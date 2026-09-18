@@ -1,0 +1,57 @@
+<?xml version="1.0"?>
+<fragment version="1">
+
+  <require>org.nuxeo.web.ui</require>
+
+  <install>
+
+    <!-- The Angular application, served as static resources of the nuxeo webapp under /nuxeo/dashboard/ -->
+    <unzip from="${bundle.fileName}" to="/">
+      <include>nuxeo.war/**</include>
+    </unzip>
+
+    <!-- The Web UI entry point that links to the dashboard, dropped into nuxeo.war/ui/ -->
+    <unzip from="${bundle.fileName}" to="/" prefix="web">
+      <include>web/nuxeo.war/**</include>
+      <exclude>web/nuxeo.war/ui/i18n/**</exclude>
+    </unzip>
+
+    <!-- Web UI translations have to be appended to the existing bundles, not overwritten -->
+    <delete path="${bundle.fileName}.tmp" />
+    <mkdir path="${bundle.fileName}.tmp" />
+    <unzip from="${bundle.fileName}" to="${bundle.fileName}.tmp">
+      <include>web/nuxeo.war/ui/i18n/**</include>
+    </unzip>
+    <append from="${bundle.fileName}.tmp/web/nuxeo.war/ui/i18n/messages.json"
+            to="nuxeo.war/ui/i18n/messages.json" addNewLine="true" />
+    <append from="${bundle.fileName}.tmp/web/nuxeo.war/ui/i18n/messages-fr.json"
+            to="nuxeo.war/ui/i18n/messages-fr.json" addNewLine="true" />
+    <append from="${bundle.fileName}.tmp/web/nuxeo.war/ui/i18n/messages-fr.json"
+            to="nuxeo.war/ui/i18n/messages-fr-FR.json" addNewLine="true" />
+    <delete path="${bundle.fileName}.tmp" />
+
+  </install>
+
+  <!--
+    Protect the application with the standard Nuxeo session. FORWARD is required because the
+    rewrite rule below forwards deep links to index.jsp.
+  -->
+  <extension target="web#STD-AUTH-FILTER">
+    <filter-mapping>
+      <filter-name>NuxeoAuthenticationFilter</filter-name>
+      <url-pattern>/dashboard/*</url-pattern>
+      <dispatcher>REQUEST</dispatcher>
+      <dispatcher>FORWARD</dispatcher>
+    </filter-mapping>
+  </extension>
+
+  <!--
+    Angular router support: any /dashboard/ path without a file extension is forwarded to the
+    SPA entry point so that deep links survive a hard refresh.
+  -->
+  <extension target="rewrite#RULE">
+    RewriteCond %{REQUEST_PATH} ^/dashboard/[^.]*(html?)?$
+    RewriteRule ^(.*)$ /dashboard/index.jsp [L]
+  </extension>
+
+</fragment>

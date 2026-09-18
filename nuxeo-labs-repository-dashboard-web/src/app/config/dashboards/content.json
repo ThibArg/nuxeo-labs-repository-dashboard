@@ -1,0 +1,328 @@
+{
+  "id": "content",
+  "label": "Content Dashboard",
+  "index": "nuxeo",
+  "filters": [
+    {
+      "type": "dateRange",
+      "field": "dc:created",
+      "default": "all"
+    },
+    {
+      "type": "termsGroup",
+      "id": "kind",
+      "label": "Document kinds",
+      "combine": "or",
+      "members": [
+        {
+          "id": "types",
+          "field": "ecm:primaryType",
+          "label": "Document types",
+          "labels": "doctype",
+          "size": 200
+        },
+        {
+          "id": "facets",
+          "field": "ecm:mixinType",
+          "label": "Facets",
+          "size": 200,
+          "note": "A document carries several facets, so these counts overlap."
+        }
+      ]
+    }
+  ],
+  "baseFilter": [],
+  "defaultScope": "liveNotTrashed",
+  "scopes": {
+    "all": [],
+    "liveNotTrashed": [
+      {
+        "term": {
+          "ecm:isVersion": false
+        }
+      },
+      {
+        "term": {
+          "ecm:isProxy": false
+        }
+      },
+      {
+        "term": {
+          "ecm:isTrashed": false
+        }
+      }
+    ],
+    "trashed": [
+      {
+        "term": {
+          "ecm:isVersion": false
+        }
+      },
+      {
+        "term": {
+          "ecm:isProxy": false
+        }
+      },
+      {
+        "term": {
+          "ecm:isTrashed": true
+        }
+      }
+    ],
+    "versions": [
+      {
+        "term": {
+          "ecm:isVersion": true
+        }
+      },
+      {
+        "term": {
+          "ecm:isProxy": false
+        }
+      }
+    ],
+    "proxies": [
+      {
+        "term": {
+          "ecm:isProxy": true
+        }
+      }
+    ]
+  },
+  "layout": [
+    {
+      "cells": ["totalAll", "liveNotTrashed", "trashed", "versions", "proxies"]
+    },
+    {
+      "cells": ["records", "legalHold", "expiringWeek", "expiring60", "expired"]
+    },
+    {
+      "cells": ["byType", "byState"]
+    },
+    {
+      "cells": ["createdTrend", "modifiedTrend"]
+    },
+    {
+      "cells": ["topContributors", "storageByType"]
+    }
+  ],
+  "widgets": {
+    "totalAll": {
+      "type": "kpi",
+      "label": "Total Documents",
+      "hint": "Live, versions and proxies, trashed or not",
+      "scope": "all",
+      "span": 4
+    },
+    "liveNotTrashed": {
+      "type": "kpi",
+      "label": "Live",
+      "hint": "Scope of every chart below",
+      "scope": "liveNotTrashed",
+      "span": 2
+    },
+    "trashed": {
+      "type": "kpi",
+      "label": "Trashed",
+      "severity": "warning",
+      "scope": "trashed",
+      "span": 2
+    },
+    "versions": {
+      "type": "kpi",
+      "label": "Versions",
+      "scope": "versions",
+      "span": 2,
+      "secondary": {
+        "filter": [
+          {
+            "term": {
+              "ecm:isTrashed": true
+            }
+          }
+        ],
+        "label": "{value} trashed",
+        "hideWhenZero": true
+      }
+    },
+    "proxies": {
+      "type": "kpi",
+      "label": "Proxies",
+      "scope": "proxies",
+      "span": 2,
+      "secondary": {
+        "filter": [
+          {
+            "term": {
+              "ecm:isTrashed": true
+            }
+          }
+        ],
+        "label": "{value} targeting trashed",
+        "hideWhenZero": true
+      }
+    },
+    "records": {
+      "type": "kpi",
+      "label": "Records",
+      "severity": "accent",
+      "span": 2,
+      "filter": [
+        {
+          "term": {
+            "ecm:isRecord": true
+          }
+        }
+      ]
+    },
+    "legalHold": {
+      "type": "kpi",
+      "label": "Under Legal Hold",
+      "severity": "accent",
+      "span": 3,
+      "filter": [
+        {
+          "term": {
+            "ecm:hasLegalHold": true
+          }
+        }
+      ]
+    },
+    "expiringWeek": {
+      "type": "kpi",
+      "label": "Expiring This Week",
+      "severity": "warning",
+      "span": 2,
+      "filter": [
+        {
+          "range": {
+            "dc:expired": {
+              "gte": "now",
+              "lte": "now+7d"
+            }
+          }
+        }
+      ]
+    },
+    "expiring60": {
+      "type": "kpi",
+      "label": "Expiring < 60 Days",
+      "severity": "warning",
+      "span": 2,
+      "filter": [
+        {
+          "range": {
+            "dc:expired": {
+              "gte": "now",
+              "lte": "now+60d"
+            }
+          }
+        }
+      ]
+    },
+    "expired": {
+      "type": "kpi",
+      "label": "Already Expired",
+      "severity": "danger",
+      "span": 3,
+      "filter": [
+        {
+          "range": {
+            "dc:expired": {
+              "lt": "now"
+            }
+          }
+        }
+      ]
+    },
+    "byType": {
+      "type": "donut",
+      "label": "By Document Type",
+      "span": 6,
+      "labels": "doctype",
+      "agg": {
+        "terms": {
+          "field": "ecm:primaryType",
+          "size": 10
+        }
+      }
+    },
+    "byState": {
+      "type": "donut",
+      "label": "By Lifecycle State",
+      "span": 6,
+      "labels": "lifecycle",
+      "agg": {
+        "terms": {
+          "field": "ecm:currentLifeCycleState",
+          "size": 10
+        }
+      }
+    },
+    "createdTrend": {
+      "type": "area",
+      "label": "Documents Created",
+      "hint": "Number of documents created per day ({range})",
+      "span": 12,
+      "spanByRange": {
+        "7d": 6,
+        "30d": 6
+      },
+      "agg": {
+        "date_histogram": {
+          "field": "dc:created",
+          "calendar_interval": "day",
+          "format": "yyyy-MM-dd"
+        }
+      }
+    },
+    "modifiedTrend": {
+      "type": "area",
+      "label": "Documents Modified",
+      "hint": "Number of documents modified per day (Based on {range} creation)",
+      "span": 12,
+      "spanByRange": {
+        "7d": 6,
+        "30d": 6
+      },
+      "agg": {
+        "date_histogram": {
+          "field": "dc:modified",
+          "calendar_interval": "day",
+          "format": "yyyy-MM-dd"
+        }
+      }
+    },
+    "topContributors": {
+      "type": "ranked-list",
+      "label": "Top Contributors",
+      "hint": "Documents created, by author",
+      "span": 6,
+      "labels": "user",
+      "agg": {
+        "terms": {
+          "field": "dc:creator",
+          "size": 10
+        }
+      }
+    },
+    "storageByType": {
+      "type": "ranked-list",
+      "label": "Storage by Document Type",
+      "hint": "Main blob only, documents without a blob are absent",
+      "span": 6,
+      "labels": "doctype",
+      "format": "bytes",
+      "metric": {
+        "sum": "file:content.length"
+      },
+      "agg": {
+        "terms": {
+          "field": "ecm:primaryType",
+          "size": 10,
+          "order": "metric_desc"
+        }
+      }
+    }
+  }
+}

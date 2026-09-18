@@ -1,0 +1,30 @@
+<!-- See documentation at http://doc.nuxeo.com/x/HgIz -->
+<package type="addon" name="nuxeo-labs-repository-dashboard" version="@VERSION@">
+  <title>Nuxeo Labs Repository Dashboard</title>
+  <description>
+    <p>An administrator facing analytics dashboard for a Nuxeo repository, served by the platform
+    at /nuxeo/dashboard/ and reachable from the Web UI Administration menu.</p>
+    <p>Charts and figures are described by configuration rather than hard coded, and every widget
+    on a page is batched into a single OpenSearch aggregation request.</p>
+    <p>Requires the OpenSearch search client with the passthrough enabled
+    (nuxeo.passthrough.elasticsearch.enabled). The Governance dashboard additionally requires the
+    nuxeo-retention addon, and the Process dashboard the audit passthrough
+    (nuxeo.passthrough.elasticsearch.audit.enabled).</p>
+  </description>
+  <vendor>Hyland</vendor>
+  <installer restart="true" />
+  <uninstaller restart="true" />
+  <nuxeo-validation>none</nuxeo-validation>
+  <production-state>testing</production-state>
+  <supported>false</supported>
+  <target-platform>
+    <name>lts</name>
+    <version>[@NUXEO_TARGET_VERSION@,)</version>
+  </target-platform>
+  <dependencies>
+    <package>nuxeo-web-ui</package>
+  </dependencies>
+  <license>Apache License, Version 2.0</license>
+  <license-url>http://www.apache.org/licenses/LICENSE-2.0</license-url>
+  <visibility>DEV</visibility>
+</package>

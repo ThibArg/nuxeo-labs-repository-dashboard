@@ -1,0 +1,70 @@
+<?xml version="1.0"?>
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://maven.apache.org/POM/4.0.0" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>org.nuxeo</groupId>
+    <artifactId>nuxeo-parent</artifactId>
+    <version>2025.22</version>
+  </parent>
+
+  <groupId>org.nuxeo.labs.dashboard</groupId>
+  <artifactId>nuxeo-labs-repository-dashboard-parent</artifactId>
+  <version>2025.1.0-SNAPSHOT</version>
+  <name>Nuxeo Labs Repository Dashboard</name>
+  <description>Configurable, admin-only analytics dashboard for a Nuxeo repository. Angular SPA served by Nuxeo, reading aggregations from the OpenSearch passthrough.</description>
+  <packaging>pom</packaging>
+
+  <properties>
+    <nuxeo.skip.enforcer>true</nuxeo.skip.enforcer>
+    <nuxeo.target.version>2025.*</nuxeo.target.version>
+    <pushReleaseChanges>false</pushReleaseChanges>
+    <!-- Angular 22 CLI requires node ^22.22.3 || ^24.15.0 || >=26.0.0 -->
+    <frontend-plugin.node.version>v24.21.0</frontend-plugin.node.version>
+    <frontend-plugin.version>1.15.4</frontend-plugin.version>
+  </properties>
+
+  <modules>
+    <module>nuxeo-labs-repository-dashboard-web</module>
+    <module>nuxeo-labs-repository-dashboard-package</module>
+  </modules>
+
+  <scm />
+  <licenses />
+  <mailingLists />
+  <issueManagement />
+  <ciManagement />
+  <developers />
+  <distributionManagement />
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.nuxeo.labs.dashboard</groupId>
+        <artifactId>nuxeo-labs-repository-dashboard-web</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.nuxeo.labs.dashboard</groupId>
+        <artifactId>nuxeo-labs-repository-dashboard-package</artifactId>
+        <version>${project.version}</version>
+        <type>zip</type>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>com.github.eirslett</groupId>
+          <artifactId>frontend-maven-plugin</artifactId>
+          <version>${frontend-plugin.version}</version>
+          <configuration>
+            <nodeVersion>${frontend-plugin.node.version}</nodeVersion>
+          </configuration>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+  </build>
+
+</project>

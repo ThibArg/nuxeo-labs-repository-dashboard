@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<component name="org.nuxeo.labs.dashboard.webresources">
+
+  <documentation>
+    Registers a plain HTML resource with the Web UI bundle so that Web UI loads it at startup and
+    picks up the nuxeo-slot-content it declares.
+
+    The type="import" attribute is mandatory: nuxeo.war/ui/config.jsp only lists resources whose
+    type matches "import". Without it, ResourceDescriptor would infer type "html" from the file
+    name and the resource would be silently dropped.
+
+    This route is used instead of the file name convention (nuxeo.war/ui/PACKAGE-NAME.html)
+    because the convention ties the file name to the marketplace package name.
+
+    Do NOT add a require on org.nuxeo.web.ui here. Inside a component, require names a COMPONENT,
+    and no component is named org.nuxeo.web.ui: that string is only the bundle symbolic name.
+    The component would stay pending, and since nuxeo.start.strict defaults to true the server
+    would refuse to start. It is not needed anyway: WebResourceManagerImpl resolves the web-ui
+    bundle lazily at read time, and an append="true" contribution is never lost whatever its
+    registration order. Web UI's own reference contribution has no require either. For bundle
+    level ordering, the right place is Nuxeo-Require in META-INF/MANIFEST.MF.
+  </documentation>
+
+  <extension target="org.nuxeo.ecm.platform.WebResources" point="resources">
+    <resource name="nuxeo-labs-repository-dashboard.html" type="import">
+      <uri>/ui/nuxeo-labs-repository-dashboard.html</uri>
+    </resource>
+  </extension>
+
+  <extension target="org.nuxeo.ecm.platform.WebResources" point="bundles">
+    <bundle name="web-ui">
+      <resources append="true">
+        <resource>nuxeo-labs-repository-dashboard.html</resource>
+      </resources>
+    </bundle>
+  </extension>
+
+</component>

@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<component name="org.nuxeo.labs.dashboard.authentication">
+
+  <documentation>
+    Declares /nuxeo/dashboard/ as a valid start URL so that, after a login redirect, the user
+    lands back on the page they originally requested instead of the default start page.
+
+    No startupPage is contributed on purpose: Web UI remains the default UI after login.
+  </documentation>
+
+  <extension point="startURL" target="org.nuxeo.ecm.platform.ui.web.auth.service.PluggableAuthenticationService">
+    <startURLPattern>
+      <patterns>
+        <pattern>dashboard/</pattern>
+      </patterns>
+    </startURLPattern>
+  </extension>
+
+</component>

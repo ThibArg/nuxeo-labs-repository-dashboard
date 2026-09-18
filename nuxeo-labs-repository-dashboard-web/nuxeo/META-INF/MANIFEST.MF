@@ -1,0 +1,10 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: nuxeo-labs-repository-dashboard-web
+Bundle-SymbolicName: org.nuxeo.labs.dashboard.nuxeo-labs-repository-dashboard-web;singleton=true
+Bundle-Version: 2025.1.0
+Bundle-Vendor: Hyland
+Bundle-ActivationPolicy: lazy
+Bundle-ClassPath: .
+Nuxeo-Component: OSGI-INF/dashboard-auth-contrib.xml,
+ OSGI-INF/dashboard-webresources-contrib.xml
