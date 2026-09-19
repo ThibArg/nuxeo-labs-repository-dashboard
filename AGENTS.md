@@ -120,6 +120,15 @@ OpenSearch's request cache, and the dead-port control is what established the di
 `process`/`Buffer` access untyped, too: there is no `@types/node` here, and a throwaway file does
 not deserve a dependency.
 
+**A shell harness fails green even more easily, because an empty count reads as zero.** The
+Governance fixture's own check once announced a perfectly clean repository while all five of its
+probes had returned nothing: macOS still ships bash 3.2, where expanding an empty array under
+`set -u` aborts the command, and `$(( ))` then read the empty results as zeroes that happily added
+up to the expected total. Two habits close it: refuse a count that is not numeric rather than
+letting it default, and publish results in a variable instead of through `$(...)`, since a `die`
+inside a subshell ends the subshell and nothing else. The same subshell trap silently swallowed a
+`die` after every document creation before it was noticed.
+
 The whole of the shipped configuration was confronted this way once: 17 planned requests over the
 four dashboards and every date range, all accepted, `shard_size` on every `terms`, `time_zone` on
 every histogram, `extended_bounds` only on the field the date filter constrains, `ecm:uuid` in the
@@ -182,6 +191,11 @@ it now carries six against two, which merge to eight. Every count in this file i
   a `terms` ordered by it needs `metric.50` in the order path, not `metric`. **That ordering path
   is the one thing no shipped configuration exercises**: all seven `terms` of `workflows.json` sort
   by `avg`, so it has never been confronted with a live index.
+- **`@children` trails a write by about a second.** Listing a container straight after creating
+  twenty-three documents in it answered six. `CURRENT_DOC_CHILDREN` is declared a
+  `coreQueryPageProvider` and no Elasticsearch override of it exists anywhere in the LTS 2025 tree,
+  so this is not the indexing lag it looks like. Any script that enumerates what it has just
+  written has to converge rather than read once.
 
 ## Design decisions, and why
 
@@ -248,33 +262,46 @@ Answer the user in French, using *vous*.
 ## Where things stand
 
 Five live screens — Content, Users, Workflows, Tasks, Diagnostics — plus Governance, which is
-still a placeholder naming its missing prerequisite. Build green, 348 tests over 27 files.
+still a placeholder naming its missing prerequisite. Build green, 353 tests over 27 files.
 
 The work is pushed to `github.com/ThibArg/nuxeo-labs-repository-dashboard`, a public backup until
 the plugin is ready to be forked into `nuxeo-sandbox`; the README carries a warning saying so, and
 `AGENTS.md` is deliberately **not** gitignored in this repository, so keep it free of credentials.
 
-**Phase 5, the Governance dashboard, is next.** The record and legal hold tiles are already out of
-`content.json`, so it starts from a blank page rather than from a move; it may well need
-`DataTableComponent`, which `tasks.json` already exercises. Then phase 2 (cross filtering on bucket
-click, active filter chips, path scope, CSV and PNG export) and phase 3 (configuration editor with
-a field picker fed by `/api/v1/config/schemas`).
+**Phase 5, the Governance dashboard, is next, and it now has data to be built against.** The
+record and legal hold tiles are already out of `content.json`, so it starts from a blank page
+rather than from a move; it may well need `DataTableComponent`, which `tasks.json` already
+exercises. Then phase 2 (cross filtering on bucket click, active filter chips, path scope, CSV and
+PNG export) and phase 3 (configuration editor with a field picker fed by `/api/v1/config/schemas`).
 
-**Its real obstacle is not the one both files used to name.** On the sandbox `nuxeo-retention` is
-installed — `RetentionRule` answers 200, and the `record`, `retention_rule`,
-`retention_definition` and `retention_search` schemas are declared — yet the repository holds **no
-record, no legal hold, no `ecm:retainUntil` and no `RetentionRule` document at all**. A Governance
-page built today would render a column of zeroes, and since `record:ruleIds` is absent from the
-static mapping while the passthrough refuses `_mapping` and `_field_caps`, nothing read-only could
-tell a correct empty page from one querying a field that does not exist. So phase 5 needs a
-fixture before it needs code, and the README's "A record cannot be unmade" says why that fixture
-must be flexible or short lived.
+**The obstacle both files used to name is lifted.** The sandbox held no record, no legal hold, no
+`ecm:retainUntil` and no `RetentionRule` at all, so a Governance page would have rendered a column
+of zeroes with no read-only way to tell a correct empty page from one querying a field that does
+not exist. A reversible fixture now sits in
+`/default-domain/workspaces/governance-fixture`: 23 throwaway documents and three `RetentionRule`
+documents under `/RetentionRules`, all named `gov-fixture-*`. 22 records, 2 legal holds, 19
+retentions over three horizons, two document types, and one untouched control. **The creation and
+teardown scripts live outside this repository** — they write to a server and have no business in a
+public plugin — and the teardown was run for real, to zero, before the fixture was rebuilt.
 
-**Four operations build and undo that fixture**, read off `GET /nuxeo/site/automation`:
-`Document.Retain` takes an `until` date **and a `flexible` boolean**, `Document.Hold` sets a legal
-hold, `Retention.AttachRule` attaches a `RetentionRule` document, and
-`Document.UnattachRetentionRule` stops the retention again — on a flexible record only, which is
-the whole reason to make them flexible. **`Document.Retain` cannot populate `record:ruleIds`**:
-only attaching a rule does. A fixture limited to "records with a date" would therefore leave that
-field out of the mapping and its widget exactly as unverifiable as it is today, so the fixture
-needs at least one `RetentionRule` document and one `Retention.AttachRule` call.
+**What the live index then established**, none of which was decidable read-only, and all of which
+the README's "Indexing rules worth knowing" now carries as rules:
+
+- `record:ruleIds` does reach the index once a first record exists, and both `terms` and
+  `cardinality` answer on it. That was the open question, and it is closed.
+- `ecm:isFlexibleRecord` never does. Do not design a widget that separates flexible from enforced.
+- The `Record` facet is the only discriminant left, and the fixture measures the gap it describes:
+  22 records against 19 facets.
+
+**Three things the fixture still cannot prove**, to be treated like "N targeting trashed":
+`record:retainUntil`, which only a passing expiry fills; `Document.UnattachRetentionRule` against
+an enforced record, refused by construction; and a document carrying a legal hold *and* a
+retention, deliberately left out because `Document.Hold` hardens a record irreversibly and its
+cleanup would then have to wait for the date.
+
+**The design question the fixture raised is settled.** `record:ruleIds` holds document uuids, and
+no `LabelStrategy` resolved one, so a "by rule" chart would have drawn bare uuids. A `document`
+strategy now does, through `GET /api/v1/id/{uuid}`, sharing the user lookup's in-flight cache —
+which is why the two now go through one `resolveCached` helper rather than two copies of the same
+eighteen lines. The fixture carries three rules rather than one so that the chart has something to
+show, and the live index resolves all three to their titles.

@@ -22,7 +22,7 @@ a single OpenSearch aggregation request.
 | **Users** | Audit index: `loginSuccess`, `loginFailed`, `documentCreated` and `documentModified`, grouped by `principalName` over `eventDate` |
 | **Workflows** | `audit_wf` passthrough view: workflow state derived from `eventId`, `extended.modelName`, `extended.workflowInitiator`, `extended.taskName`, `extended.action`, and durations from `extended.timeSinceWfStarted` and `extended.timeSinceTaskStarted` |
 | **Tasks** | Repository index: open tasks only, through the `Task` facet — `nt:dueDate`, `nt:actors`, `nt:name`, `nt:directive` |
-| **Governance** | `ecm:isRecord`, `ecm:hasLegalHold`, `ecm:retainUntil`, and — once a first record exists to put it in the mapping — `record:ruleIds` resolved against the `RetentionRule` documents |
+| **Governance** | `ecm:isRecord`, `ecm:hasLegalHold`, `ecm:retainUntil`, the `Record` facet through `ecm:mixinType`, and `record:ruleIds` resolved against the `RetentionRule` documents |
 | **Diagnostics** | The preflight report, always available |
 
 ## Configuring a dashboard
@@ -601,9 +601,37 @@ or demonstrates the Governance dashboard.** `UnsetRetention` exists in `permissi
 only *for flexible records*; on an ordinary record the retention date cannot be lowered and the
 document cannot be deleted, administrator included, until that date has passed.
 
+**`ecm:isRecord` never goes back to false.** There is no `unmakeRecord` anywhere in the tree, so
+the only way to undo the flag is to delete the document. Being a record protects nothing by
+itself, though: what blocks a deletion is a future `ecm:retainUntil` or a legal hold, and once
+both are gone the document can be removed like any other. That is the whole basis on which a
+throwaway fixture can be undone.
+
 So a few documents created to give a Governance screen something to show will outlive the
 experiment. Make them **flexible records**, or give them a retention of minutes rather than years,
 and keep them in a container of their own.
+
+Three traps sit in the operations themselves:
+
+- **Only `Retention.AttachRule`, with a rule whose `retention_rule:flexibleRecords` is true, is
+  reversible in one move.** It is also the only operation that sets the `Record` facet, and
+  `Document.UnattachRetentionRule` refuses a document without it. `Document.Retain` writes a
+  retention but no facet, so a document retained that way cannot be released at all.
+- **`Document.Retain` with no `until` means `9999-01-01`, not "no retention".** That is a
+  perpetual block. A date can still be brought back down from it, which is the one escape route.
+- **`Document.Hold` turns its target into an *enforced* record**, and a flexible record loses that
+  quality permanently the moment a legal hold touches it. `Document.Unhold` removes the hold and
+  nothing else.
+
+Leave `retention_def:endActions` empty on any rule written for a demonstration. The `retention_end`
+vocabulary offers exactly two values, `Document.Delete` and `Document.Trash`, so a non-empty list
+makes the documents disappear on their own at expiry, under the `system` identity.
+
+**An "expired retention" widget is empty by construction.** The `findRetentionExpired` scheduler
+runs hourly, selects everything whose `ecm:retainUntil` lies in the past and sets it back to null.
+A retention is therefore visible as future or not visible at all, and a tile counting lapsed ones
+holds a value for at most an hour. What survives is `record:retainUntil` on documents that carry
+the `Record` facet.
 
 ### Indexing rules worth knowing
 
@@ -636,13 +664,24 @@ document and look at what comes back.
   `shard_size` well past the OpenSearch default to make the merged ranking exact, and asks for a
   `cardinality` alongside so a truncated chart can say how many values it left out.
 - **`ecm:retainUntil` is only written when non null**; combine it with an `exists` clause.
-- **The retention fields are not all mapped alike.** `ecm:isRecord`, `ecm:retainUntil` and
-  `ecm:hasLegalHold` have explicit entries, as `boolean`, `date` and `boolean`. **`record:ruleIds`
-  has none**: the `record` schema carries no prefix, so its two fields read `record:ruleIds` and
-  `record:retainUntil`, and they only enter the mapping through the `strings` dynamic template, at
-  the first document that carries one. On a repository where nothing has ever been declared a
-  record, a `terms` on `record:ruleIds` answers an empty list — see the warning above about the
-  server not telling you which of the two situations you are in.
+- **The index carries three retention fields and no more.** `DefaultIndexingJsonWriter` writes
+  `ecm:isRecord`, `ecm:retainUntil` and `ecm:hasLegalHold`, which the mapping declares as
+  `boolean`, `date` and `boolean`. **`ecm:isFlexibleRecord` is not among them.** It exists in the
+  repository and `/api/v1/id/{uuid}` returns it, but no widget here can tell a flexible record
+  from an enforced one.
+- **`record:ruleIds` has no explicit mapping entry, and aggregates correctly all the same.** The
+  `record` schema's two fields read `record:ruleIds` and `record:retainUntil`, and they enter the
+  mapping through the `strings` dynamic template at the first document that carries one. Confirmed
+  against a live index once records existed: `terms` and `cardinality` both answer. Before that
+  first record they answer an empty list, indistinguishable from a field nobody has filled — see
+  the warning above about the server not telling you which situation you are in.
+- **The `Record` facet is the only thing that says how a record was made.** It reaches the index
+  through `ecm:mixinType`, and only `Retention.AttachRule` sets it: `Document.Retain` and
+  `Document.Hold` both produce a record without it. "Records governed by a rule" is therefore
+  expressible, and "flexible records" is not.
+- **`record:retainUntil` is written only once a retention has run out**, by the listener reacting
+  to `retentionExpired`, in the very move that sets `ecm:retainUntil` back to null. The two fields
+  never describe the same thing, and neither is in the static mapping.
 - **`extended.params` in the audit index is `"enabled": false`** and cannot be aggregated.
 - **`comment` in the audit index is `text` with no keyword sub-field**: readable from `_source`,
   never aggregatable. Every other audit field is a `keyword` set by a dynamic template.
