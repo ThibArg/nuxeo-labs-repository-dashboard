@@ -106,7 +106,7 @@
     "modificationsByUser": {
       "type": "hbar",
       "label": "Documents Modified by User",
-      "hint": "Credited to the original user, not to a borrowed identity",
+      "hint": "Server-side work counts for the user who triggered it",
       "span": 6,
       "labels": "user",
       "filter": [

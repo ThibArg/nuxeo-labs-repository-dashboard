@@ -92,8 +92,20 @@ was made to render the hint.
 - **`documentCreated` is also fired by a check-in and by a proxy creation**
   (`AbstractSession.java:1988,2150`), and nothing in the audit entry tells them apart. Counting it
   per user therefore includes versions and published proxies; the widget hint says so.
-- **`principalName` is `getActingUser()`** (`UserPrincipal.java:209-211`): under impersonation it
-  names the original user, not the borrowed identity. Correct for an audit, surprising otherwise.
+- **`principalName` is `getActingUser()`**, which is `originatingUser ?? name`
+  (`UserPrincipal.java:209-211`). The two differ in exactly one living case: a `SystemPrincipal`,
+  whose `getName()` is invariably `system` while `getActingUser()` names the human behind the
+  action. That is what credits an asynchronous Work, an `UnrestrictedSessionRunner` or a
+  `CoreInstance.doPrivileged(repo, …)` to the user who triggered it instead of to a technical
+  account. **It is not about impersonation**, and an earlier note here claimed the opposite:
+  `Auth.LoginAs(name)` credits the *assumed* identity, since `Framework.loginUser` takes the
+  principal from the directory and leaves `originatingUser` null — the administrator vanishes
+  without trace. `Auth.LoginAs()` with no argument does the reverse, building
+  `SystemPrincipal(origUser)`: the two branches of one operation disagree. The admin centre's
+  "Login as" no longer exists in LTS 2025 — `switchUser()` waits on a request *attribute* named
+  `deputy` that nothing in the tree sets. And `system` still surfaces, through
+  `Framework.doPrivileged` with no argument and through the `documentCreated` entries
+  `syncLogCreationEntries` rebuilds. See the README under "Who an action is credited to".
 - **A failed login carries the login that was typed.** `NuxeoAuthenticationFilter.java:182` builds
   the principal from the submitted name before knowing whether it is valid. Token authentication
   is the exception: `principalName` may be empty, the token landing in `comment` (`:197-199`), so

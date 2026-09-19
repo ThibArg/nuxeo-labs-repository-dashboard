@@ -267,7 +267,7 @@
     "topTaskPerformers": {
       "type": "ranked-list",
       "label": "Tasks Completed by User",
-      "hint": "Credited to the original user, not to a borrowed identity",
+      "hint": "Server-side work counts for the user who triggered it",
       "scope": "taskEnded",
       "span": 6,
       "labels": "user",

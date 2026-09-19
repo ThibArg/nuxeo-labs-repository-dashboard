@@ -643,6 +643,46 @@ rather than errors.
 - **Non-administrators see only the workflow models they hold `DataVisualization` on.** An empty
   permission set compiles to an empty `terms`, so zero hits rather than an error.
 
+### Who an action is credited to
+
+Every per-user figure on the Users and Workflows dashboards counts `principalName`, which the audit
+fills with `getActingUser()` rather than `getName()`:
+
+```java
+public String getActingUser() {
+    return getOriginatingUser() == null ? getName() : getOriginatingUser();
+}
+```
+
+The two differ in **exactly one living case**: a `SystemPrincipal`, whose name is invariably
+`system` while its acting user names the human behind the action. That is what makes an
+asynchronous Work, an `UnrestrictedSessionRunner` or a `CoreInstance.doPrivileged(repo, …)` count
+for the person who triggered it, instead of piling every server-side action onto a technical
+account. Without it the Users dashboard would be a chart of `system`.
+
+**It is not a protection against impersonation**, and it is worth being precise, because a script
+that writes demonstration data or integrates a third party system runs straight into this:
+
+| Situation | Recorded as |
+| --- | --- |
+| `Auth.LoginAs("jdoe")` run by an administrator | **`jdoe`** — the administrator leaves no trace |
+| `Auth.LoginAs()` with no argument | the **caller**, through `SystemPrincipal(caller)` |
+| Asynchronous Work scheduled by `jdoe` | `jdoe` |
+| `CoreInstance.doPrivileged(repository, …)` under `jdoe` | `jdoe` |
+| `Framework.doPrivileged(…)` opening a fresh session | **`system`** |
+| Bulk action launched by `jdoe` | `jdoe` |
+
+The two branches of `Auth.LoginAs` therefore disagree: with a name it goes through
+`Framework.loginUser`, which takes the principal from the directory and leaves `originatingUser`
+null, so the assumed identity is credited; without one it builds `SystemPrincipal(caller)` and the
+caller survives.
+
+Two further facts. The admin centre's **"Login as" no longer exists** in LTS 2025: the mechanism
+survives in `NuxeoAuthenticationFilter.switchUser()`, but it triggers on a request *attribute*
+named `deputy` that nothing in the tree sets, and Web UI offers no equivalent. And `system` does
+still appear in an audit index, through `Framework.doPrivileged` with no argument and through the
+`documentCreated` entries `syncLogCreationEntries` rebuilds.
+
 ## Project layout
 
 ```
