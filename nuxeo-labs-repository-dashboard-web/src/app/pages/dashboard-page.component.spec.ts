@@ -528,7 +528,8 @@ describe('DashboardPageComponent', () => {
       await settle(fixture);
       await openDialog(fixture);
 
-      const dialog = element(fixture).querySelector('dialog')!;
+      // Scoped to the facet editor: the page also carries the path scope picker's own dialog.
+      const dialog = element(fixture).querySelector('nxd-facet-group-dialog dialog')!;
       expect(stub.bodies.filter(isFacetValuesRequest)).toHaveLength(1);
       expect(dialog.textContent).toContain('File');
       expect(dialog.textContent).toContain((3000).toLocaleString());
@@ -738,6 +739,98 @@ describe('DashboardPageComponent', () => {
       expect(lastQuery()).not.toContain('ecm:currentLifeCycleState');
       expect(lastQuery()).not.toContain('"ecm:primaryType":["File"]');
       expect(localStorage.getItem('nxd.filters.content.kind')).toBeNull();
+    });
+  });
+
+  describe('path scope', () => {
+    /** The picker browses the index, so its own request must not be read as a widget batch. */
+    function isContainerRequest(body: unknown): boolean {
+      return JSON.stringify(body).includes('Folderish');
+    }
+
+    function routes(): StubRoute[] {
+      return [
+        {
+          match: '/site/es/nuxeo/_search',
+          matchBody: isContainerRequest,
+          json: {
+            hits: {
+              hits: [
+                {
+                  _id: 'ws',
+                  _source: {
+                    'ecm:uuid': 'ws',
+                    'ecm:path': '/default-domain/workspaces',
+                    'ecm:name': 'workspaces',
+                    'ecm:title': 'Workspaces',
+                  },
+                },
+              ],
+            },
+          },
+        },
+        {
+          match: '/site/es/nuxeo/_search',
+          matchBody: isAggregationsRequest,
+          json: aggregationsResponse(),
+        },
+        ...supportRoutes(),
+      ];
+    }
+
+    async function render() {
+      stub = installFetchStub(routes());
+      const fixture = TestBed.createComponent(DashboardPageComponent);
+      await settle(fixture);
+      return fixture;
+    }
+
+    function buttonNamed(
+      fixture: ComponentFixture<DashboardPageComponent>,
+      text: string,
+    ): HTMLButtonElement {
+      return [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].find(
+        (button) => button.textContent?.trim() === text,
+      ) as HTMLButtonElement;
+    }
+
+    function lastQuery(): string {
+      const bodies = stub.bodies.filter(isAggregationsRequest) as { query?: unknown }[];
+      return JSON.stringify(bodies[bodies.length - 1]?.query);
+    }
+
+    it('costs no request until the picker is opened', async () => {
+      await render();
+
+      expect(stub.bodies.filter(isContainerRequest)).toHaveLength(0);
+    });
+
+    it('restricts every widget to the container that was chosen', async () => {
+      const fixture = await render();
+
+      buttonNamed(fixture, 'Whole repository').click();
+      await settle(fixture);
+      buttonNamed(fixture, 'Use').click();
+      await settle(fixture);
+
+      expect(lastQuery()).toContain('"ecm:path.children":"/default-domain/workspaces"');
+    });
+
+    it('describes the whole repository again once the scope is lifted', async () => {
+      const fixture = await render();
+
+      buttonNamed(fixture, 'Whole repository').click();
+      await settle(fixture);
+      buttonNamed(fixture, 'Use').click();
+      await settle(fixture);
+      expect(lastQuery()).toContain('ecm:path.children');
+
+      buttonNamed(fixture, 'workspaces').click();
+      await settle(fixture);
+      buttonNamed(fixture, 'Whole repository').click();
+      await settle(fixture);
+
+      expect(lastQuery()).not.toContain('ecm:path.children');
     });
   });
 });

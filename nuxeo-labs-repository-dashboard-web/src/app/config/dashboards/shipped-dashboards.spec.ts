@@ -30,6 +30,7 @@ const BOUNDED: FilterState = {
   range: customRange('2026-08-20', '2026-09-18'),
   groups: {},
   picks: [],
+  path: null,
 };
 
 function everyAggregation(config: DashboardConfig): unknown[] {

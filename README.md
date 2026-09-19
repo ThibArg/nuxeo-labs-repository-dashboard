@@ -313,6 +313,28 @@ Two picks on the same field are read as alternatives — nothing is at once a `F
 field whose values are principals searches both forms, exactly as a selection made through the
 dialog does.
 
+### Restricting the figures to one place
+
+A dashboard declaring a `pathScope` filter gains a container picker. Everything on the page then
+describes that container and its descendants.
+
+```jsonc
+{ "type": "pathScope", "label": "Location", "root": "/default-domain" }
+```
+
+Only worth declaring where the documents counted *are* the business documents. A task lives under
+`/task-root` and a workflow instance under `/document-route-instances-root`, so scoping either by
+path would say something about the plumbing rather than about the content — which is why Content
+and Governance declare it and Tasks, Workflows and Users do not.
+
+The picker browses rather than asking for a path to be typed: a path is only obvious to whoever
+created it, and an administrator reading someone else's repository recognises a container by its
+title. Each level is one query against the index for the `Folderish` documents one step below,
+which is why a container created seconds ago may be missing — indexing is asynchronous, and for
+choosing a place to read figures about that is the right trade. The trail doubles as the way back
+up, and the scope is not persisted: a place is the filter a reader is most likely to forget having
+set.
+
 ### Persistence
 
 Selections are stored in `localStorage`, per dashboard, under `nxd.filters.<dashboard>.<group>`.
@@ -708,6 +730,18 @@ document and look at what comes back.
 - **`record:retainUntil` is written only once a retention has run out**, by the listener reacting
   to `retentionExpired`, in the very move that sets `ecm:retainUntil` back to null. The two fields
   never describe the same thing, and neither is in the static mapping.
+- **`ecm:path.children` is the path hierarchy sub-field**, and one `term` on it matches a container
+  **and everything below it, the container included**. That last part differs from NXQL, where
+  `ecm:path STARTSWITH '/a'` leaves `/a` out. Scoping a dashboard to a workspace therefore counts
+  the workspace itself, which is defensible — it is a document in that place — but one more
+  than a reader counting folders would predict.
+- **`ecm:path@depth` counts `pathAsString.split("/").length`**, and the leading slash leaves an
+  empty first segment, so `/default-domain` is **2** rather than 1. Counting the segments instead
+  is short by one, and a level of a container picker built on it lists the container rather than
+  its children — plausible enough on screen to go unnoticed.
+- **A version carries the path of the document it was cut from.** A path scope therefore includes
+  versions unless something else excludes them, which every shipped dashboard using one does in
+  its `baseFilter`.
 - **`extended.params` in the audit index is `"enabled": false`** and cannot be aggregated.
 - **`comment` in the audit index is `text` with no keyword sub-field**: readable from `_source`,
   never aggregatable. Every other audit field is a `keyword` set by a dynamic template.
@@ -811,7 +845,8 @@ still appear in an audit index, through `Framework.doPrivileged` with no argumen
 | 1d | Modification trend, range reminder, range driven layout | done |
 | 1e | Period with explicit inclusive bounds, and the Users dashboard on the audit index | done |
 | 2 | Cross filtering on bucket click, with active filter chips | done |
-| 2b | Path scope, CSV and PNG export | |
+| 2b | Path scope | done |
+| 2c | CSV and PNG export | |
 | 3 | Configuration editor, with a field picker fed by `/api/v1/config/schemas` | |
 | 4 | Workflows dashboard | done |
 | 4b | Tasks dashboard, on open tasks and due dates | done |

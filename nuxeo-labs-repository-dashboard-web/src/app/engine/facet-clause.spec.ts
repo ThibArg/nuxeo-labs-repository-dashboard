@@ -17,6 +17,7 @@ function state(selection: GroupSelection): FilterState {
     range: { id: 'all', label: 'All time', from: null, to: null },
     groups: { kind: selection },
     picks: [],
+    path: null,
   };
 }
 
@@ -101,6 +102,7 @@ describe('compileTermsGroup', () => {
         range: { id: 'all', label: '', from: null, to: null },
         groups: {},
         picks: [],
+        path: null,
       }),
     ).toBeNull();
   });
@@ -120,6 +122,7 @@ describe('a member naming principals', () => {
       range: { id: 'all', label: 'All time', from: null, to: null },
       groups: { assignees: { actors: { mode: 'subset', values } } },
       picks: [],
+      path: null,
     };
   }
 

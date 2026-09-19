@@ -217,7 +217,21 @@ export interface TermsGroupConfig {
   members: TermsMemberConfig[];
 }
 
-export type FilterConfig = DateRangeFilterConfig | TermsGroupConfig;
+/**
+ * Restricts every figure to one container and its descendants.
+ *
+ * Only worth declaring on a dashboard whose documents are the business documents. A task lives
+ * under `/task-root` and a workflow instance under `/document-route-instances-root`, so scoping
+ * either by path says something about the plumbing rather than about the content.
+ */
+export interface PathScopeFilterConfig {
+  type: 'pathScope';
+  label?: string;
+  /** Container the picker opens on. Defaults to `/default-domain`. */
+  root?: string;
+}
+
+export type FilterConfig = DateRangeFilterConfig | TermsGroupConfig | PathScopeFilterConfig;
 
 /* ==================== Dashboard ==================== */
 
@@ -422,6 +436,13 @@ export interface FilterState {
    * context — and the chips make the difference visible while the page is open.
    */
   picks: BucketPick[];
+  /**
+   * Container every figure is restricted to, or null for the whole repository.
+   *
+   * A path is a place rather than a preference, and the one filter a reader is most likely to
+   * forget having set, so it is not persisted either.
+   */
+  path: string | null;
 }
 
 /** Resolves a configured shortcut id against today, falling back to the first shortcut. */
@@ -438,6 +459,13 @@ export function termsGroups(config: DashboardConfig): TermsGroupConfig[] {
   return (config.filters ?? []).filter((filter) => filter.type === 'termsGroup');
 }
 
+export function pathScopeFilter(config: DashboardConfig): PathScopeFilterConfig | null {
+  return (config.filters ?? []).find((filter) => filter.type === 'pathScope') ?? null;
+}
+
+/** Container the picker opens on when the reader has chosen nothing yet. */
+export const DEFAULT_PATH_ROOT = '/default-domain';
+
 /**
  * Initial state: the configured default range, and no constraint on any group.
  *
@@ -446,7 +474,7 @@ export function termsGroups(config: DashboardConfig): TermsGroupConfig[] {
  */
 export function defaultFilterState(config?: DashboardConfig, today = new Date()): FilterState {
   if (!config) {
-    return { range: dateRangeOption(undefined, today), groups: {}, picks: [] };
+    return { range: dateRangeOption(undefined, today), groups: {}, picks: [], path: null };
   }
 
   const groups: Record<string, GroupSelection> = {};
@@ -458,6 +486,7 @@ export function defaultFilterState(config?: DashboardConfig, today = new Date())
     range: dateRangeOption(dateRangeFilter(config)?.default, today),
     groups,
     picks: [],
+    path: null,
   };
 }
 

@@ -9,6 +9,7 @@ import {
 } from '@angular/core';
 import {
   BucketPick,
+  DEFAULT_PATH_ROOT,
   DashboardConfig,
   DateRangeOption,
   FilterState,
@@ -20,6 +21,7 @@ import {
   defaultFilterState,
   isConstrained,
   memberForField,
+  pathScopeFilter,
   termsGroups,
 } from '../config/dashboard-config.model';
 import { DashboardConfigService } from '../config/dashboard-config.service';
@@ -27,11 +29,13 @@ import { LabelService } from '../core/label.service';
 import { DashboardRunner } from '../engine/dashboard-runner.service';
 import { FacetStorageService } from '../engine/facet-storage.service';
 import { FacetValuesService, GroupValues } from '../engine/facet-values.service';
+import { Container, PathBrowserService } from '../engine/path-browser.service';
 import { DashboardGridComponent } from '../layout/dashboard-grid.component';
 import { DateRangePickerComponent } from '../layout/date-range-picker.component';
 import { FacetGroupButtonComponent } from '../layout/facet-group-button.component';
 import { FacetGroupDialogComponent } from '../layout/facet-group-dialog.component';
 import { FilterChipsComponent } from '../layout/filter-chips.component';
+import { PathScopePickerComponent } from '../layout/path-scope-picker.component';
 import { PageHeaderComponent } from '../layout/page-header.component';
 import { BucketClick } from '../widgets/chart-widget.component';
 import {
@@ -57,6 +61,7 @@ type GroupLabels = Map<string, Map<string, string>>;
     FacetGroupDialogComponent,
     FilterChipsComponent,
     PageHeaderComponent,
+    PathScopePickerComponent,
     RequirementNoticeComponent,
   ],
   providers: [DashboardRunner],
@@ -99,6 +104,22 @@ type GroupLabels = Map<string, Map<string, string>>;
                 (rangeChange)="changeRange($event)"
               />
               <span class="text-xs text-ink-subtle">on {{ range.field }}</span>
+            }
+
+            @if (pathFilter(); as scope) {
+              <nxd-path-scope-picker
+                [label]="scope.label ?? 'Location'"
+                [current]="browsedPath()"
+                [selected]="filters().path"
+                [containers]="containers()"
+                [open]="pathPickerOpen()"
+                [loading]="browsing()"
+                [disabled]="runner.loading()"
+                (opened)="openPathPicker()"
+                (closed)="pathPickerOpen.set(false)"
+                (browse)="browseTo($event)"
+                (applied)="applyPath($event)"
+              />
             }
 
             @for (group of groups(); track group.id) {
@@ -160,6 +181,7 @@ type GroupLabels = Map<string, Map<string, string>>;
 export class DashboardPageComponent {
   private readonly configs = inject(DashboardConfigService);
   private readonly facetValues = inject(FacetValuesService);
+  private readonly pathBrowser = inject(PathBrowserService);
   private readonly storage = inject(FacetStorageService);
   private readonly labelService = inject(LabelService);
   readonly runner = inject(DashboardRunner);
@@ -177,6 +199,10 @@ export class DashboardPageComponent {
   readonly filters = signal<FilterState>(defaultFilterState());
 
   readonly openGroupId = signal<string | null>(null);
+  readonly pathPickerOpen = signal(false);
+  readonly browsedPath = signal(DEFAULT_PATH_ROOT);
+  readonly containers = signal<Container[]>([]);
+  readonly browsing = signal(false);
   private readonly values = signal<Map<string, GroupValues>>(new Map());
   private readonly labels = signal<Map<string, GroupLabels>>(new Map());
 
@@ -189,14 +215,23 @@ export class DashboardPageComponent {
     const config = this.config();
     return config ? dateRangeFilter(config) : null;
   });
+  readonly pathFilter = computed(() => {
+    const config = this.config();
+    return config ? pathScopeFilter(config) : null;
+  });
   readonly hasFilters = computed(
-    () => !!this.dateFilter() || this.groups().length > 0 || this.filters().picks.length > 0,
+    () =>
+      !!this.dateFilter() ||
+      !!this.pathFilter() ||
+      this.groups().length > 0 ||
+      this.filters().picks.length > 0,
   );
 
   /** Anything at all narrowing the figures, which is what makes "Clear filters" worth offering. */
   readonly anyConstrained = computed(
     () =>
       this.filters().picks.length > 0 ||
+      !!this.filters().path ||
       Object.values(this.filters().groups).some((group) =>
         Object.values(group).some(isConstrained),
       ),
@@ -303,7 +338,39 @@ export class DashboardPageComponent {
       ...state,
       groups: defaultFilterState(config).groups,
       picks: [],
+      path: null,
     }));
+    void this.runCurrent();
+  }
+
+  /** Opens on the container in force, so the trail starts where the figures already are. */
+  async openPathPicker(): Promise<void> {
+    this.pathPickerOpen.set(true);
+    const start = this.filters().path ?? this.pathFilter()?.root ?? DEFAULT_PATH_ROOT;
+    await this.browseTo(start);
+  }
+
+  async browseTo(path: string): Promise<void> {
+    const config = this.config();
+    if (!config) {
+      return;
+    }
+
+    this.browsedPath.set(path);
+    this.browsing.set(true);
+    try {
+      this.containers.set(await this.pathBrowser.children(config.index, path));
+    } catch {
+      // A level that cannot be listed shows as empty; the trail still walks back up.
+      this.containers.set([]);
+    } finally {
+      this.browsing.set(false);
+    }
+  }
+
+  applyPath(path: string | null): void {
+    this.pathPickerOpen.set(false);
+    this.filters.update((state) => ({ ...state, path }));
     void this.runCurrent();
   }
 

@@ -10,6 +10,10 @@
       "default": "all"
     },
     {
+      "type": "pathScope",
+      "label": "Location"
+    },
+    {
       "type": "termsGroup",
       "id": "kind",
       "label": "Document kinds",

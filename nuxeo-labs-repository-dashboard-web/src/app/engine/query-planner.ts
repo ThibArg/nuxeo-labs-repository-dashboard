@@ -17,6 +17,7 @@ import {
   isChartWidget,
   isKpiWidget,
   isTableWidget,
+  pathScopeFilter,
   scopeClauses,
   termsGroups,
 } from '../config/dashboard-config.model';
@@ -115,6 +116,16 @@ export function globalFilters(
     if (clause) {
       clauses.push(clause);
     }
+  }
+
+  /*
+   * `ecm:path.children` is the path hierarchy sub-field: it holds every ancestor path as a token,
+   * so one `term` matches a container and everything below it. That includes versions, which carry
+   * the path of the document they were cut from — harmless where the dashboard already excludes
+   * them in its `baseFilter`, and worth knowing where it does not.
+   */
+  if (pathScopeFilter(config) && filters.path) {
+    clauses.push({ term: { 'ecm:path.children': filters.path } });
   }
 
   /*
