@@ -104,6 +104,62 @@ describe('compileTermsGroup', () => {
   });
 });
 
+describe('a member naming principals', () => {
+  const ACTORS: TermsGroupConfig = {
+    type: 'termsGroup',
+    id: 'assignees',
+    label: 'Assignees',
+    combine: 'or',
+    members: [{ id: 'actors', field: 'nt:actors', label: 'Assigned to', labels: 'user' }],
+  };
+
+  function actorState(values: string[]): FilterState {
+    return {
+      range: { id: 'all', label: 'All time', from: null, to: null },
+      groups: { assignees: { actors: { mode: 'subset', values } } },
+    };
+  }
+
+  /*
+   * The same person reaches the index as `Josh` or `user:Josh` depending on which workflow node
+   * created the task, so searching one form finds part of their work. `TaskActorsHelper` does
+   * exactly this on the platform side, for every "My tasks" screen.
+   */
+  it('searches both forms of the selected user', () => {
+    const clause = compileTermsGroup(ACTORS, actorState(['Josh'])) as {
+      terms: { 'nt:actors': string[] };
+    };
+
+    expect(clause.terms['nt:actors'].sort()).toEqual(['Josh', 'user:Josh']);
+  });
+
+  it('searches both forms of a group as well', () => {
+    const clause = compileTermsGroup(ACTORS, actorState(['group:sales'])) as {
+      terms: { 'nt:actors': string[] };
+    };
+
+    expect(clause.terms['nt:actors'].sort()).toEqual(['group:sales', 'sales']);
+  });
+
+  // A selection persisted before the merge existed holds a raw value; it must still work.
+  it('accepts a value stored under its raw form', () => {
+    const clause = compileTermsGroup(ACTORS, actorState(['user:Josh'])) as {
+      terms: { 'nt:actors': string[] };
+    };
+
+    expect(clause.terms['nt:actors'].sort()).toEqual(['Josh', 'user:Josh']);
+  });
+
+  it('leaves a member that names no principal untouched', () => {
+    const clause = compileTermsGroup(
+      GROUP,
+      state({ types: { mode: 'subset', values: ['File'] }, facets: { mode: 'all' } }),
+    );
+
+    expect(clause).toEqual({ terms: { 'ecm:primaryType': ['File'] } });
+  });
+});
+
 describe('describeTermsGroup', () => {
   const labels = new Map([['types', new Map([['File', 'Fichier']])]]);
 

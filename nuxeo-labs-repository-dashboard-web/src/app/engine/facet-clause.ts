@@ -14,6 +14,7 @@ import {
   TermsGroupConfig,
   TermsMemberConfig,
 } from '../config/dashboard-config.model';
+import { principalForms } from '../core/principal';
 import { EsClause } from './es-query';
 
 export interface ActiveMember {
@@ -35,8 +36,23 @@ export function activeMembers(group: TermsGroupConfig, selection: GroupSelection
   return active;
 }
 
+/**
+ * Expands a selection into the clause values that will actually match.
+ *
+ * A principal reaches the index under two forms, so selecting one person must search for both —
+ * exactly what `TaskActorsHelper` does on the platform side. Both are always emitted rather than
+ * only the forms already seen, because a reassignment rewrites the stored form after the value
+ * list was built. See `core/principal.ts`.
+ */
+function clauseValues(member: TermsMemberConfig, values: string[]): string[] {
+  if (member.labels !== 'user') {
+    return values;
+  }
+  return [...new Set(values.flatMap(principalForms))];
+}
+
 function termsClause(member: TermsMemberConfig, values: string[]): EsClause {
-  return { terms: { [member.field]: values } };
+  return { terms: { [member.field]: clauseValues(member, values) } };
 }
 
 /**

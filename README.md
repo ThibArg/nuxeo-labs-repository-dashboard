@@ -449,6 +449,42 @@ underscore is left exactly as it was written.
 (`approve`, `reject`, `validate`), while the i18n key sits in the button's `label` and never leaves
 the model definition. Declaring a strategy there would promise a translation that can never happen.
 
+### A principal reaches the index under two forms
+
+**`nt:actors` holds `Josh` for one task and `user:Josh` for the next, in the same workflow
+instance.** This is stock Nuxeo behaviour, not a quirk of one server, and a dashboard that ignores
+it reports one person twice, each holding part of their work.
+
+The field has no resolver and no normalisation, so the platform stores verbatim what the workflow
+node produced. Two sources coexist:
+
+| Node assigns | Form stored | Why |
+| --- | --- | --- |
+| `workflowInitiator` | `Josh` | the initiator comes from `getActingUser()`, which is bare |
+| a variable fed by Web UI's picker | `user:Josh` | that widget carries the `prefixed` attribute |
+
+In `ParallelDocumentReview`, "Choose Participants" and "Consolidate" are bare while "Give Opinion"
+is prefixed. A reassignment then rewrites the list bare again, so one task changes form over its
+life.
+
+The platform copes by searching both at once: `TaskActorsHelper.getTaskActors()` builds "prefixed
+and unprefixed names of the principal and all its groups", and six page providers feed that to
+`nt:actors/* IN ?`. Every "My tasks" screen in Nuxeo therefore queries both forms.
+
+So does this dashboard, wherever `labels` is `user`:
+
+- **Buckets are merged** on a canonical key, adding their counts. Only counts: two averages
+  recombine solely with their weights, so a widget combining `"labels": "user"` with a `metric`
+  fails loudly at plan time rather than reporting a figure that would be wrong.
+- **A selection expands to both forms.** Ticking "Josh" sends `["Josh", "user:Josh"]`, always —
+  not merely the forms already seen, since a reassignment can change the stored one afterwards.
+- **A group stays distinct from a user of the same name.** Only the user form is collapsed, which
+  preserves the very distinction the prefix was introduced for. A bare value is read as a user,
+  as `UserManagerResolver` does.
+
+On the sandbox the difference is measurable: filtering on `Josh` without this finds five of his
+six open tasks.
+
 ### Metrics with no value
 
 A count, a cardinality and a sum over an empty set are all legitimately zero. An average, a

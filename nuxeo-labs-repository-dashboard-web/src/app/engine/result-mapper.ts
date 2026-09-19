@@ -7,6 +7,7 @@
  * exposes both `doc_count` and `metric`.
  */
 import { EsAggregation, EsBucket, EsResponse, totalHits } from '../core/nuxeo.types';
+import { canonicalPrincipal } from '../core/principal';
 import { DISTINCT_AGG, INNER_AGG, METRIC_AGG } from './agg-compiler';
 import { PlannedRequest, SECONDARY_AGG, WidgetPlan } from './query-planner';
 
@@ -106,6 +107,30 @@ function normaliseBuckets(
 }
 
 /**
+ * Collapses the two forms of a principal onto one bucket.
+ *
+ * `nt:actors` stores `Josh` for a task assigned through `workflowInitiator` and `user:Josh` for
+ * one assigned through Web UI's picker, within the same workflow instance. Only counts are added:
+ * the planner refuses a metric on a merged list, because two averages do not add up.
+ */
+function mergePrincipalBuckets(buckets: DataBucket[]): DataBucket[] {
+  const merged = new Map<string, DataBucket>();
+
+  for (const bucket of buckets) {
+    const key = canonicalPrincipal(bucket.key);
+    const current = merged.get(key);
+    if (current) {
+      current.value += bucket.value;
+      current.docCount += bucket.docCount;
+    } else {
+      merged.set(key, { ...bucket, key });
+    }
+  }
+
+  return [...merged.values()].sort((a, b) => b.value - a.value);
+}
+
+/**
  * Extracts one widget's data from an aggregations response.
  *
  * @param response the shared aggregations response
@@ -128,10 +153,14 @@ export function readAggregationWidget(
   const node = (plan.wrapped && (root[INNER_AGG] as EsAggregation | undefined)) || root;
 
   if (node.buckets) {
-    const buckets = normaliseBuckets(node.buckets, plan.metricUndefinedWhenEmpty);
+    const returned = normaliseBuckets(node.buckets, plan.metricUndefinedWhenEmpty);
+    const buckets = plan.mergePrincipals ? mergePrincipalBuckets(returned) : returned;
     /*
      * The count of distinct values hangs off the wrapper, never off the bucket list itself, so it
      * is read from the root. `sum_other_doc_count` sits on the list and weighs what was dropped.
+     *
+     * The comparison uses the number of buckets the server returned, not the merged one: the
+     * cardinality counts raw values, so subtracting a merged list would invent omissions.
      */
     const distinct = metricValue(root[DISTINCT_AGG] as EsAggregation | undefined);
     const otherDocs = node['sum_other_doc_count'];
@@ -139,7 +168,7 @@ export function readAggregationWidget(
     return {
       kind: 'buckets',
       buckets,
-      ...(distinct === null ? {} : { others: Math.max(0, distinct - buckets.length) }),
+      ...(distinct === null ? {} : { others: Math.max(0, distinct - returned.length) }),
       ...(typeof otherDocs === 'number' ? { otherDocs } : {}),
     };
   }

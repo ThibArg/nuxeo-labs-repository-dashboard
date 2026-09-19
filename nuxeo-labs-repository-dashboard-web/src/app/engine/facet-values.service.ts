@@ -7,6 +7,7 @@ import {
 } from '../config/dashboard-config.model';
 import { NuxeoHttpService } from '../core/nuxeo-http.service';
 import { EsAggregation, EsBucket } from '../core/nuxeo.types';
+import { canonicalPrincipal } from '../core/principal';
 import { compileAgg } from './agg-compiler';
 import { boolFilter } from './es-query';
 import { globalFilters } from './query-planner';
@@ -110,10 +111,16 @@ export class FacetValuesService {
         ? (aggregation.buckets as EsBucket[])
         : [];
 
-      const values: FacetValue[] = buckets.map((bucket) => ({
+      const returned: FacetValue[] = buckets.map((bucket) => ({
         value: String(bucket.key_as_string ?? bucket.key),
         count: bucket.doc_count ?? 0,
       }));
+
+      /*
+       * A principal reaches the index under two forms, so the list would otherwise offer the same
+       * person twice, each with part of their tasks. See `core/principal.ts`.
+       */
+      const values = member.labels === 'user' ? mergePrincipalValues(returned) : returned;
 
       /*
        * A value the user selected may be absent from the index right now, typically after a
@@ -137,4 +144,25 @@ export class FacetValuesService {
 
     return result;
   }
+}
+
+/**
+ * Collapses the two forms of a principal onto one entry, adding their counts.
+ *
+ * Ordered by count so the busiest come first, which is also what the merged list is asked for.
+ */
+function mergePrincipalValues(values: FacetValue[]): FacetValue[] {
+  const merged = new Map<string, FacetValue>();
+
+  for (const entry of values) {
+    const value = canonicalPrincipal(entry.value);
+    const current = merged.get(value);
+    if (current) {
+      current.count += entry.count;
+    } else {
+      merged.set(value, { value, count: entry.count });
+    }
+  }
+
+  return [...merged.values()].sort((a, b) => b.count - a.count);
 }

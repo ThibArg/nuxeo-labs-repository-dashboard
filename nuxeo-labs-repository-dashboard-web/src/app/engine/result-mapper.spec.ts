@@ -12,6 +12,7 @@ function plan(overrides: Partial<WidgetPlan> = {}): WidgetPlan {
     hasMetric: false,
     metricUndefinedWhenEmpty: false,
     hasSecondary: false,
+    mergePrincipals: false,
     ...overrides,
   };
 }
@@ -269,6 +270,75 @@ describe('result-mapper', () => {
 
   it('returns undefined when the aggregation is missing from the response', () => {
     expect(readAggregationWidget(response({}), plan())).toBeUndefined();
+  });
+
+  /*
+   * `nt:actors` holds `Josh` for a task assigned through `workflowInitiator` and `user:Josh` for
+   * one assigned through Web UI's picker — within the same workflow instance. Listing them apart
+   * reports one person twice, each with part of their work.
+   */
+  describe('the two forms of a principal', () => {
+    function actors(buckets: unknown[], distinct?: number) {
+      return readAggregationWidget(
+        response({
+          w: {
+            doc_count: 9,
+            [INNER_AGG]: { buckets },
+            ...(distinct === undefined ? {} : { [DISTINCT_AGG]: { value: distinct } }),
+          },
+        }),
+        plan({ wrapped: true, mergePrincipals: true }),
+      ) as { buckets: { key: string; value: number; docCount: number }[]; others?: number };
+    }
+
+    it('adds the counts of both forms onto one bucket', () => {
+      const data = actors([
+        { key: 'Josh', doc_count: 5 },
+        { key: 'alan', doc_count: 2 },
+        { key: 'user:Josh', doc_count: 1 },
+      ]);
+
+      expect(data.buckets).toEqual([
+        { key: 'Josh', value: 6, docCount: 6 },
+        { key: 'alan', value: 2, docCount: 2 },
+      ]);
+    });
+
+    it('keeps a group apart from a user bearing the same name', () => {
+      const data = actors([
+        { key: 'sales', doc_count: 3 },
+        { key: 'group:sales', doc_count: 4 },
+      ]);
+
+      expect(data.buckets.map((bucket) => bucket.key).sort()).toEqual(['group:sales', 'sales']);
+    });
+
+    /*
+     * The cardinality counts raw values, so comparing it against the merged list would invent
+     * omissions: three values came back, and three is what the server was able to distinguish.
+     */
+    it('counts omitted values against what the server returned, not the merged list', () => {
+      const data = actors(
+        [
+          { key: 'Josh', doc_count: 5 },
+          { key: 'user:Josh', doc_count: 1 },
+          { key: 'alan', doc_count: 2 },
+        ],
+        3,
+      );
+
+      expect(data.buckets).toHaveLength(2);
+      expect(data.others).toBe(0);
+    });
+
+    it('leaves buckets alone when the widget names no principal', () => {
+      const data = readAggregationWidget(
+        response({ w: { buckets: [{ key: 'user:Josh', doc_count: 1 }] } }),
+        plan(),
+      ) as { buckets: { key: string }[] };
+
+      expect(data.buckets[0].key).toBe('user:Josh');
+    });
   });
 
   describe('readHitsWidget', () => {

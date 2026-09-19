@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { LabelStrategy } from '../config/dashboard-config.model';
 import { NuxeoHttpService } from './nuxeo-http.service';
+import { parsePrincipal } from './principal';
 
 interface NxUserEntity {
   id: string;
@@ -195,14 +196,8 @@ export class LabelService {
  * `nt:actors` holds prefixed identifiers — the parameter is literally named `prefixedActorIds` in
  * `CreateTaskUnrestricted` — so looking `user:jdoe` up as a user id answers a 404 and the chart
  * falls back to showing the prefix. A bare value is treated as a user, which is what `dc:creator`
- * and the audit's `principalName` hold.
+ * and the audit's `principalName` hold. See `core/principal.ts` for why both forms exist.
  */
-function parsePrincipal(raw: string): { group: boolean; name: string } {
-  if (raw.startsWith('group:')) {
-    return { group: true, name: raw.slice('group:'.length) };
-  }
-  return { group: false, name: raw.startsWith('user:') ? raw.slice('user:'.length) : raw };
-}
 
 /**
  * Splits a CamelCase identifier into words: `ClaimReview` reads `Claim Review`.

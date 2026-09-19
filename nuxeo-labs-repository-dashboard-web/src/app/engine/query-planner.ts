@@ -70,6 +70,13 @@ export interface WidgetPlan {
   metricUndefinedWhenEmpty: boolean;
   /** True when a secondary figure is nested under the wrapper. */
   hasSecondary: boolean;
+  /**
+   * True when bucket keys name principals and must be collapsed onto one form.
+   *
+   * `nt:actors` stores `Josh` and `user:Josh` for the same person, depending on which workflow
+   * node created the task. See `core/principal.ts`.
+   */
+  mergePrincipals: boolean;
 }
 
 export interface DashboardPlan {
@@ -166,6 +173,7 @@ export function planDashboard(config: DashboardConfig, filters: FilterState): Da
           hasMetric: false,
           metricUndefinedWhenEmpty: false,
           hasSecondary: false,
+          mergePrincipals: false,
         });
       } catch (error) {
         errors.set(widgetId, error instanceof Error ? error.message : String(error));
@@ -187,6 +195,7 @@ export function planDashboard(config: DashboardConfig, filters: FilterState): Da
         hasMetric: planned.hasMetric,
         metricUndefinedWhenEmpty: planned.metricUndefinedWhenEmpty,
         hasSecondary: planned.hasSecondary,
+        mergePrincipals: planned.mergePrincipals,
       });
     } catch (error) {
       errors.set(widgetId, error instanceof Error ? error.message : String(error));
@@ -219,6 +228,7 @@ interface AggregationWidgetPlan {
   hasMetric: boolean;
   metricUndefinedWhenEmpty: boolean;
   hasSecondary: boolean;
+  mergePrincipals: boolean;
 }
 
 function planAggregationWidget(
@@ -247,6 +257,7 @@ function planAggregationWidget(
         hasMetric: false,
         metricUndefinedWhenEmpty: false,
         hasSecondary: false,
+        mergePrincipals: false,
       };
     }
 
@@ -258,6 +269,7 @@ function planAggregationWidget(
         hasMetric: true,
         metricUndefinedWhenEmpty: undefinedWhenEmpty,
         hasSecondary: false,
+        mergePrincipals: false,
       };
     }
 
@@ -280,6 +292,7 @@ function planAggregationWidget(
       hasMetric: metric !== null,
       metricUndefinedWhenEmpty: metric !== null && undefinedWhenEmpty,
       hasSecondary: !!secondary,
+      mergePrincipals: false,
     };
   }
 
@@ -288,6 +301,20 @@ function planAggregationWidget(
     const hasMetric = compileMetric(widget.metric) !== null;
     const undefinedWhenEmpty = hasMetric && metricUndefinedWhenEmpty(widget.metric);
     const distinct = distinctAgg(widget.agg);
+
+    /*
+     * Bucket keys that name principals carry two forms of the same person, so they are collapsed
+     * after the response comes back. Only document counts survive that: two averages recombine
+     * only with their weights, and two cardinalities or percentiles not at all. Rather than merge
+     * a figure that would be wrong, the widget fails loudly.
+     */
+    const mergePrincipals = widget.labels === 'user';
+    if (mergePrincipals && hasMetric) {
+      throw new Error(
+        `Widget "${widgetId}" cannot merge principals and compute a metric: ` +
+          'the two forms of a principal would have to be averaged, not added',
+      );
+    }
 
     /*
      * A `terms` list is a top N, so the reader deserves to know how many values it leaves out.
@@ -303,6 +330,7 @@ function planAggregationWidget(
         hasMetric,
         metricUndefinedWhenEmpty: undefinedWhenEmpty,
         hasSecondary: false,
+        mergePrincipals,
       };
     }
     return {
@@ -315,6 +343,7 @@ function planAggregationWidget(
       hasMetric,
       metricUndefinedWhenEmpty: undefinedWhenEmpty,
       hasSecondary: false,
+      mergePrincipals,
     };
   }
 

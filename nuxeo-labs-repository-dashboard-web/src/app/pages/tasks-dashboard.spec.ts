@@ -47,10 +47,14 @@ function aggregationsResponse(): unknown {
         },
       },
       byAssignee: wrapped(10, [
-        { key: 'user:Josh', doc_count: 6 },
+        { key: 'Josh', doc_count: 5 },
+        { key: 'user:Josh', doc_count: 1 },
         { key: 'group:sales', doc_count: 2 },
       ]),
-      overdueByAssignee: wrapped(2, [{ key: 'user:Josh', doc_count: 2 }]),
+      overdueByAssignee: wrapped(2, [
+        { key: 'Josh', doc_count: 2 },
+        { key: 'user:Josh', doc_count: 1 },
+      ]),
       byTaskType: wrapped(10, [
         { key: 'wf.serialDocumentReview.chooseParticipants', doc_count: 4 },
       ]),
@@ -216,6 +220,24 @@ describe('Tasks dashboard', () => {
     expect(text).toContain('Sales Team');
     expect(text).not.toContain('user:Josh');
     expect(text).not.toContain('group:sales');
+  });
+
+  /*
+   * `nt:actors` stores `Josh` for a task assigned through `workflowInitiator` and `user:Josh` for
+   * one assigned through Web UI's picker, within a single workflow instance. Counting them apart
+   * would show one person twice, each holding part of their work.
+   *
+   * Read on the ranked list, which renders its figures; the chart stub renders labels only.
+   */
+  it('counts one person once, whichever form the task recorded', async () => {
+    const fixture = await render();
+    const list = (fixture.nativeElement as HTMLElement).querySelector('nxd-ranked-list');
+    const text = list?.textContent ?? '';
+
+    expect(text).toContain('Josh Kramer');
+    // Two overdue plus one, added rather than listed apart.
+    expect(text).toContain('3');
+    expect(text.match(/Josh Kramer/g)).toHaveLength(1);
   });
 
   it('translates the task name and the directive, which are both i18n keys', async () => {

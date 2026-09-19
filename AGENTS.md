@@ -379,6 +379,33 @@ every real server, not only this demo. `parsePrincipal` now splits it and routes
 `/api/v1/group/{name}`, reading `grouplabel` **at the root** of the entity — `properties.grouplabel`
 is null when none was set. A failed lookup falls back to the bare name, never to the prefix.
 
+**But the field holds *both* forms, and that is native behaviour.** `nt:actors` has no resolver and
+no normalisation, so the platform stores verbatim what the node's expression produced. A node
+assigning `workflowInitiator` stores a bare name, because `DocumentRoutingTreePersister` writes
+`getActingUser()`; a node assigning a variable fed by Web UI's picker stores a prefixed one,
+because that widget carries `prefixed`. In `ParallelDocumentReview` the forms **alternate within
+one instance**: Task2556 "Choose Participants" and Task2169 "Consolidate" are bare
+(`workflowInitiator`), Task328d "Give Opinion" is prefixed (`WorkflowVariables["participants"]`).
+`SerialDocumentReview` does the same. And `TaskServiceImpl.java:539` rewrites the list **bare** on
+a reassignment, so a single task changes form over its life.
+
+The platform reconciles them at query time rather than at write time:
+`TaskActorsHelper.getTaskActors()` builds "prefixed and unprefixed names of the principal and all
+its groups", fed to `nt:actors/* IN ?` by six page providers — every "My tasks" screen queries
+both. Where it forgets to, it is wrong: `Workflow.GetOpenTasks` compares
+`task.getActors().contains(username)` on a raw string and silently returns nothing.
+
+`core/principal.ts` therefore carries three functions. `canonicalPrincipal` keys a user by its bare
+name and a group by its prefixed one — collapsing `group:sales` to `sales` would merge it with a
+user of that name, undoing the distinction the prefix exists for. `principalForms` mirrors
+`TaskActorsHelper`, groups included. The merge is driven by `labels === 'user'`, a no-op on a field
+that never carries a prefix such as `dc:creator`. **Only counts are added**: two averages recombine
+only with their weights, so a chart combining `labels: "user"` with a `metric` raises a plan error
+naming the reason rather than merging a figure that would be wrong. And `others` is computed
+against the number of buckets the server returned, never the merged list, since the `cardinality`
+counts raw values. Measured on the sandbox: filtering on `Josh` without this finds five of his six
+open tasks.
+
 **A task carries no workflow model name.** `nt:processName` looks like it should and does not: it
 receives the node's *notification template*, usually empty (`GraphRunner.java:394-397` against the
 signature in `TaskService.java:151-154`). Only `nt:processId` leads to the instance, so grouping
@@ -447,7 +474,7 @@ Diagnostics are live; Governance is the last placeholder, and it names its missi
 The work is pushed to `github.com/ThibArg/nuxeo-labs-repository-dashboard`, a public backup until
 the plugin is ready to be forked into `nuxeo-sandbox`; the README carries a warning saying so.
 
-Phase 4b added the Tasks dashboard: 305 tests, five live screens. Read "Phase 4b" above before
+Phase 4b added the Tasks dashboard: 335 tests, five live screens. Read "Phase 4b" above before
 touching anything about due dates — the short version is that `audit_wf` cannot answer the question
 and that a nightly job truncates the corpus to workflows still alive.
 
