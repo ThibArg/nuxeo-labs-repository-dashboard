@@ -8,14 +8,18 @@ import {
   signal,
 } from '@angular/core';
 import {
+  BucketPick,
   DashboardConfig,
   DateRangeOption,
   FilterState,
   GroupSelection,
+  SELECT_ALL,
   TermsGroupConfig,
+  TermsMemberConfig,
   dateRangeFilter,
   defaultFilterState,
   isConstrained,
+  memberForField,
   termsGroups,
 } from '../config/dashboard-config.model';
 import { DashboardConfigService } from '../config/dashboard-config.service';
@@ -27,7 +31,9 @@ import { DashboardGridComponent } from '../layout/dashboard-grid.component';
 import { DateRangePickerComponent } from '../layout/date-range-picker.component';
 import { FacetGroupButtonComponent } from '../layout/facet-group-button.component';
 import { FacetGroupDialogComponent } from '../layout/facet-group-dialog.component';
+import { FilterChipsComponent } from '../layout/filter-chips.component';
 import { PageHeaderComponent } from '../layout/page-header.component';
+import { BucketClick } from '../widgets/chart-widget.component';
 import {
   PreflightFeature,
   RequirementNoticeComponent,
@@ -49,6 +55,7 @@ type GroupLabels = Map<string, Map<string, string>>;
     DateRangePickerComponent,
     FacetGroupButtonComponent,
     FacetGroupDialogComponent,
+    FilterChipsComponent,
     PageHeaderComponent,
     RequirementNoticeComponent,
   ],
@@ -103,6 +110,14 @@ type GroupLabels = Map<string, Map<string, string>>;
                 (opened)="openGroup(group)"
               />
             }
+
+            <nxd-filter-chips
+              [picks]="filters().picks"
+              [clearable]="anyConstrained()"
+              [disabled]="runner.loading()"
+              (removed)="removePick($event)"
+              (cleared)="clearFilters()"
+            />
           </div>
         }
 
@@ -122,6 +137,7 @@ type GroupLabels = Map<string, Map<string, string>>;
           [widgetErrors]="runner.widgetErrors()"
           [loading]="runner.loading()"
           [error]="runner.error()"
+          (picked)="pickBucket($event)"
         />
 
         @for (group of groups(); track group.id) {
@@ -173,7 +189,18 @@ export class DashboardPageComponent {
     const config = this.config();
     return config ? dateRangeFilter(config) : null;
   });
-  readonly hasFilters = computed(() => !!this.dateFilter() || this.groups().length > 0);
+  readonly hasFilters = computed(
+    () => !!this.dateFilter() || this.groups().length > 0 || this.filters().picks.length > 0,
+  );
+
+  /** Anything at all narrowing the figures, which is what makes "Clear filters" worth offering. */
+  readonly anyConstrained = computed(
+    () =>
+      this.filters().picks.length > 0 ||
+      Object.values(this.filters().groups).some((group) =>
+        Object.values(group).some(isConstrained),
+      ),
+  );
 
   constructor() {
     // Reloads whenever the route points at another dashboard.
@@ -227,6 +254,96 @@ export class DashboardPageComponent {
     this.configs.invalidate(this.dashboardId());
     this.facetValues.invalidate();
     void this.loadConfig(this.dashboardId());
+  }
+
+  /**
+   * Narrows the dashboard to the bucket that was clicked, or widens it again if it was already the
+   * constraint.
+   *
+   * A value whose field a group declares is routed into that group rather than kept apart, so the
+   * two ways of expressing one constraint — this click and the facet dialog — never disagree on
+   * screen. Everything else becomes a pick.
+   */
+  pickBucket(click: BucketClick): void {
+    const config = this.config();
+    if (!config) {
+      return;
+    }
+
+    const routed = memberForField(config, click.field);
+    if (routed) {
+      this.toggleMemberValue(routed.group, routed.member, click.value);
+    } else {
+      this.togglePick(click);
+    }
+    void this.runCurrent();
+  }
+
+  removePick(pick: BucketPick): void {
+    this.filters.update((state) => ({
+      ...state,
+      picks: state.picks.filter(
+        (current) => current.field !== pick.field || current.value !== pick.value,
+      ),
+    }));
+    void this.runCurrent();
+  }
+
+  /** Drops every constraint but the period, which is a reading window rather than a filter. */
+  clearFilters(): void {
+    const config = this.config();
+    if (!config) {
+      return;
+    }
+
+    for (const group of termsGroups(config)) {
+      this.storage.clear(this.dashboardId(), group);
+    }
+    this.filters.update((state) => ({
+      ...state,
+      groups: defaultFilterState(config).groups,
+      picks: [],
+    }));
+    void this.runCurrent();
+  }
+
+  /**
+   * Adds the value to the member's selection, or takes it out when it was already there.
+   *
+   * An emptied subset goes back to "all" rather than staying an empty list: an empty `terms` clause
+   * matches nothing, so the dashboard would read zero everywhere instead of unfiltered.
+   */
+  private toggleMemberValue(
+    group: TermsGroupConfig,
+    member: TermsMemberConfig,
+    value: string,
+  ): void {
+    const current = this.filters().groups[group.id]?.[member.id] ?? SELECT_ALL;
+    const values = current.mode === 'subset' ? current.values : [];
+    const next = values.includes(value)
+      ? values.filter((candidate) => candidate !== value)
+      : [...values, value];
+
+    const selection: GroupSelection = {
+      ...(this.filters().groups[group.id] ?? {}),
+      [member.id]: next.length ? { mode: 'subset', values: next } : SELECT_ALL,
+    };
+
+    this.filters.update((state) => ({
+      ...state,
+      groups: { ...state.groups, [group.id]: selection },
+    }));
+    this.storage.write(this.dashboardId(), group, selection);
+  }
+
+  private togglePick(click: BucketClick): void {
+    this.filters.update((state) => {
+      const without = state.picks.filter(
+        (pick) => pick.field !== click.field || pick.value !== click.value,
+      );
+      const removed = without.length !== state.picks.length;
+      return { ...state, picks: removed ? without : [...state.picks, click] };
+    });
   }
 
   private async loadConfig(id: string): Promise<void> {

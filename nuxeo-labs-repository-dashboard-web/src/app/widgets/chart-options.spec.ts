@@ -1,5 +1,5 @@
 import { DataBucket } from '../engine/result-mapper';
-import { buildChartOption } from './chart-options';
+import { bucketIndexAt, buildChartOption } from './chart-options';
 
 function buckets(...entries: [string, number][]): DataBucket[] {
   return entries.map(([key, value]) => ({ key, value, docCount: value }));
@@ -161,5 +161,24 @@ describe('buildChartOption', () => {
         seriesName: 's',
       }),
     ).toEqual({});
+  });
+});
+
+describe('bucketIndexAt', () => {
+  /*
+   * The reversal a horizontal bar chart applies is invisible on a click in the middle of an odd
+   * sized chart, which is exactly how a bug like this survives being looked at.
+   */
+  it('maps a click back through the reversal a horizontal bar chart applies', () => {
+    expect([0, 1, 2, 3].map((index) => bucketIndexAt('hbar', 4, index))).toEqual([3, 2, 1, 0]);
+  });
+
+  it('leaves every other chart type alone', () => {
+    for (const type of ['bar', 'line', 'area', 'donut', 'pie', 'ranked-list'] as const) {
+      expect(
+        [0, 1, 2, 3].map((index) => bucketIndexAt(type, 4, index)),
+        type,
+      ).toEqual([0, 1, 2, 3]);
+    }
   });
 });

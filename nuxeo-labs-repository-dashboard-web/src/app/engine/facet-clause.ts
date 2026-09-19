@@ -8,8 +8,10 @@
  * document types stayed checked.
  */
 import {
+  BucketPick,
   FilterState,
   GroupSelection,
+  LabelStrategy,
   SELECT_ALL,
   TermsGroupConfig,
   TermsMemberConfig,
@@ -44,15 +46,15 @@ export function activeMembers(group: TermsGroupConfig, selection: GroupSelection
  * only the forms already seen, because a reassignment rewrites the stored form after the value
  * list was built. See `core/principal.ts`.
  */
-function clauseValues(member: TermsMemberConfig, values: string[]): string[] {
-  if (member.labels !== 'user') {
+function clauseValues(labels: LabelStrategy | undefined, values: string[]): string[] {
+  if (labels !== 'user') {
     return values;
   }
   return [...new Set(values.flatMap(principalForms))];
 }
 
-function termsClause(member: TermsMemberConfig, values: string[]): EsClause {
-  return { terms: { [member.field]: clauseValues(member, values) } };
+function termsClause(field: string, labels: LabelStrategy | undefined, values: string[]): EsClause {
+  return { terms: { [field]: clauseValues(labels, values) } };
 }
 
 /**
@@ -67,14 +69,35 @@ export function compileTermsGroup(group: TermsGroupConfig, state: FilterState): 
 
   // A single constrained member needs no boolean wrapper.
   if (active.length === 1) {
-    return termsClause(active[0].member, active[0].values);
+    return termsClause(active[0].member.field, active[0].member.labels, active[0].values);
   }
 
-  const clauses = active.map((entry) => termsClause(entry.member, entry.values));
+  const clauses = active.map((entry) =>
+    termsClause(entry.member.field, entry.member.labels, entry.values),
+  );
 
   return group.combine === 'and'
     ? { bool: { must: clauses } }
     : { bool: { should: clauses, minimum_should_match: 1 } };
+}
+
+/**
+ * Compiles the constraints picked by clicking buckets.
+ *
+ * One clause per field, so two picks on the same field are alternatives rather than an
+ * impossibility: nothing is at once a `File` and a `Note`, and a reader clicking both means "either
+ * of these". Across fields the clauses stack, which is the ordinary reading of two filters.
+ */
+export function compilePicks(picks: BucketPick[]): EsClause[] {
+  const byField = new Map<string, { labels: LabelStrategy | undefined; values: string[] }>();
+
+  for (const pick of picks) {
+    const entry = byField.get(pick.field) ?? { labels: pick.labels, values: [] };
+    entry.values.push(pick.value);
+    byField.set(pick.field, entry);
+  }
+
+  return [...byField].map(([field, entry]) => termsClause(field, entry.labels, entry.values));
 }
 
 /**

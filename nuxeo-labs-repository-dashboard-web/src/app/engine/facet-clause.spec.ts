@@ -1,5 +1,5 @@
 import { FilterState, GroupSelection, TermsGroupConfig } from '../config/dashboard-config.model';
-import { compileTermsGroup, describeTermsGroup } from './facet-clause';
+import { compilePicks, compileTermsGroup, describeTermsGroup } from './facet-clause';
 
 const GROUP: TermsGroupConfig = {
   type: 'termsGroup',
@@ -16,6 +16,7 @@ function state(selection: GroupSelection): FilterState {
   return {
     range: { id: 'all', label: 'All time', from: null, to: null },
     groups: { kind: selection },
+    picks: [],
   };
 }
 
@@ -99,6 +100,7 @@ describe('compileTermsGroup', () => {
       compileTermsGroup(GROUP, {
         range: { id: 'all', label: '', from: null, to: null },
         groups: {},
+        picks: [],
       }),
     ).toBeNull();
   });
@@ -117,6 +119,7 @@ describe('a member naming principals', () => {
     return {
       range: { id: 'all', label: 'All time', from: null, to: null },
       groups: { assignees: { actors: { mode: 'subset', values } } },
+      picks: [],
     };
   }
 
@@ -203,5 +206,53 @@ describe('describeTermsGroup', () => {
         facets: { mode: 'all' },
       }),
     ).toBe('Including: document types a, b, c, d and 2 more.');
+  });
+});
+
+describe('compilePicks', () => {
+  it('emits nothing when nothing was picked', () => {
+    expect(compilePicks([])).toEqual([]);
+  });
+
+  /*
+   * Two values of one field are alternatives: no document is at once a File and a Note, so
+   * stacking them as separate clauses would answer zero and read as a broken dashboard rather
+   * than as an impossible question.
+   */
+  it('reads two picks on one field as alternatives', () => {
+    expect(
+      compilePicks([
+        { field: 'ecm:primaryType', value: 'File', label: 'File' },
+        { field: 'ecm:primaryType', value: 'Note', label: 'Note' },
+      ]),
+    ).toEqual([{ terms: { 'ecm:primaryType': ['File', 'Note'] } }]);
+  });
+
+  it('stacks picks on different fields', () => {
+    expect(
+      compilePicks([
+        { field: 'ecm:primaryType', value: 'File', label: 'File' },
+        { field: 'ecm:currentLifeCycleState', value: 'project', label: 'Project' },
+      ]),
+    ).toEqual([
+      { terms: { 'ecm:primaryType': ['File'] } },
+      { terms: { 'ecm:currentLifeCycleState': ['project'] } },
+    ]);
+  });
+
+  /*
+   * A bucket keyed by a principal has already been merged to its canonical form, so the clause has
+   * to search both forms again — exactly as a selection made through the facet dialog does.
+   */
+  it('searches both forms of a principal', () => {
+    expect(
+      compilePicks([{ field: 'dc:creator', value: 'Josh', label: 'Josh Kramer', labels: 'user' }]),
+    ).toEqual([{ terms: { 'dc:creator': ['Josh', 'user:Josh'] } }]);
+  });
+
+  it('leaves a value alone when the widget resolved it any other way', () => {
+    expect(
+      compilePicks([{ field: 'dc:creator', value: 'Josh', label: 'Josh', labels: 'raw' }]),
+    ).toEqual([{ terms: { 'dc:creator': ['Josh'] } }]);
   });
 });

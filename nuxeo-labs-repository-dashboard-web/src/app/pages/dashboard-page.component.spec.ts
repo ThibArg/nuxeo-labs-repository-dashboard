@@ -601,4 +601,143 @@ describe('DashboardPageComponent', () => {
       );
     });
   });
+  describe('cross filtering', () => {
+    function routes(): StubRoute[] {
+      return [
+        {
+          match: '/site/es/nuxeo/_search',
+          matchBody: isAggregationsRequest,
+          json: aggregationsResponse(),
+        },
+        {
+          match: '/site/es/nuxeo/_search',
+          matchBody: isFacetValuesRequest,
+          json: { hits: { total: { value: 0, relation: 'eq' }, hits: [] }, aggregations: {} },
+        },
+        ...supportRoutes(),
+      ];
+    }
+
+    afterEach(() => localStorage.clear());
+
+    async function render() {
+      stub = installFetchStub(routes());
+      const fixture = TestBed.createComponent(DashboardPageComponent);
+      await settle(fixture);
+      return fixture;
+    }
+
+    /** The stubbed chart renders one button per bucket, standing in for an ECharts segment. */
+    function segment(
+      fixture: ComponentFixture<DashboardPageComponent>,
+      field: string,
+      key: string,
+    ) {
+      return (fixture.nativeElement as HTMLElement).querySelector(
+        `button[data-testid="chart-pick"][data-field="${field}"][data-key="${key}"]`,
+      ) as HTMLButtonElement;
+    }
+
+    /*
+     * Only the query, never the whole body: `byState` aggregates on ecm:currentLifeCycleState, so
+     * a naive stringify of the request finds that field whether or not anything filters on it.
+     */
+    function lastQuery(): string {
+      const bodies = stub.bodies.filter(isAggregationsRequest) as { query?: unknown }[];
+      return JSON.stringify(bodies[bodies.length - 1]?.query);
+    }
+
+    it('narrows every widget to the bucket that was clicked', async () => {
+      const fixture = await render();
+
+      segment(fixture, 'ecm:currentLifeCycleState', 'project').click();
+      await settle(fixture);
+
+      expect(lastQuery()).toContain('"ecm:currentLifeCycleState":["project"]');
+    });
+
+    it('shows the constraint as a chip, and lifts it when dismissed', async () => {
+      const fixture = await render();
+
+      segment(fixture, 'ecm:currentLifeCycleState', 'project').click();
+      await settle(fixture);
+      expect((fixture.nativeElement as HTMLElement).textContent).toContain(
+        'ecm:currentLifeCycleState',
+      );
+
+      (
+        (fixture.nativeElement as HTMLElement).querySelector(
+          'button[aria-label^="Remove filter"]',
+        ) as HTMLButtonElement
+      ).click();
+      await settle(fixture);
+
+      expect(lastQuery()).not.toContain('ecm:currentLifeCycleState');
+    });
+
+    it('lifts the constraint when the same bucket is clicked again', async () => {
+      const fixture = await render();
+
+      segment(fixture, 'ecm:currentLifeCycleState', 'project').click();
+      await settle(fixture);
+      segment(fixture, 'ecm:currentLifeCycleState', 'project').click();
+      await settle(fixture);
+
+      expect(lastQuery()).not.toContain('ecm:currentLifeCycleState');
+    });
+
+    /*
+     * `ecm:primaryType` is charted *and* declared as a filter member. Both paths must land in the
+     * same place, otherwise the filter bar would read "all document types" beside a chip saying
+     * the opposite.
+     */
+    it('routes a click into the declared filter when one covers that field', async () => {
+      const fixture = await render();
+
+      segment(fixture, 'ecm:primaryType', 'File').click();
+      await settle(fixture);
+
+      expect(lastQuery()).toContain('"ecm:primaryType":["File"]');
+      // It belongs to the group, so the button names it and no chip repeats it.
+      const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+      expect(text).toContain('Document kinds');
+      expect(text).not.toContain('ecm:primaryType');
+      expect(localStorage.getItem('nxd.filters.content.kind')).toContain('File');
+    });
+
+    /*
+     * A bucket keyed by a principal was merged to one canonical form before being drawn, so the
+     * clause has to look for both forms again or it finds only half the documents it counted.
+     */
+    it('searches both forms of a principal picked from a ranked list', async () => {
+      const fixture = await render();
+
+      const rows = (fixture.nativeElement as HTMLElement).querySelectorAll(
+        'nxd-ranked-list button',
+      );
+      (rows[0] as HTMLButtonElement).click();
+      await settle(fixture);
+
+      expect(lastQuery()).toContain('"dc:creator":["jdoe","user:jdoe"]');
+    });
+
+    it('clears the picks and the groups together, and leaves the period alone', async () => {
+      const fixture = await render();
+
+      segment(fixture, 'ecm:currentLifeCycleState', 'project').click();
+      await settle(fixture);
+      segment(fixture, 'ecm:primaryType', 'File').click();
+      await settle(fixture);
+
+      const clear = [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].find(
+        (button) => button.textContent?.trim() === 'Clear filters',
+      ) as HTMLButtonElement;
+      clear.click();
+      await settle(fixture);
+
+      expect(lastQuery()).not.toContain('ecm:currentLifeCycleState');
+      expect(lastQuery()).not.toContain('"ecm:primaryType":["File"]');
+      expect(localStorage.getItem('nxd.filters.content.kind')).toBeNull();
+    });
+  });
 });

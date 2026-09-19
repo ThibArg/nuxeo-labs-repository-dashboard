@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import {
   DashboardConfig,
   DateRangeOption,
@@ -6,6 +6,7 @@ import {
   resolveSpan,
 } from '../config/dashboard-config.model';
 import { WidgetData } from '../engine/result-mapper';
+import { BucketClick } from '../widgets/chart-widget.component';
 import { WidgetOutletComponent } from '../widgets/widget-outlet.component';
 
 interface RenderedCell {
@@ -34,6 +35,7 @@ const GRID_COLUMNS = 12;
                 [rangeLabel]="range().label"
                 [bucketLabels]="bucketLabels().get(cell.id) ?? emptyBucketLabels"
                 [columnLabels]="columnLabels().get(cell.id) ?? emptyColumnLabels"
+                (picked)="picked.emit($event)"
               />
             </div>
           }
@@ -51,6 +53,9 @@ export class DashboardGridComponent {
   readonly loading = input(false);
   readonly error = input<string | null>(null);
   readonly widgetErrors = input<Map<string, string>>(new Map());
+
+  /** A bucket the reader clicked, in any widget of the grid. */
+  readonly picked = output<BucketClick>();
 
   protected readonly emptyBucketLabels = new Map<string, string>();
   protected readonly emptyColumnLabels = new Map<string, Map<string, string>>();

@@ -35,6 +35,7 @@ function state(overrides: Partial<FilterState> = {}): FilterState {
   return {
     range: { id: 'all', label: 'All time', from: null, to: null },
     groups: { kind: { types: { mode: 'all' }, facets: { mode: 'all' } } },
+    picks: [],
     ...overrides,
   };
 }

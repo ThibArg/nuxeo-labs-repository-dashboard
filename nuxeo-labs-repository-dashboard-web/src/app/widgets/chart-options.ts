@@ -91,6 +91,20 @@ export function buildChartOption(input: ChartOptionInput): EChartsCoreOption {
   }
 }
 
+/**
+ * Bucket a click at `dataIndex` landed on.
+ *
+ * Lives beside `buildBarOption` because it is the exact inverse of what that function does: a
+ * horizontal bar chart reverses both its category axis and its series data, so that the largest
+ * value reads at the top rather than at the bottom. ECharts then reports an index into the
+ * reversed array, and taking it at face value picks the bucket symmetrically opposite the one the
+ * reader clicked — right in the middle, wrong everywhere else, which is the kind of bug that
+ * survives a casual look at a five bar chart.
+ */
+export function bucketIndexAt(type: ChartWidgetType, count: number, dataIndex: number): number {
+  return type === 'hbar' ? count - 1 - dataIndex : dataIndex;
+}
+
 function buildPieOption(input: ChartOptionInput): EChartsCoreOption {
   const format = valueFormatter(input.format);
   const data = input.buckets.map((bucket) => ({

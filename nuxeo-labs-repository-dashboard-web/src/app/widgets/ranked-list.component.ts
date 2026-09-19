@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { ChartWidgetConfig } from '../config/dashboard-config.model';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChartWidgetConfig, pickableField } from '../config/dashboard-config.model';
 import { formatNumber } from '../core/format';
 import { WidgetData, isEmptyData } from '../engine/result-mapper';
+import { BucketClick } from './chart-widget.component';
 import { chartPalette } from './chart-options';
 import { truncationDetail, truncationFooter } from './truncation';
 import { WidgetHostComponent } from './widget-host.component';
@@ -39,16 +40,28 @@ interface RankedEntry {
     >
       <ul class="flex flex-col gap-3">
         @for (entry of entries(); track entry.key) {
-          <li class="grid grid-cols-[minmax(6rem,9rem)_1fr_auto] items-center gap-3">
-            <span class="truncate text-sm text-ink" [title]="entry.label">{{ entry.label }}</span>
-            <span class="h-2 overflow-hidden rounded-full bg-canvas">
-              <span
-                class="block h-full rounded-full"
-                [style.width.%]="entry.share"
-                [style.background-color]="entry.colour"
-              ></span>
-            </span>
-            <span class="text-sm font-medium tabular-nums text-ink-muted">{{ entry.value }}</span>
+          <li>
+            <!--
+              A button rather than a clickable row: the bars are a list of values, and reaching one
+              with a keyboard is the same gesture as reaching any other control on the page.
+            -->
+            <button
+              type="button"
+              class="grid w-full grid-cols-[minmax(6rem,9rem)_1fr_auto] items-center gap-3 rounded text-left"
+              [class.cursor-default]="!pickable()"
+              [disabled]="!pickable()"
+              (click)="pick(entry)"
+            >
+              <span class="truncate text-sm text-ink" [title]="entry.label">{{ entry.label }}</span>
+              <span class="h-2 overflow-hidden rounded-full bg-canvas">
+                <span
+                  class="block h-full rounded-full"
+                  [style.width.%]="entry.share"
+                  [style.background-color]="entry.colour"
+                ></span>
+              </span>
+              <span class="text-sm font-medium tabular-nums text-ink-muted">{{ entry.value }}</span>
+            </button>
           </li>
         }
       </ul>
@@ -65,7 +78,23 @@ export class RankedListComponent {
   readonly loading = input(false);
   readonly error = input<string | null>(null);
 
+  readonly picked = output<BucketClick>();
+
   readonly empty = computed(() => isEmptyData(this.data()));
+
+  protected readonly pickable = computed(() => pickableField(this.config()) !== null);
+
+  protected pick(entry: RankedEntry): void {
+    const field = pickableField(this.config());
+    if (field) {
+      this.picked.emit({
+        field,
+        value: entry.key,
+        label: entry.label,
+        labels: this.config().labels,
+      });
+    }
+  }
 
   readonly entries = computed<RankedEntry[]>(() => {
     const data = this.data();

@@ -287,6 +287,32 @@ One consequence worth knowing: under `lookup` a full page is **never** collapsed
 Holding every row of a top N says nothing about holding every value, and collapsing would silently
 widen the filter to people who were never shown.
 
+### Filtering by clicking a chart
+
+Clicking a bar, a slice or a row of a ranked list narrows the whole dashboard to that value.
+Clicking it again lifts the constraint, so the gesture is its own undo.
+
+Only a `terms` aggregation offers this. The bucket of a histogram or of a range aggregation names
+an interval, and its key — `2026-09-15`, `over 30 days late` — is not a value the field ever
+equals, so those charts stay inert and their pointer says so.
+
+**A click on a field a filter group already declares is routed into that group** rather than kept
+beside it. Content charts `ecm:primaryType` and also exposes it as a filter member, so clicking a
+slice of "By Document Type" checks that type in "Document kinds": one constraint, one place, and no
+possibility of the button reading "all document types" while something else narrowed the figures.
+It is persisted like any other change to that group, because it *is* one.
+
+Everything else becomes a **pick**, shown as a chip under the filter bar with the field it
+constrains and a cross to remove it. Picks are deliberately **not** persisted. A group selection is
+a stated preference, edited through a dialog with an explicit Apply; a pick is a gesture made while
+reading a chart, and restoring one a week later over figures that have moved on would be noise
+rather than context.
+
+Two picks on the same field are read as alternatives — nothing is at once a `File` and a `Note`
+— while picks on different fields stack, which is the ordinary reading of two filters. A pick on a
+field whose values are principals searches both forms, exactly as a selection made through the
+dialog does.
+
 ### Persistence
 
 Selections are stored in `localStorage`, per dashboard, under `nxd.filters.<dashboard>.<group>`.
@@ -784,7 +810,8 @@ still appear in an audit index, through `Framework.doPrivileged` with no argumen
 | 1c | Scopes and the repository composition row | done |
 | 1d | Modification trend, range reminder, range driven layout | done |
 | 1e | Period with explicit inclusive bounds, and the Users dashboard on the audit index | done |
-| 2 | Cross filtering on bucket click, active filter chips, path scope, CSV and PNG export | |
+| 2 | Cross filtering on bucket click, with active filter chips | done |
+| 2b | Path scope, CSV and PNG export | |
 | 3 | Configuration editor, with a field picker fed by `/api/v1/config/schemas` | |
 | 4 | Workflows dashboard | done |
 | 4b | Tasks dashboard, on open tasks and due dates | done |

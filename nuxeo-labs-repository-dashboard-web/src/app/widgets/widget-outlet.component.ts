@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import {
   ChartWidgetConfig,
   KpiWidgetConfig,
@@ -6,7 +6,7 @@ import {
   WidgetConfig,
 } from '../config/dashboard-config.model';
 import { WidgetData } from '../engine/result-mapper';
-import { ChartWidgetComponent } from './chart-widget.component';
+import { BucketClick, ChartWidgetComponent } from './chart-widget.component';
 import { DataTableComponent } from './data-table.component';
 import { KpiCardComponent } from './kpi-card.component';
 import { RankedListComponent } from './ranked-list.component';
@@ -32,6 +32,7 @@ import { RankedListComponent } from './ranked-list.component';
         [labels]="bucketLabels()"
         [loading]="loading()"
         [error]="error()"
+        (picked)="picked.emit($event)"
       />
     } @else if (asChart(); as chart) {
       <nxd-chart-widget
@@ -40,6 +41,7 @@ import { RankedListComponent } from './ranked-list.component';
         [labels]="bucketLabels()"
         [loading]="loading()"
         [error]="error()"
+        (picked)="picked.emit($event)"
       />
     } @else if (asTable(); as table) {
       <nxd-data-table
@@ -57,6 +59,9 @@ export class WidgetOutletComponent {
   readonly data = input<WidgetData | undefined>(undefined);
   readonly loading = input(false);
   readonly error = input<string | null>(null);
+
+  /** A bucket the reader clicked, on its way to the filter state. */
+  readonly picked = output<BucketClick>();
 
   /** Label of the active date range, interpolated into a `{range}` placeholder in the hint. */
   readonly rangeLabel = input('');

@@ -7,10 +7,12 @@ const NO_GROUPS = { kind: { types: { mode: 'all' as const }, facets: { mode: 'al
 const RANGE_ALL: FilterState = {
   range: { id: 'all', label: 'All time', from: null, to: null },
   groups: NO_GROUPS,
+  picks: [],
 };
 const RANGE_30D: FilterState = {
   range: { id: '30d', label: 'Last 30 days', from: '2026-08-20', to: '2026-09-18' },
   groups: NO_GROUPS,
+  picks: [],
 };
 
 function config(overrides: Partial<DashboardConfig> = {}): DashboardConfig {
@@ -427,6 +429,7 @@ describe('planDashboard', () => {
       const filters: FilterState = {
         ...RANGE_ALL,
         groups: { kind: { types: { mode: 'subset', values: ['File'] }, facets: { mode: 'all' } } },
+        picks: [],
       };
 
       const body = planDashboard(config(), filters).requests[0].body;
@@ -484,6 +487,7 @@ describe('planDashboard', () => {
       const filters: FilterState = {
         ...RANGE_30D,
         groups: { kind: { types: { mode: 'subset', values: ['File'] }, facets: { mode: 'all' } } },
+        picks: [],
       };
 
       const clauses = (planDashboard(config(), filters).requests[0].body.query as any).bool.filter;

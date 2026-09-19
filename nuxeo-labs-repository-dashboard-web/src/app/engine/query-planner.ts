@@ -29,7 +29,7 @@ import {
   compileMetric,
   metricUndefinedWhenEmpty,
 } from './agg-compiler';
-import { compileTermsGroup } from './facet-clause';
+import { compilePicks, compileTermsGroup } from './facet-clause';
 import { EsClause, boolFilter, dayRangeFilter, startOfLocalDayMillis } from './es-query';
 
 /** Name of the nested aggregation carrying a KPI's secondary figure. */
@@ -116,6 +116,13 @@ export function globalFilters(
       clauses.push(clause);
     }
   }
+
+  /*
+   * Picked buckets narrow the facet value lists too, deliberately. They constrain a field no group
+   * declares, so no dialog shows a list this could collapse — and a reader who has drilled into a
+   * lifecycle state expects the type list beside it to describe what is left.
+   */
+  clauses.push(...compilePicks(filters.picks));
 
   return clauses;
 }

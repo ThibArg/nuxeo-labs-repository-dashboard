@@ -21,7 +21,7 @@ Angular 22:
 ```bash
 cd nuxeo-labs-repository-dashboard-web
 export PATH="$PWD/node:$PATH"
-npm test                                      # 28 files, vitest + jsdom
+npm test                                      # 29 files, vitest + jsdom
 npm test -- --watch=false --include src/app/engine/agg-compiler.spec.ts   # one file
 npm test -- --watch=false --filter 'never emits a .keyword'               # one behaviour
 npm run build                                 # this is the typecheck
@@ -231,6 +231,9 @@ about the choices behind them.
 | Merging the two forms of a principal adds counts only | Two averages recombine only with their weights, so `labels: "user"` together with a `metric` raises a plan error naming the reason rather than merging a wrong figure |
 | A mixed aggregate always ships with a breakdown beside it | An aggregate over unlike populations describes none of its members: on five workflow models spanning two orders of magnitude the mean lands where no model is |
 | No dashboard lists records until it can paginate | Twenty rows under a badge reading ten thousand describe nothing, and no sort makes the other 9,980 reachable. Answering "how much" is the grid's job; reaching the documents needs paging and export |
+| A click on a charted field a group declares is routed into that group | Two paths to one constraint must not become two states. Otherwise the button reads "all document types" beside a chip saying the opposite, and no reader can tell which the figures obeyed |
+| Picks are not persisted, group selections are | A group is a stated preference with an explicit Apply; a pick is a gesture made while reading a chart. Restoring one a week later, over figures that have moved on, is noise rather than context |
+| Chips render picks only | A group's selection is already named by its own button, which is also where it is edited. A second rendering would be two places to reconcile and two to keep in sync; a pick has no button, so without a chip it could be neither seen nor undone |
 
 ## Blob volumetry, set aside
 
@@ -273,8 +276,8 @@ Answer the user in French, using *vous*.
 
 ## Where things stand
 
-Six live screens — Content, Users, Workflows, Tasks, Governance, Diagnostics. Build green, 370
-tests over 28 files. `UpcomingPageComponent` is gone with the last placeholder; the requirement
+Six live screens — Content, Users, Workflows, Tasks, Governance, Diagnostics. Build green, 386
+tests over 29 files. `UpcomingPageComponent` is gone with the last placeholder; the requirement
 notice it used to carry is now tested where it lives, in `requirement-notice.component.spec.ts`.
 
 The work is pushed to `github.com/ThibArg/nuxeo-labs-repository-dashboard`, a public backup until

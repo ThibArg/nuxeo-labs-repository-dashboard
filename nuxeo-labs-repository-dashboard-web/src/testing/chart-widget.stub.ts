@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { ChartWidgetConfig } from '../app/config/dashboard-config.model';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChartWidgetConfig, pickableField } from '../app/config/dashboard-config.model';
 import { WidgetData, isEmptyData } from '../app/engine/result-mapper';
+import { BucketClick } from '../app/widgets/chart-widget.component';
 
 /**
  * Stands in for `ChartWidgetComponent` in component tests.
@@ -27,6 +28,22 @@ import { WidgetData, isEmptyData } from '../app/engine/result-mapper';
       @for (label of bucketLabels(); track label) {
         <span data-testid="chart-bucket-label">{{ label }}</span>
       }
+      <!--
+        A clickable stand-in for an ECharts segment, so cross filtering stays reachable from a page
+        test. The real component maps a dataIndex back to a bucket, which is unit tested separately
+        against the reversal a horizontal bar chart applies.
+      -->
+      @for (bucket of pickableBuckets(); track bucket.value) {
+        <button
+          type="button"
+          data-testid="chart-pick"
+          [attr.data-field]="bucket.field"
+          [attr.data-key]="bucket.value"
+          (click)="picked.emit(bucket)"
+        >
+          {{ bucket.label }}
+        </button>
+      }
     </div>
   `,
 })
@@ -36,6 +53,8 @@ export class ChartWidgetStubComponent {
   readonly labels = input<Map<string, string>>(new Map());
   readonly loading = input(false);
   readonly error = input<string | null>(null);
+
+  readonly picked = output<BucketClick>();
 
   readonly empty = computed(() => isEmptyData(this.data()));
 
@@ -51,5 +70,20 @@ export class ChartWidgetStubComponent {
     }
     const labels = this.labels();
     return data.buckets.map((bucket) => labels.get(bucket.key) ?? bucket.key);
+  });
+
+  readonly pickableBuckets = computed<BucketClick[]>(() => {
+    const data = this.data();
+    const field = pickableField(this.config());
+    if (data?.kind !== 'buckets' || !field) {
+      return [];
+    }
+    const labels = this.labels();
+    return data.buckets.map((bucket) => ({
+      field,
+      value: bucket.key,
+      label: labels.get(bucket.key) ?? bucket.key,
+      labels: this.config().labels,
+    }));
   });
 }

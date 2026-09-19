@@ -388,10 +388,40 @@ export const SELECT_ALL: TermsSelection = { mode: 'all' };
 /** Member id to selection, for a single group. */
 export type GroupSelection = Record<string, TermsSelection>;
 
+/**
+ * A constraint added by clicking a bucket, on a field no declared group covers.
+ *
+ * Clicking a value whose field *is* a group member goes into that group instead, so the filter bar
+ * never shows two renderings of one constraint. What lands here is the rest: a lifecycle state, a
+ * retention rule, anything a configuration charted without also exposing it as a filter.
+ *
+ * The label is captured at click time because nothing downstream could resolve it again: it came
+ * from the widget's own `LabelStrategy`, against a bucket list the chip has no access to.
+ */
+export interface BucketPick {
+  /** Aggregatable field the bucket came from. */
+  field: string;
+  /** Raw bucket key, which is what the clause matches on. */
+  value: string;
+  /** What the chip displays. */
+  label: string;
+  /** Strategy the widget resolved its keys with, so a principal expands the way it merged it. */
+  labels?: LabelStrategy;
+}
+
 export interface FilterState {
   range: DateRangeOption;
   /** Group id to member selections. */
   groups: Record<string, GroupSelection>;
+  /**
+   * Constraints picked by clicking a bucket.
+   *
+   * Deliberately not persisted, where a group selection is. A group is a stated preference, edited
+   * through a dialog with an explicit Apply; a pick is a gesture made while reading a chart.
+   * Restoring one a week later, over figures that have moved on, would be noise rather than
+   * context — and the chips make the difference visible while the page is open.
+   */
+  picks: BucketPick[];
 }
 
 /** Resolves a configured shortcut id against today, falling back to the first shortcut. */
@@ -416,7 +446,7 @@ export function termsGroups(config: DashboardConfig): TermsGroupConfig[] {
  */
 export function defaultFilterState(config?: DashboardConfig, today = new Date()): FilterState {
   if (!config) {
-    return { range: dateRangeOption(undefined, today), groups: {} };
+    return { range: dateRangeOption(undefined, today), groups: {}, picks: [] };
   }
 
   const groups: Record<string, GroupSelection> = {};
@@ -424,7 +454,49 @@ export function defaultFilterState(config?: DashboardConfig, today = new Date())
     groups[group.id] = Object.fromEntries(group.members.map((member) => [member.id, SELECT_ALL]));
   }
 
-  return { range: dateRangeOption(dateRangeFilter(config)?.default, today), groups };
+  return {
+    range: dateRangeOption(dateRangeFilter(config)?.default, today),
+    groups,
+    picks: [],
+  };
+}
+
+/**
+ * Member a click on this field should be routed to, if any group declares one.
+ *
+ * Two paths exist to the same constraint, the facet dialog and a click on a chart, and they must
+ * not produce two independent states for one field, which would put "All selected" on the button
+ * while a chip said otherwise.
+ */
+export function memberForField(
+  config: DashboardConfig,
+  field: string,
+): { group: TermsGroupConfig; member: TermsMemberConfig } | null {
+  for (const group of termsGroups(config)) {
+    const member = group.members.find((candidate) => candidate.field === field);
+    if (member) {
+      return { group, member };
+    }
+  }
+  return null;
+}
+
+/**
+ * Field a click on these buckets filters on, or null when the buckets are not values of one.
+ *
+ * Only `terms` qualifies. The bucket of a histogram or of a range aggregation names an interval,
+ * and its key — `2026-09-15`, `over 30 days late` — is not something the field ever equals.
+ */
+export function pickableField(widget: WidgetConfig): string | null {
+  if (isKpiWidget(widget) || isTableWidget(widget)) {
+    return null;
+  }
+  return (widget.agg as { terms?: { field?: string } }).terms?.field ?? null;
+}
+
+/** True when that exact value is already picked. */
+export function isPicked(state: FilterState, field: string, value: string): boolean {
+  return state.picks.some((pick) => pick.field === field && pick.value === value);
 }
 
 /** Selection of one member, defaulting to "no constraint". */
