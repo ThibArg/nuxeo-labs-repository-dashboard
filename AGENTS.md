@@ -113,23 +113,46 @@ it has answered. Confronting fixtures with a live index is what found that `_sou
 properties as objects while aggregations address them with a dot, that `time_zone` was missing, and
 that a bound cannot be a date string.
 
-Two paths the dataset cannot exercise, so a green run proves nothing about them: **`time_zone`**,
-every document having been created between 07:00 and 12:00 UTC so no bucket moves — use a control
-zone at UTC−10; and **"N targeting trashed" on proxies**, which needs a proxy on a *live* document
-later trashed, proxies on versions inheriting a flag that stays false.
+**Point that harness at a dead port before believing its green run.** It reaches the server through
+plain `fetch`, so a wrong base URL, a missing credential or a typo in the path yields a suite that
+passes without touching anything. The last run answered in 280 ms and looked fake; it was
+OpenSearch's request cache, and the dead-port control is what established the difference. Write the
+`process`/`Buffer` access untyped, too: there is no `@types/node` here, and a throwaway file does
+not deserve a dependency.
+
+The whole of the shipped configuration was confronted this way once: 17 planned requests over the
+four dashboards and every date range, all accepted, `shard_size` on every `terms`, `time_zone` on
+every histogram, `extended_bounds` only on the field the date filter constrains, `ecm:uuid` in the
+table's `_source`, and `percentiles` keyed `"50.0"`. Two assertions failed and **both were the
+harness's fault** — it demanded bounds on every histogram, and read the percentile under `inner`
+rather than under `metric`. Worth remembering before concluding that a red live check means the
+application is wrong.
+
+One path the dataset cannot exercise, so a green run proves nothing about it: **"N targeting
+trashed" on proxies**, which needs a proxy on a *live* document later trashed, proxies on versions
+inheriting a flag that stays false. **`time_zone` used to be on that list and no longer is**: a
+control zone at `Pacific/Honolulu` shifts the buckets onto local midnight, 10:00 UTC, so the
+parameter is demonstrably honoured even though every document here was created between 07:00 and
+12:00 UTC.
 
 **Both audit indices on the sandbox are partly fabricated and prove nothing about the platform.**
 In `audit`, `principalName` and `eventDate` of `documentCreated` and `documentModified` were taken
-from the target document, and the login events were generated outright; the prior state is kept in
-`nuxeo-audit-backup-20260918`. In `audit_wf`, 2173 entries covering 450 instances were bulk loaded
-because the twenty genuine ones had nothing completed or cancelled; prior state in
+from the target document, and the login events were generated outright; the prior state is said to
+be kept in `nuxeo-audit-backup-20260918`. In `audit_wf`, 2173 entries covering 450 instances were
+bulk loaded because the twenty genuine ones had nothing completed or cancelled; prior state in
 `nuxeo-audit-backup-20260919`, and every fabricated entry carries an `id` at or above 900000.
-Loading them needed `docker exec` on the `opensearch` container: the passthrough is read-only and
-rejects any index it does not declare, and OpenSearch is not published on a host port. Three
-consequences before a demo or a conclusion: three of the five models there — `RequestDownload`,
-`AdHoc`, `ClaimReview` — exist in no repository, so filtering on them leads to documents nobody can
-open; the durations were drawn uniformly, so mean and median coincide per model by construction;
-and any distribution or daily curve read there reflects what was written.
+Neither backup index can be checked from here: the passthrough rejects any index it does not
+declare, so those two names are hearsay until somebody looks from inside the container. Loading the
+entries needed `docker exec` on the `opensearch` container for that same reason, OpenSearch not
+being published on a host port either. Three consequences before a demo or a conclusion: three of
+the five models there — `RequestDownload`, `AdHoc`, `ClaimReview` — exist in no repository, so
+filtering on them leads to documents nobody can open; the durations were drawn uniformly, so mean
+and median coincide per model by construction; and any distribution or daily curve read there
+reflects what was written.
+
+**Figures drift, so re-measure rather than quote.** `audit_wf` held 2193 entries when the loading
+was recorded and holds 2241 today. `nt:actors` carried `Josh` five times against one `user:Josh`;
+it now carries six against two, which merge to eight. Every count in this file is a photograph.
 
 ## Facts the README does not carry
 
@@ -155,8 +178,10 @@ and any distribution or daily curve read there reflects what was written.
   `ecm:uuid` to `_source`, which the audit does not have.
 - **`percentiles` answers a map under `values`**, keyed as OpenSearch formats it (`"50.0"`, but
   `"99.9"` for a fractional percent), so `result-mapper` reads the single entry rather than
-  recomposing the key; and being multi-valued, a `terms` ordered by it needs `metric.50` in the
-  order path, not `metric`.
+  recomposing the key — and it sits under `metric`, not under the bucket name. Being multi-valued,
+  a `terms` ordered by it needs `metric.50` in the order path, not `metric`. **That ordering path
+  is the one thing no shipped configuration exercises**: all seven `terms` of `workflows.json` sort
+  by `avg`, so it has never been confronted with a live index.
 
 ## Design decisions, and why
 
@@ -233,5 +258,14 @@ the plugin is ready to be forked into `nuxeo-sandbox`; the README carries a warn
 `content.json`, so it starts from a blank page rather than from a move; it may well need
 `DataTableComponent`, which `tasks.json` already exercises. Then phase 2 (cross filtering on bucket
 click, active filter chips, path scope, CSV and PNG export) and phase 3 (configuration editor with
-a field picker fed by `/api/v1/config/schemas`). The README's status banner still says "phase 4"
-and lists only three dashboards; it predates 4b–4d.
+a field picker fed by `/api/v1/config/schemas`).
+
+**Its real obstacle is not the one both files used to name.** On the sandbox `nuxeo-retention` is
+installed — `RetentionRule` answers 200, and the `record`, `retention_rule`,
+`retention_definition` and `retention_search` schemas are declared — yet the repository holds **no
+record, no legal hold, no `ecm:retainUntil` and no `RetentionRule` document at all**. A Governance
+page built today would render a column of zeroes, and since `record:ruleIds` is absent from the
+static mapping while the passthrough refuses `_mapping` and `_field_caps`, nothing read-only could
+tell a correct empty page from one querying a field that does not exist. So phase 5 needs a
+fixture before it needs code, and the README's "A record cannot be unmade" says why that fixture
+must be flexible or short lived.

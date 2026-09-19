@@ -22,7 +22,7 @@ a single OpenSearch aggregation request.
 | **Users** | Audit index: `loginSuccess`, `loginFailed`, `documentCreated` and `documentModified`, grouped by `principalName` over `eventDate` |
 | **Workflows** | `audit_wf` passthrough view: workflow state derived from `eventId`, `extended.modelName`, `extended.workflowInitiator`, `extended.taskName`, `extended.action`, and durations from `extended.timeSinceWfStarted` and `extended.timeSinceTaskStarted` |
 | **Tasks** | Repository index: open tasks only, through the `Task` facet — `nt:dueDate`, `nt:actors`, `nt:name`, `nt:directive` |
-| **Governance** | `ecm:isRecord`, `ecm:hasLegalHold`, `ecm:retainUntil`, and `record:ruleIds` resolved against the `RetentionRule` documents |
+| **Governance** | `ecm:isRecord`, `ecm:hasLegalHold`, `ecm:retainUntil`, and — once a first record exists to put it in the mapping — `record:ruleIds` resolved against the `RetentionRule` documents |
 | **Diagnostics** | The preflight report, always available |
 
 ## Configuring a dashboard
@@ -586,10 +586,27 @@ One more trap, unrelated to the cleanup: a workflow node with no due date expres
 task whose `nt:dueDate` is *the moment it was created*, so it counts as overdue a second later. The
 two shipped models set the expression; a Studio model need not.
 
+### A record cannot be unmade
+
+**Putting a document under retention is close to irreversible, and it matters before anyone builds
+or demonstrates the Governance dashboard.** `UnsetRetention` exists in `permissions-contrib.xml`
+only *for flexible records*; on an ordinary record the retention date cannot be lowered and the
+document cannot be deleted, administrator included, until that date has passed.
+
+So a few documents created to give a Governance screen something to show will outlive the
+experiment. Make them **flexible records**, or give them a retention of minutes rather than years,
+and keep them in a container of their own.
+
 ### Indexing rules worth knowing
 
 Taken from the LTS 2025 `opensearch1-doc-mapping.json`; getting these wrong produces empty results
 rather than errors.
+
+**And the server will not tell you.** The passthrough exposes `_search` and nothing else:
+`_mapping`, `_field_caps` and `_count` all answer 404. Since an aggregation on a field absent from
+the mapping returns an empty bucket list *without an error*, exactly like a mapped field nobody
+has filled yet, no read-only call tells the two apart. Read the mapping file, or index one
+document and look at what comes back.
 
 - **Never append `.keyword`.** A dynamic template maps strings straight to `keyword`, so
   `ecm:primaryType.keyword` matches nothing.
@@ -611,6 +628,13 @@ rather than errors.
   `shard_size` well past the OpenSearch default to make the merged ranking exact, and asks for a
   `cardinality` alongside so a truncated chart can say how many values it left out.
 - **`ecm:retainUntil` is only written when non null**; combine it with an `exists` clause.
+- **The retention fields are not all mapped alike.** `ecm:isRecord`, `ecm:retainUntil` and
+  `ecm:hasLegalHold` have explicit entries, as `boolean`, `date` and `boolean`. **`record:ruleIds`
+  has none**: the `record` schema carries no prefix, so its two fields read `record:ruleIds` and
+  `record:retainUntil`, and they only enter the mapping through the `strings` dynamic template, at
+  the first document that carries one. On a repository where nothing has ever been declared a
+  record, a `terms` on `record:ruleIds` answers an empty list — see the warning above about the
+  server not telling you which of the two situations you are in.
 - **`extended.params` in the audit index is `"enabled": false`** and cannot be aggregated.
 - **`comment` in the audit index is `text` with no keyword sub-field**: readable from `_source`,
   never aggregatable. Every other audit field is a `keyword` set by a dynamic template.
