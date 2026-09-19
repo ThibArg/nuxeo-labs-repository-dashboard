@@ -89,6 +89,29 @@ describe('result-mapper', () => {
     expect(buckets[1].value).toBe(90);
   });
 
+  /*
+   * `percentiles` answers a map rather than a scalar, keyed by the percentile as OpenSearch
+   * formats it. Only one is ever asked for, so the single entry is read rather than the key
+   * recomposed — `"99.9"` would not survive that.
+   */
+  it('reads a percentile out of the values map', () => {
+    const data = readAggregationWidget(
+      response({ w: { doc_count: 71, [METRIC_AGG]: { values: { '50.0': 86_400_000 } } } }),
+      plan({ wrapped: true, hasMetric: true, metricUndefinedWhenEmpty: true }),
+    );
+
+    expect(data).toEqual({ kind: 'scalar', value: 86_400_000 });
+  });
+
+  it('treats a percentile over an empty set as unmeasured', () => {
+    const data = readAggregationWidget(
+      response({ w: { doc_count: 0, [METRIC_AGG]: { values: { '50.0': null } } } }),
+      plan({ wrapped: true, hasMetric: true, metricUndefinedWhenEmpty: true }),
+    );
+
+    expect(Number.isNaN((data as { value: number }).value)).toBe(true);
+  });
+
   it('maps terms buckets, using doc_count as the value', () => {
     const data = readAggregationWidget(
       response({

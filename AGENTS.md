@@ -402,6 +402,36 @@ overdue table exposed a genuine defect: a multivalued column resolved its labels
 the runner and the cell renderer now work element by element, which benefits any multivalued
 column.
 
+## Phase 4c: reading an aggregate over unlike populations
+
+Asked for after the Workflows dashboard shipped, and it exposed a design flaw worth remembering:
+**an aggregate over a mixed population describes none of its members.** On the sandbox the five
+models span two orders of magnitude — `RequestDownload` settles in 0.1 day, `ClaimReview` takes 34
+— so the overall mean lands at ten days, which no model approaches, while the median says one day.
+
+Three answers, all shipped:
+
+- **`MetricConfig` gained `{ percentile: { field, percent } }`.** `percent: 50` is the median,
+  `percent: 90` a service level. `metricUndefinedWhenEmpty` marks it, like `avg`. Two traps:
+  `percentiles` answers a *map* under `values`, keyed as OpenSearch formats it (`"50.0"`, but
+  `"99.9"` for a fractional one), so `result-mapper` reads the single entry rather than recomposing
+  the key; and it is multi-valued, so a `terms` ordered by it needs `metric.50` in the path, not
+  `metric` — `compileTermsOrder` now takes the metric for that reason alone. Verified against the
+  passthrough, which forwards the order untouched.
+- **A breakdown beside every mixed aggregate.** `durationByModel` and `slowestSteps` are `terms`
+  carrying the same metric, ordered `metric_desc`. The tile keeps the headline figure and its hint
+  points at the breakdown.
+- **The filter bar names what it filters, and stays on screen.** It used to read "1 models", which
+  tells a reader nothing when the answer is "Claim Review"; past two values it still counts them.
+  The labels come from `LabelService` under the member's own strategy, so `workflowModel` costs no
+  request. A persisted selection is now resolved at load time, since otherwise the bar showed the
+  raw value until somebody happened to open the dialog. And the bar is `position: sticky` — the
+  scroll container is `<main class="overflow-y-auto">`, so nothing else had to move.
+
+**Median and mean coincide per model on this server, and that proves nothing.** The durations were
+generated with a uniform draw, so every model is symmetric by construction. Real workflow durations
+are not; do not conclude from these figures that a per-model median is useless.
+
 ## Style
 Comments explain *why*, never *what*. Prefer no comment to one that restates the code, and fix a
 comment whose justification is wrong — one claimed OpenSearch flattens blobs, which it does not.
@@ -428,9 +458,9 @@ workflow specific:
   `doctype` and `lifecycle`. `message` falls back to the raw key; `workflowModel` falls back to the
   words of the identifier, for the reason given in the phase 4 section.
 - **An average over an empty set now renders a dash, not a zero.** `metricUndefinedWhenEmpty`
-  (`agg-compiler.ts`) marks `avg`, `min` and `max`; the plan carries the flag and `result-mapper`
-  turns their `null` into `NaN`, which every formatter already renders as `—`. A count, a
-  cardinality and a sum still answer zero, because zero is their correct value.
+  (`agg-compiler.ts`) marks `avg`, `min`, `max` and `percentile`; the plan carries the flag and
+  `result-mapper` turns their `null` into `NaN`, which every formatter already renders as `—`. A
+  count, a cardinality and a sum still answer zero, because zero is their correct value.
 - **`ChartWidgetStubComponent` now renders resolved bucket labels.** It swallowed them before, so a
   broken `LabelStrategy` passed in silence — the same blind spot the hint had. A chart test can now
   observe what it claims to verify.

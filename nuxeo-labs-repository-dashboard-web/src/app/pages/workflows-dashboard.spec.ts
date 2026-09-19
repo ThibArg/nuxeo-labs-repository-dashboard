@@ -71,10 +71,33 @@ function workflowResponse(): unknown {
       cancelled: { doc_count: 9 },
       // Nothing has completed with a measurable duration, which must read as a dash, not as zero.
       averageDuration: { doc_count: 0, metric: { value: null } },
+      medianDuration: { doc_count: 71, metric: { values: { '50.0': 86_400_000 } } },
       tasksCreated: { doc_count: 240 },
       tasksEnded: { doc_count: 205 },
       averageTaskDuration: { doc_count: 205, metric: { value: 7_200_000 } },
-      tasksMoved: { doc_count: 12 },
+      durationByModel: {
+        doc_count: 71,
+        distinct: { value: 2 },
+        inner: {
+          buckets: [
+            { key: 'ClaimReview', doc_count: 12, metric: { value: 2_937_600_000 } },
+            { key: 'RequestDownload', doc_count: 59, metric: { value: 8_640_000 } },
+          ],
+        },
+      },
+      slowestSteps: {
+        doc_count: 205,
+        distinct: { value: 1 },
+        inner: {
+          buckets: [
+            {
+              key: 'wf.parallelDocumentReview.chooseParticipants.title',
+              doc_count: 90,
+              metric: { value: 388_800_000 },
+            },
+          ],
+        },
+      },
       startedPerDay: {
         doc_count: 96,
         inner: {
@@ -241,6 +264,32 @@ describe('workflows.json', () => {
     expect(ranges[0].to).toBe(3_600_000);
   });
 
+  /*
+   * A mean over five populations whose durations differ by two orders of magnitude describes none
+   * of them. The median says what a typical instance does, and the breakdown says which model
+   * drags the mean.
+   */
+  it('reports a median beside the mean, and breaks the mean down by model', () => {
+    const aggs = planDashboard(WORKFLOWS, defaultFilterState(WORKFLOWS)).requests[0].body
+      .aggs as Record<string, any>;
+
+    expect(aggs['medianDuration'].aggs.metric).toEqual({
+      percentiles: { field: 'extended.timeSinceWfStarted', percents: [50] },
+    });
+    expect(aggs['durationByModel'].aggs.inner.terms.field).toBe('extended.modelName');
+    expect(aggs['durationByModel'].aggs.inner.aggs.metric).toEqual({
+      avg: { field: 'extended.timeSinceWfStarted' },
+    });
+    // Slowest first: a breakdown ordered by count would bury the model that costs the most.
+    expect(aggs['durationByModel'].aggs.inner.terms.order).toEqual({ metric: 'desc' });
+    expect(aggs['slowestSteps'].aggs.inner.terms.order).toEqual({ metric: 'desc' });
+  });
+
+  it('warns on the tile itself that the mean mixes unlike populations', () => {
+    const tile = WORKFLOWS.widgets['averageDuration'];
+    expect(tile.hint).toContain('no single model resembles');
+  });
+
   it('starts on a bounded period, since the audit index grows faster than the repository', () => {
     expect(defaultFilterState(WORKFLOWS).range.from).not.toBeNull();
   });
@@ -307,6 +356,17 @@ describe('Workflows dashboard', () => {
     expect(text).toContain('Average Duration');
     expect(text).not.toContain('0 s');
     expect(text).toContain('2.0 h');
+  });
+
+  it('renders the median and the per model breakdown', async () => {
+    const text = ((await render()).nativeElement as HTMLElement).textContent ?? '';
+
+    expect(text).toContain('Median Duration');
+    // 86 400 000 ms, rendered as a day rather than as a raw millisecond count.
+    expect(text).toContain('24.0 h');
+    expect(text).toContain('Average Duration by Model');
+    expect(text).toContain('Claim Review');
+    expect(text).toContain('Slowest Steps');
   });
 
   it('translates the i18n keys the audit stores for models and tasks', async () => {

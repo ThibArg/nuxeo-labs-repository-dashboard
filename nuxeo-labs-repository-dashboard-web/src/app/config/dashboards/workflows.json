@@ -62,21 +62,17 @@
           "eventId": "afterWorkflowTaskEnded"
         }
       }
-    ],
-    "taskMoved": [
-      {
-        "terms": {
-          "eventId": ["afterWorkflowTaskReassigned", "afterWorkflowTaskDelegated"]
-        }
-      }
     ]
   },
   "layout": [
     {
-      "cells": ["started", "completed", "cancelled", "averageDuration"]
+      "cells": ["started", "completed", "cancelled", "tasksCreated"]
     },
     {
-      "cells": ["tasksCreated", "tasksEnded", "averageTaskDuration", "tasksMoved"]
+      "cells": ["averageDuration", "medianDuration", "averageTaskDuration", "tasksEnded"]
+    },
+    {
+      "cells": ["durationByModel", "slowestSteps"]
     },
     {
       "cells": ["startedPerDay", "completedPerDay"]
@@ -116,11 +112,25 @@
     "averageDuration": {
       "type": "kpi",
       "label": "Average Duration",
-      "hint": "Completed instances only",
+      "hint": "Every model at once, which no single model resembles — see the breakdown below",
       "scope": "completed",
       "span": 3,
       "metric": {
         "avg": "extended.timeSinceWfStarted"
+      },
+      "format": "duration"
+    },
+    "medianDuration": {
+      "type": "kpi",
+      "label": "Median Duration",
+      "hint": "Half of the completed instances settle faster than this",
+      "scope": "completed",
+      "span": 3,
+      "metric": {
+        "percentile": {
+          "field": "extended.timeSinceWfStarted",
+          "percent": 50
+        }
       },
       "format": "duration"
     },
@@ -147,12 +157,43 @@
       },
       "format": "duration"
     },
-    "tasksMoved": {
-      "type": "kpi",
-      "label": "Reassigned or Delegated",
-      "hint": "Tasks that changed hands",
-      "scope": "taskMoved",
-      "span": 3
+    "durationByModel": {
+      "type": "hbar",
+      "label": "Average Duration by Model",
+      "hint": "Slowest first. This is where the overall average comes from",
+      "scope": "completed",
+      "span": 6,
+      "labels": "workflowModel",
+      "format": "duration",
+      "metric": {
+        "avg": "extended.timeSinceWfStarted"
+      },
+      "agg": {
+        "terms": {
+          "field": "extended.modelName",
+          "size": 10,
+          "order": "metric_desc"
+        }
+      }
+    },
+    "slowestSteps": {
+      "type": "hbar",
+      "label": "Slowest Steps",
+      "hint": "Average time a task waits before it is answered — filter by model to isolate one process",
+      "scope": "taskEnded",
+      "span": 6,
+      "labels": "message",
+      "format": "duration",
+      "metric": {
+        "avg": "extended.timeSinceTaskStarted"
+      },
+      "agg": {
+        "terms": {
+          "field": "extended.taskName",
+          "size": 10,
+          "order": "metric_desc"
+        }
+      }
     },
     "startedPerDay": {
       "type": "area",

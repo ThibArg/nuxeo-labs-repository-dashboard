@@ -52,14 +52,21 @@ export type AggConfig =
   | { date_range: { field: string; ranges: DateRangeBucket[] } }
   | { filters: { filters: Record<string, EsClause> } };
 
-/** Single value metric computed instead of the document count. */
+/**
+ * Single value metric computed instead of the document count.
+ *
+ * `percentile` answers the value below which that share of the population falls: `percent: 50` is
+ * the median, `percent: 90` the figure a service level is written against. It is worth reaching
+ * for whenever a few extreme members drag the mean somewhere no member actually sits.
+ */
 export type MetricConfig =
   | { count: true }
   | { cardinality: string }
   | { sum: string }
   | { avg: string }
   | { min: string }
-  | { max: string };
+  | { max: string }
+  | { percentile: { field: string; percent: number } };
 
 /* ==================== Presentation ==================== */
 

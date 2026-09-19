@@ -5,6 +5,7 @@ import {
   browserTimeZone,
   compileAgg,
   compileMetric,
+  metricUndefinedWhenEmpty,
   shardSizeFor,
 } from './agg-compiler';
 
@@ -96,6 +97,19 @@ describe('agg-compiler', () => {
       expect(() => compileAgg({ terms: { field: 'a', order: 'metric_desc' } })).toThrow(
         /requires a metric/,
       );
+    });
+
+    /*
+     * `percentiles` is multi-valued, so an order naming the aggregation alone leaves OpenSearch
+     * unable to tell which percentile to sort on, and the request is rejected.
+     */
+    it('names the percentile in the order path, since percentiles is multi-valued', () => {
+      const compiled = compileAgg(
+        { terms: { field: 'extended.modelName', order: 'metric_desc' } },
+        { percentile: { field: 'extended.timeSinceWfStarted', percent: 50 } },
+      ) as { terms: { order: Record<string, string> } };
+
+      expect(compiled.terms.order).toEqual({ [`${METRIC_AGG}.50`]: 'desc' });
     });
   });
 
@@ -200,6 +214,36 @@ describe('agg-compiler', () => {
       expect(() => compileMetric({ sum: 'file:content.length.keyword' })).toThrow(
         UnsupportedAggregationError,
       );
+    });
+
+    it('asks for a single percentile, which is what the reader is shown', () => {
+      expect(
+        compileMetric({ percentile: { field: 'extended.timeSinceWfStarted', percent: 50 } }),
+      ).toEqual({
+        percentiles: { field: 'extended.timeSinceWfStarted', percents: [50] },
+      });
+    });
+
+    it('rejects a percentile outside the open interval, which OpenSearch cannot answer', () => {
+      for (const percent of [0, 100, -5, 140]) {
+        expect(() => compileMetric({ percentile: { field: 'a', percent } })).toThrow(
+          UnsupportedAggregationError,
+        );
+      }
+    });
+
+    it('validates the percentile field like any other', () => {
+      expect(() => compileMetric({ percentile: { field: 'a.keyword', percent: 50 } })).toThrow(
+        UnsupportedAggregationError,
+      );
+    });
+
+    it('marks as unmeasured the metrics that have no value over an empty set', () => {
+      expect(metricUndefinedWhenEmpty({ percentile: { field: 'a', percent: 90 } })).toBe(true);
+      expect(metricUndefinedWhenEmpty({ avg: 'a' })).toBe(true);
+      // A sum and a cardinality of nothing really are zero.
+      expect(metricUndefinedWhenEmpty({ sum: 'a' })).toBe(false);
+      expect(metricUndefinedWhenEmpty({ cardinality: 'a' })).toBe(false);
     });
   });
 });

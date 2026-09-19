@@ -64,7 +64,7 @@ A dashboard is one JSON file under
 | `type` | `kpi`, `donut`, `pie`, `bar`, `hbar`, `line`, `area`, `ranked-list`, `table` |
 | `agg` | `terms`, `date_histogram`, `range`, `date_range`, `filters` |
 | `agg.date_histogram.time_zone` | IANA zone the buckets are cut in; defaults to the reader's own |
-| `metric` | `count`, `cardinality`, `sum`, `avg`, `min`, `max` — nested under the aggregation |
+| `metric` | `count`, `cardinality`, `sum`, `avg`, `min`, `max`, `percentile` — nested under the aggregation |
 | `scope` | Named population this widget describes, see below |
 | `labels` | `raw`, `doctype`, `lifecycle`, `user`, `boolean`, `message`, `workflowModel` |
 | `format` | `integer`, `decimal`, `bytes`, `percent`, `duration`, `date`, `daysUntil`, `text` |
@@ -451,10 +451,35 @@ the model definition. Declaring a strategy there would promise a translation tha
 
 ### Metrics with no value
 
-A count, a cardinality and a sum over an empty set are all legitimately zero. An average, a minimum
-and a maximum are not: OpenSearch answers `null`, and the dashboard renders that as a dash rather
-than as `0`. Without this, an average duration tile would read `0 s` on a server where no workflow
-has ever completed, which no reader can tell apart from a genuinely instantaneous workflow.
+A count, a cardinality and a sum over an empty set are all legitimately zero. An average, a
+minimum, a maximum and a percentile are not: OpenSearch answers `null`, and the dashboard renders
+that as a dash rather than as `0`. Without this, an average duration tile would read `0 s` on a
+server where no workflow has ever completed, which no reader can tell apart from a genuinely
+instantaneous workflow.
+
+### When the mean describes nobody
+
+```json
+"metric": { "percentile": { "field": "extended.timeSinceWfStarted", "percent": 50 } }
+```
+
+`percent: 50` is the median, `percent: 90` the figure a service level is written against. Both
+matter whenever a dashboard aggregates populations that have nothing in common. On the sandbox,
+five workflow models span two orders of magnitude — a download request settles in hours, a claim
+review drags on for weeks — so the overall mean lands at ten days, a value **no model approaches**,
+while the median says one day. The mean is not wrong; it simply describes nobody.
+
+Two consequences for anyone writing a configuration:
+
+- **Put a breakdown next to any aggregate over a mixed population.** A `terms` aggregation carrying
+  the same metric, ordered by `metric_desc`, names the member responsible in one glance. The tile
+  keeps the headline figure, and its `hint` points at the breakdown.
+- **`percentiles` is multi-valued**, so ordering a `terms` by it needs the percentile in the path —
+  `metric.50`, not `metric`. The compiler derives that, so no configuration can get it wrong.
+
+The filter bar is the other half of the answer: once the breakdown names the culprit, filtering on
+that model recomputes every widget, and "Slowest Steps" then shows only its own steps. The bar is
+sticky and names the value chosen, so the context does not disappear when the reader scrolls.
 
 ### Tasks live only as long as their workflow
 

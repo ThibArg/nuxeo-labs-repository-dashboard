@@ -15,6 +15,7 @@ import {
   TermsGroupConfig,
   dateRangeFilter,
   defaultFilterState,
+  isConstrained,
   termsGroups,
 } from '../config/dashboard-config.model';
 import { DashboardConfigService } from '../config/dashboard-config.service';
@@ -76,7 +77,13 @@ type GroupLabels = Map<string, Map<string, string>>;
         </div>
       } @else if (config(); as dashboard) {
         @if (hasFilters()) {
-          <div class="mb-5 flex flex-wrap items-center gap-3">
+          <!--
+            Sticky, because the filter bar is the only thing naming the population the figures
+            describe. Scrolling down to a chart used to lose that context entirely.
+          -->
+          <div
+            class="sticky top-0 z-20 -mx-8 mb-5 flex flex-wrap items-center gap-3 border-b border-subtle bg-canvas/95 px-8 py-3 backdrop-blur"
+          >
             @if (dateFilter(); as range) {
               <nxd-date-range-picker
                 [selected]="filters().range"
@@ -91,6 +98,7 @@ type GroupLabels = Map<string, Map<string, string>>;
               <nxd-facet-group-button
                 [group]="group"
                 [selection]="selectionFor(group.id)"
+                [labels]="labelsFor(group.id)"
                 [disabled]="runner.loading()"
                 (opened)="openGroup(group)"
               />
@@ -231,6 +239,18 @@ export class DashboardPageComponent {
       this.config.set(config);
       this.filters.set(this.restoreFilters(id, config));
       await this.runCurrent();
+      /*
+       * A persisted selection is restored before anything is displayed, so the filter bar would
+       * name it by its raw value until the reader happened to open the dialog. Only constrained
+       * groups are fetched, so an unfiltered dashboard still costs a single request.
+       */
+      await Promise.all(
+        termsGroups(config)
+          .filter((group) =>
+            Object.values(this.filters().groups[group.id] ?? {}).some(isConstrained),
+          )
+          .map((group) => this.loadGroupValues(group)),
+      );
     } catch (error) {
       this.config.set(null);
       this.configError.set(error instanceof Error ? error.message : String(error));

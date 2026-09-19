@@ -63,10 +63,10 @@ export interface EsBucket {
 export interface EsAggregation {
   /** `terms`, `date_histogram`, `range`, `filters`, ... */
   buckets?: EsBucket[] | Record<string, EsBucket>;
-  /** Single-value metrics: `cardinality`, `avg`, `sum`, `min`, `max`. */
-  value?: number;
-  /** Multi-value metrics: `percentiles`. */
-  values?: Record<string, number>;
+  /** Single-value metrics: `cardinality`, `avg`, `sum`, `min`, `max`. Null over an empty set. */
+  value?: number | null;
+  /** Multi-value metrics: `percentiles`. Each entry is null over an empty set. */
+  values?: Record<string, number | null>;
   /** `filter` aggregation wrapper. */
   doc_count?: number;
   [nestedAggregationName: string]: unknown;

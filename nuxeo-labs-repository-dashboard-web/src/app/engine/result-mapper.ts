@@ -52,6 +52,10 @@ export function isEmptyData(data: WidgetData | undefined): boolean {
 /**
  * Reads the value of a single value metric aggregation.
  *
+ * `percentiles` is the one metric that answers a map rather than a scalar, under `values`, keyed
+ * by the percentile as OpenSearch formats it — `"50.0"`, but `"99.9"` for a fractional one. Only
+ * ever one percentile is requested, so the single entry is read rather than the key recomposed.
+ *
  * @param undefinedWhenEmpty when the metric has no value over an empty set, a `null` answer means
  *                           "not measured" and becomes `NaN`, which every formatter renders as a
  *                           dash. Otherwise `null` is the zero of a count, a cardinality or a sum.
@@ -63,7 +67,11 @@ function metricValue(node: EsAggregation | undefined, undefinedWhenEmpty = false
   if (typeof node.value === 'number') {
     return node.value;
   }
-  if (node.value === null) {
+  const percentile = node.values ? Object.values(node.values)[0] : undefined;
+  if (typeof percentile === 'number') {
+    return percentile;
+  }
+  if (node.value === null || (node.values !== undefined && percentile === null)) {
     return undefinedWhenEmpty ? Number.NaN : 0;
   }
   return null;

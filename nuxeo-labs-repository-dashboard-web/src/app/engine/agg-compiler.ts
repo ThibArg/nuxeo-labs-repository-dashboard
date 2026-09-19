@@ -104,6 +104,13 @@ export function compileMetric(metric: MetricConfig | undefined): EsClause | null
   if (!metric || 'count' in metric) {
     return null;
   }
+  if ('percentile' in metric) {
+    const { field, percent } = metric.percentile;
+    if (!(percent > 0 && percent < 100)) {
+      throw new UnsupportedAggregationError(`percentile "${percent}" is not between 0 and 100`);
+    }
+    return { percentiles: { field: assertAggregatableField(field), percents: [percent] } };
+  }
   const [operator, field] = Object.entries(metric)[0] as [string, string];
   return { [operator]: { field: assertAggregatableField(field) } };
 }
@@ -111,13 +118,16 @@ export function compileMetric(metric: MetricConfig | undefined): EsClause | null
 /**
  * Whether this metric has no value at all over an empty set, as opposed to having the value zero.
  *
- * A count, a cardinality and a sum over nothing are all legitimately zero. An average, a minimum
- * and a maximum are not: OpenSearch answers `null`, and rendering that as `0` states a measurement
- * that was never made. On a server where no workflow has ever completed, an average duration tile
- * would read `0 s`, which no reader can tell apart from a genuinely instantaneous workflow.
+ * A count, a cardinality and a sum over nothing are all legitimately zero. An average, a minimum,
+ * a maximum and a percentile are not: OpenSearch answers `null`, and rendering that as `0` states
+ * a measurement that was never made. On a server where no workflow has ever completed, an average
+ * duration tile would read `0 s`, which no reader can tell apart from a genuinely instantaneous
+ * workflow.
  */
 export function metricUndefinedWhenEmpty(metric: MetricConfig | undefined): boolean {
-  return !!metric && ('avg' in metric || 'min' in metric || 'max' in metric);
+  return (
+    !!metric && ('avg' in metric || 'min' in metric || 'max' in metric || 'percentile' in metric)
+  );
 }
 
 /**
@@ -140,8 +150,22 @@ function extendedBounds(
   };
 }
 
+/**
+ * Path a `terms` order must use to reach the nested metric.
+ *
+ * A single value metric is addressed by its name alone, but `percentiles` is multi-valued: sorting
+ * on `metric` would leave OpenSearch unable to tell which percentile is meant, so the path carries
+ * it — `metric.50`. Verified against the passthrough, which forwards the order untouched.
+ */
+function metricOrderPath(metric: MetricConfig | undefined): string {
+  return metric && 'percentile' in metric
+    ? `${METRIC_AGG}.${metric.percentile.percent}`
+    : METRIC_AGG;
+}
+
 function compileTermsOrder(
   order: TermsOrder | undefined,
+  metric: MetricConfig | undefined,
   hasMetric: boolean,
 ): EsClause | undefined {
   switch (order) {
@@ -159,7 +183,7 @@ function compileTermsOrder(
       if (!hasMetric) {
         throw new UnsupportedAggregationError(`order "${order}" requires a metric to be declared`);
       }
-      return { [METRIC_AGG]: order === 'metric_desc' ? 'desc' : 'asc' };
+      return { [metricOrderPath(metric)]: order === 'metric_desc' ? 'desc' : 'asc' };
     default:
       throw new UnsupportedAggregationError(`unknown terms order "${order}"`);
   }
@@ -191,7 +215,7 @@ export function compileAgg(
       terms['size'] = size;
       terms['shard_size'] = shardSizeFor(size);
     }
-    const compiledOrder = compileTermsOrder(order, compiledMetric !== null);
+    const compiledOrder = compileTermsOrder(order, metric, compiledMetric !== null);
     if (compiledOrder) {
       terms['order'] = compiledOrder;
     }
