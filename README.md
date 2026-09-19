@@ -10,9 +10,9 @@ The dashboard is a standalone Angular application packaged as a Nuxeo bundle. Ch
 are described by configuration rather than hard coded, and every widget of a page is batched into
 a single OpenSearch aggregation request.
 
-> **Status: phase 4.** The Content, Users and Workflows dashboards are complete and configuration
-> driven. The Governance dashboard, the configuration editor and cross filtering land next, see
-> [Roadmap](#roadmap).
+> **Status: five screens live.** Content, Users, Workflows and Tasks are complete and
+> configuration driven, alongside Diagnostics. Governance is still a placeholder naming its
+> prerequisite. The configuration editor and cross filtering land next, see [Roadmap](#roadmap).
 
 ## Screens
 
@@ -717,6 +717,8 @@ still appear in an audit index, through `Framework.doPrivileged` with no argumen
 | 3 | Configuration editor, with a field picker fed by `/api/v1/config/schemas` | |
 | 4 | Workflows dashboard | done |
 | 4b | Tasks dashboard, on open tasks and due dates | done |
+| 4c | A median beside the mean, and a per model breakdown, where an aggregate mixes populations | done |
+| 4d | Directory backed filtering for a field with as many values as there are people | done |
 | 5 | Governance dashboard, on records, legal holds and retention | next |
 
 ## Licence
