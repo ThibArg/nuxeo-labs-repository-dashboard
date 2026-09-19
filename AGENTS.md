@@ -217,6 +217,63 @@ with its fields typed, a blob being literally `"blob"` or `"blob[]"`
 `long` fields that a plain `sum` can aggregate while honouring the dashboard filters; not
 deduplicated, but the only route to a volume without a heavy operation.
 
+## Phase 4: the Process dashboard, groundwork
+
+Researched, not started. These are the facts that cost the most to establish; read them before
+planning anything on `audit_wf`. What the page should show is still an open question — that is a
+decision for the user, not something this section settles.
+
+**The passthrough hides five of the thirteen audited workflow events.**
+`RoutingAuditRequestFilter` injects `term: { category: "Routing" }` for *every* caller,
+administrators included (`RoutingAuditRequestFilter.java:90-93`). Five events are fired with no
+explicit category and therefore default to `eventDocumentCategory` (`AuditComponent.java:430-431`):
+`workflowTaskAssigned`, `workflowTaskReassigned`, `workflowTaskCompleted`, `workflowTaskDelegated`
+and `auditLogRoute`. They are audited, they sit in the index, and `audit_wf` will never return them.
+Only these eight are reachable: `afterWorkflowStarted`, `afterWorkflowFinish`,
+`beforeWorkflowCanceled`, `workflowCanceled`, `afterWorkflowTaskCreated`, `afterWorkflowTaskEnded`,
+`afterWorkflowTaskReassigned`, `afterWorkflowTaskDelegated`. Corollary: `extended.directive` and
+`extended.dueDate` are declared only on the excluded events, so no task directive and no due date
+can ever be read through this view.
+
+**There is no workflow state field.** State has to be derived from event ids: started is
+`afterWorkflowStarted`, completed is `afterWorkflowFinish`, cancelled is `beforeWorkflowCanceled`.
+Prefer that last one to `workflowCanceled`, which is fired once per attached document and therefore
+multiplies. A trustworthy "currently running" figure cannot come from the audit at all: it needs
+`DocumentRoute` with `ecm:currentLifeCycleState = 'running'` on the `nuxeo` index, hence a second
+request on another index, which the planner does not support today — one index per dashboard.
+`docLifeCycle` looks like a substitute and is not: it is a snapshot at event time, and on task
+events it describes the `RoutingTask`, not the route.
+
+**Aggregatable `extended.*`**, all `keyword` unless noted: `modelName` (the primary dimension),
+`modelId`, `workflowInitiator`, `taskActor`, `taskName`, `action`, and `comment` — note that
+`extended.comment` aggregates while the top level `comment` does not. Plus `timeSinceWfStarted` and
+`timeSinceTaskStarted`, both **`long`, in milliseconds** (`RoutingAuditHelper.java:79,92`), and
+absent rather than negative when the helper cannot find the start event. `workflowVariables.*`,
+`nodeVariables.*` and `data.*` are nested objects typed leaf by leaf, so what they offer depends on
+the Studio model.
+
+**Three traps in that list.** `extended.actors` is a `keyword[]` on `afterWorkflowTaskReassigned`
+but a single string `"[bob, alice]"` on `afterWorkflowTaskCreated`, because a `LinkedHashSet` falls
+through to `toString()` (`LogEntryJsonWriter.java:187-203`) — never aggregate it across both
+events. `extended.taskActor` mixes `getActingUser()` and `getOriginatingUser()` depending on the
+event (`GraphRunner.java:139` against `:408`), so it is simply absent when nobody impersonates. And
+the dynamic template's `ignore_above: 256` drops a long `taskName` or variable from every
+aggregation, silently.
+
+**Non-administrators see only the models they hold `DataVisualization` on**
+(`RoutingAuditRequestFilter.java:95-108`, permission declared in
+`document-routing-security-contrib.xml:9-11`). An empty permission set compiles to
+`terms: { "extended.modelName": [] }`, so zero hits rather than an error. The dashboard requires an
+administrator anyway, but a screenshot taken as somebody else will look broken for this reason.
+
+**The demo server cannot exercise most of this.** `audit_wf` held twenty entries when this was
+written: ten `afterWorkflowStarted` and ten `afterWorkflowTaskCreated`, over
+`ParallelDocumentReview` and `SerialDocumentReview`. Nothing has ever completed or been cancelled,
+so `timeSinceWfStarted`, `timeSinceTaskStarted` and `taskActor` are absent from every row. Any
+duration, completion rate or SLA widget will render empty until workflows are actually run, or
+until audit entries are synthesised the way the login events were. Settle the data question before
+designing the widgets, not after.
+
 ## Style
 
 Comments explain *why*, never *what*. Prefer no comment to one that restates the code, and fix a
@@ -229,12 +286,21 @@ Answer the user in French, using *vous*.
 ## Where things stand
 
 Phase 1e is complete: build green, 256 tests, package produced. Content, Users and Diagnostics are
-live; Process and Governance are placeholders that name their missing prerequisite.
+live; Process and Governance are placeholders that name their missing prerequisite. The work is
+pushed to `github.com/ThibArg/nuxeo-labs-repository-dashboard`, a public backup until the plugin is
+ready to be forked into `nuxeo-sandbox`; the README carries a warning saying so.
 
-Next, in order: phase 2 (cross filtering on bucket click, active filter chips, path scope, CSV and
-PNG export), phase 3 (configuration editor with a field picker fed by `/api/v1/config/schemas`),
-phase 4 (Process dashboard on the `audit_wf` view), phase 5 (Governance dashboard, which must start
-with the record and legal hold tiles taken out of Content).
+**Phase 4, the Process dashboard, is what comes next**, and its groundwork is already done: read
+"Phase 4: the Process dashboard, groundwork" above before anything else. Two things are settled
+there and should not be re-derived — which workflow events `audit_wf` actually returns, and the
+fact that workflow state has to be derived from event ids. Two things are not settled, and both
+need the user: which widgets the page should carry, and how to get workflow data worth charting,
+since nothing on the demo server has ever completed or been cancelled.
+
+The other phases, in order: phase 2 (cross filtering on bucket click, active filter chips, path
+scope, CSV and PNG export), phase 3 (configuration editor with a field picker fed by
+`/api/v1/config/schemas`), phase 5 (Governance dashboard, which must start with the record and
+legal hold tiles taken out of Content).
 
 The `DataTableComponent` is currently unused by `content.json` — the expired documents table was
 removed on request — but it is kept, and tested, for phases 4 and 5.
