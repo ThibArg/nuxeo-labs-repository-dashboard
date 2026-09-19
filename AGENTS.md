@@ -269,3 +269,12 @@ static mapping while the passthrough refuses `_mapping` and `_field_caps`, nothi
 tell a correct empty page from one querying a field that does not exist. So phase 5 needs a
 fixture before it needs code, and the README's "A record cannot be unmade" says why that fixture
 must be flexible or short lived.
+
+**Four operations build and undo that fixture**, read off `GET /nuxeo/site/automation`:
+`Document.Retain` takes an `until` date **and a `flexible` boolean**, `Document.Hold` sets a legal
+hold, `Retention.AttachRule` attaches a `RetentionRule` document, and
+`Document.UnattachRetentionRule` stops the retention again — on a flexible record only, which is
+the whole reason to make them flexible. **`Document.Retain` cannot populate `record:ruleIds`**:
+only attaching a rule does. A fixture limited to "records with a date" would therefore leave that
+field out of the mapping and its widget exactly as unverifiable as it is today, so the fixture
+needs at least one `RetentionRule` document and one `Retention.AttachRule` call.
