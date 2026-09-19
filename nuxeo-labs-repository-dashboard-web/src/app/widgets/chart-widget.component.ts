@@ -1,10 +1,19 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  input,
+  output,
+} from '@angular/core';
 import { ECharts } from 'echarts/core';
 import { NgxEchartsDirective } from 'ngx-echarts';
 import { ChartWidgetConfig, LabelStrategy, pickableField } from '../config/dashboard-config.model';
 import { downloadCsv, downloadDataUrl, safeFilename } from '../core/export';
 import { DataBucket, WidgetData, isEmptyData } from '../engine/result-mapper';
 import { bucketIndexAt, buildChartOption } from './chart-options';
+import { ChartSnapshotRegistry } from './chart-snapshot.registry';
 import { bucketRows } from './widget-export';
 import { truncationDetail, truncationFooter } from './truncation';
 import { WidgetHostComponent } from './widget-host.component';
@@ -51,7 +60,11 @@ export interface BucketClick {
   `,
 })
 export class ChartWidgetComponent {
+  private readonly snapshots = inject(ChartSnapshotRegistry);
+
   readonly config = input.required<ChartWidgetConfig>();
+  /** Identifies this chart to a whole page export. Empty outside a dashboard grid. */
+  readonly widgetId = input('');
   readonly data = input<WidgetData | undefined>(undefined);
 
   protected readonly footer = computed(() => truncationFooter(this.data()));
@@ -64,6 +77,27 @@ export class ChartWidgetComponent {
 
   /** Held so that a PNG can be asked of the very instance on screen. */
   protected chart: ECharts | null = null;
+
+  constructor() {
+    effect((onCleanup) => {
+      const id = this.widgetId();
+      if (!id) {
+        return;
+      }
+      this.snapshots.register(id, () => this.png());
+      onCleanup(() => this.snapshots.unregister(id));
+    });
+  }
+
+  /*
+   * An explicit background, because ECharts renders onto a transparent canvas. A chart pasted into
+   * a document would otherwise show whatever is behind it, which on a dark slide is nothing at all.
+   */
+  private png(): string | null {
+    return (
+      this.chart?.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#ffffff' }) ?? null
+    );
+  }
 
   readonly empty = computed(() => isEmptyData(this.data()));
 
@@ -100,12 +134,8 @@ export class ChartWidgetComponent {
     downloadCsv(`${safeFilename(label)}.csv`, bucketRows(this.buckets(), this.labels()));
   }
 
-  /*
-   * An explicit background, because ECharts renders onto a transparent canvas. A chart pasted into
-   * a document would otherwise show whatever is behind it, which on a dark slide is nothing at all.
-   */
   protected onExportPng(): void {
-    const url = this.chart?.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#ffffff' });
+    const url = this.png();
     if (url) {
       downloadDataUrl(`${safeFilename(this.config().label)}.png`, url);
     }

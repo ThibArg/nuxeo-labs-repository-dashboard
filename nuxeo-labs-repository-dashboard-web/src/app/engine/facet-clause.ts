@@ -9,12 +9,15 @@
  */
 import {
   BucketPick,
+  DashboardConfig,
   FilterState,
   GroupSelection,
   LabelStrategy,
   SELECT_ALL,
   TermsGroupConfig,
   TermsMemberConfig,
+  dateRangeFilter,
+  termsGroups,
 } from '../config/dashboard-config.model';
 import { principalForms } from '../core/principal';
 import { EsClause } from './es-query';
@@ -140,4 +143,36 @@ function listPhrase(values: string[], joiner: string): string {
     return `${values.slice(0, -1).join(', ')}${joiner}${values[values.length - 1]}`;
   }
   return `${values.slice(0, MAX).join(', ')} and ${values.length - MAX} more`;
+}
+
+/**
+ * One phrase per constraint in force, for a reader who will see the figures out of context.
+ *
+ * An exported page outlives the screen it was taken from: a mail attachment showing 675 documents
+ * says nothing unless it also says which 675. Every filter that narrowed them is named, including
+ * the ones the filter bar shows as a button rather than as text.
+ */
+export function describeFilters(config: DashboardConfig, state: FilterState): string[] {
+  const lines: string[] = [];
+
+  const range = dateRangeFilter(config);
+  if (range) {
+    lines.push(`Period: ${state.range.label} on ${range.field}`);
+  }
+  if (state.path) {
+    lines.push(`Location: ${state.path} and everything inside it`);
+  }
+
+  for (const group of termsGroups(config)) {
+    const active = activeMembers(group, state.groups[group.id] ?? {});
+    for (const entry of active) {
+      lines.push(`${group.label} — ${entry.member.label}: ${entry.values.join(', ')}`);
+    }
+  }
+
+  for (const pick of state.picks) {
+    lines.push(`${pick.field}: ${pick.label}`);
+  }
+
+  return lines;
 }

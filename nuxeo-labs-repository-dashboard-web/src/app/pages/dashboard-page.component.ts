@@ -1,11 +1,13 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   computed,
   effect,
   inject,
   input,
   signal,
+  viewChild,
 } from '@angular/core';
 import {
   BucketPick,
@@ -25,11 +27,15 @@ import {
   termsGroups,
 } from '../config/dashboard-config.model';
 import { DashboardConfigService } from '../config/dashboard-config.service';
+import { AppStylesService } from '../core/app-styles.service';
+import { downloadFile, safeFilename } from '../core/export';
 import { LabelService } from '../core/label.service';
 import { DashboardRunner } from '../engine/dashboard-runner.service';
 import { FacetStorageService } from '../engine/facet-storage.service';
 import { FacetValuesService, GroupValues } from '../engine/facet-values.service';
+import { buildDashboardHtml } from '../engine/dashboard-html';
 import { DashboardOverrideService, validateConfig } from '../engine/dashboard-override.service';
+import { describeFilters } from '../engine/facet-clause';
 import { Container, PathBrowserService } from '../engine/path-browser.service';
 import { DashboardGridComponent } from '../layout/dashboard-grid.component';
 import { DateRangePickerComponent } from '../layout/date-range-picker.component';
@@ -40,6 +46,7 @@ import { FilterChipsComponent } from '../layout/filter-chips.component';
 import { PathScopePickerComponent } from '../layout/path-scope-picker.component';
 import { PageHeaderComponent } from '../layout/page-header.component';
 import { BucketClick } from '../widgets/chart-widget.component';
+import { ChartSnapshotRegistry } from '../widgets/chart-snapshot.registry';
 import {
   PreflightFeature,
   RequirementNoticeComponent,
@@ -76,8 +83,11 @@ type GroupLabels = Map<string, Map<string, string>>;
       [busy]="runner.loading()"
       [configurable]="!!config()"
       [overridden]="overridden()"
+      [exportable]="!!config() && !runner.loading()"
       (refresh)="reload()"
       (configure)="openEditor()"
+      (exportHtml)="exportHtml()"
+      (print)="print()"
     />
 
     <nxd-config-editor
@@ -167,6 +177,7 @@ type GroupLabels = Map<string, Map<string, string>>;
         }
 
         <nxd-dashboard-grid
+          #grid
           [config]="dashboard"
           [range]="filters().range"
           [data]="runner.data()"
@@ -200,6 +211,8 @@ export class DashboardPageComponent {
   private readonly facetValues = inject(FacetValuesService);
   private readonly pathBrowser = inject(PathBrowserService);
   private readonly overrides = inject(DashboardOverrideService);
+  private readonly snapshots = inject(ChartSnapshotRegistry);
+  private readonly appStyles = inject(AppStylesService);
   private readonly storage = inject(FacetStorageService);
   private readonly labelService = inject(LabelService);
   readonly runner = inject(DashboardRunner);
@@ -226,6 +239,12 @@ export class DashboardPageComponent {
   readonly editorSource = signal('');
   readonly editorProblems = signal<string[]>([]);
   readonly overridden = signal(false);
+
+  /*
+   * `read: ElementRef` is not optional here: `#grid` names a component, and a view query on one
+   * answers the instance by default. The export needs the DOM node, to clone it.
+   */
+  private readonly grid = viewChild('grid', { read: ElementRef });
   private readonly values = signal<Map<string, GroupValues>>(new Map());
   private readonly labels = signal<Map<string, GroupLabels>>(new Map());
 
@@ -344,6 +363,35 @@ export class DashboardPageComponent {
     this.overrides.clear(this.dashboardId());
     this.editorOpen.set(false);
     this.reload();
+  }
+
+  /**
+   * Writes the page as one file that depends on nothing.
+   *
+   * The charts are photographed before the clone is taken: a canvas copies as a blank one, so the
+   * images have to come from the live instances rather than from the copy.
+   */
+  async exportHtml(): Promise<void> {
+    const config = this.config();
+    const element = this.grid()?.nativeElement;
+    if (!config || !element) {
+      return;
+    }
+
+    const html = buildDashboardHtml(element, {
+      title: config.label,
+      subtitle: config.subtitle ?? null,
+      context: describeFilters(config, this.filters()),
+      images: this.snapshots.capture(),
+      css: await this.appStyles.load(),
+      generatedAt: new Date(),
+    });
+
+    downloadFile(`${safeFilename(config.label)}.html`, 'text/html;charset=utf-8', html);
+  }
+
+  print(): void {
+    globalThis.print?.();
   }
 
   /**

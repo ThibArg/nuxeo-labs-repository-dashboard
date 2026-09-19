@@ -1,5 +1,10 @@
 import { FilterState, GroupSelection, TermsGroupConfig } from '../config/dashboard-config.model';
-import { compilePicks, compileTermsGroup, describeTermsGroup } from './facet-clause';
+import {
+  compilePicks,
+  compileTermsGroup,
+  describeFilters,
+  describeTermsGroup,
+} from './facet-clause';
 
 const GROUP: TermsGroupConfig = {
   type: 'termsGroup',
@@ -257,5 +262,61 @@ describe('compilePicks', () => {
     expect(
       compilePicks([{ field: 'dc:creator', value: 'Josh', label: 'Josh', labels: 'raw' }]),
     ).toEqual([{ terms: { 'dc:creator': ['Josh'] } }]);
+  });
+});
+
+describe('describeFilters', () => {
+  const CONFIG = {
+    id: 'content',
+    label: 'Content',
+    index: 'nuxeo' as const,
+    filters: [{ type: 'dateRange' as const, field: 'dc:created' }, GROUP],
+    layout: [],
+    widgets: {},
+  };
+
+  function stateWith(overrides: Partial<FilterState>): FilterState {
+    return {
+      range: { id: '30d', label: 'Last 30 days', from: '2026-08-21', to: '2026-09-19' },
+      groups: {},
+      picks: [],
+      path: null,
+      ...overrides,
+    };
+  }
+
+  it('names the period and the field it applies to', () => {
+    expect(describeFilters(CONFIG, stateWith({}))).toEqual(['Period: Last 30 days on dc:created']);
+  });
+
+  it('names the container the figures describe', () => {
+    const lines = describeFilters(CONFIG, stateWith({ path: '/default-domain/workspaces' }));
+
+    expect(lines).toContain('Location: /default-domain/workspaces and everything inside it');
+  });
+
+  it('names a constrained member, group and all', () => {
+    const lines = describeFilters(
+      CONFIG,
+      stateWith({ groups: { kind: { types: { mode: 'subset', values: ['File', 'Note'] } } } }),
+    );
+
+    expect(lines).toContain('Document kinds — Document types: File, Note');
+  });
+
+  it('names a picked bucket by the label the reader saw', () => {
+    const lines = describeFilters(
+      CONFIG,
+      stateWith({
+        picks: [{ field: 'ecm:currentLifeCycleState', value: 'project', label: 'Project' }],
+      }),
+    );
+
+    expect(lines).toContain('ecm:currentLifeCycleState: Project');
+  });
+
+  /** A dashboard with no date filter must not claim a period it never applied. */
+  it('says nothing about a period the dashboard does not filter on', () => {
+    expect(describeFilters({ ...CONFIG, filters: [] }, stateWith({}))).toEqual([]);
   });
 });

@@ -37,6 +37,7 @@ import { RankedListComponent } from './ranked-list.component';
     } @else if (asChart(); as chart) {
       <nxd-chart-widget
         [config]="chart"
+        [widgetId]="widgetId()"
         [data]="data()"
         [labels]="bucketLabels()"
         [loading]="loading()"
@@ -56,6 +57,8 @@ import { RankedListComponent } from './ranked-list.component';
 })
 export class WidgetOutletComponent {
   readonly config = input.required<WidgetConfig>();
+  /** Layout cell this widget fills, which a whole page export photographs it by. */
+  readonly widgetId = input('');
   readonly data = input<WidgetData | undefined>(undefined);
   readonly loading = input(false);
   readonly error = input<string | null>(null);

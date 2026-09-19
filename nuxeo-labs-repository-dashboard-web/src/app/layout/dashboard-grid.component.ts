@@ -26,9 +26,10 @@ const GRID_COLUMNS = 12;
       @for (row of rows(); track $index) {
         <div class="nxd-grid">
           @for (cell of row; track cell.id) {
-            <div [style.--nxd-span]="cell.span">
+            <div [style.--nxd-span]="cell.span" [attr.data-widget-id]="cell.id">
               <nxd-widget-outlet
                 [config]="cell.widget"
+                [widgetId]="cell.id"
                 [data]="data().get(cell.id)"
                 [loading]="loading()"
                 [error]="errorFor(cell.id)"

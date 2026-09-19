@@ -358,6 +358,27 @@ A ranked list exports no PNG: it is plain DOM, and there is no canvas to ask one
 a chart does write is given an explicit white background, ECharts rendering onto a transparent one
 — a chart pasted into a document would otherwise show whatever sits behind it.
 
+**Export page**, in the title bar, takes the whole dashboard away in one of two forms.
+
+A **standalone HTML file** that depends on nothing: the application's own stylesheet is inlined and
+every chart is embedded as a data URL, so it opens from a mail attachment and a browser showing it
+can be copied into a wiki with the charts intact. It is built by cloning the live grid rather than
+by re-rendering each widget — re-implementing how a KPI, a ranked list and a table look would be a
+second description of the same thing, drifting the moment a widget type is added. What a clone
+cannot carry is a canvas, which copies blank, so each chart is swapped for the image its own
+component photographed. Controls are stripped: a snapshot carrying a Refresh button describes an
+application rather than a set of figures.
+
+The file states **what the figures were filtered by** and when it was taken. A page showing 5,941
+documents says nothing a week later unless it also says which 5,941, and the filter bar it was
+read beside is not in the export.
+
+**Print or save as PDF** relies on a print stylesheet instead: navigation, controls and dialogs are
+dropped, cards are kept off page boundaries, and the twelve column grid becomes two so that it
+fits a sheet. Nothing about a whole page PNG: the browser has no way to rasterise DOM, and half
+of these widgets are not charts — 27 of the 54 shipped are KPI tiles. It would need a
+screenshotting dependency, and an approximate one.
+
 ### Persistence
 
 Selections are stored in `localStorage`, per dashboard, under `nxd.filters.<dashboard>.<group>`.
@@ -894,7 +915,7 @@ still appear in an audit index, through `Framework.doPrivileged` with no argumen
 | 1e | Period with explicit inclusive bounds, and the Users dashboard on the audit index | done |
 | 2 | Cross filtering on bucket click, with active filter chips | done |
 | 2b | Path scope | done |
-| 2c | CSV and PNG export | done |
+| 2c | CSV and PNG export per widget, HTML and print for the page | done |
 | 3 | Configuration editor, JSON and validated by the real planner | done |
 | 3b | Field picker fed by `/api/v1/config/schemas` | |
 | 4 | Workflows dashboard | done |

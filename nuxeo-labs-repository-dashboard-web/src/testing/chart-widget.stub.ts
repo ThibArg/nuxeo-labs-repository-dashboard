@@ -1,7 +1,16 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  input,
+  output,
+} from '@angular/core';
 import { ChartWidgetConfig, pickableField } from '../app/config/dashboard-config.model';
 import { WidgetData, isEmptyData } from '../app/engine/result-mapper';
 import { BucketClick } from '../app/widgets/chart-widget.component';
+import { ChartSnapshotRegistry } from '../app/widgets/chart-snapshot.registry';
 
 /**
  * Stands in for `ChartWidgetComponent` in component tests.
@@ -16,6 +25,11 @@ import { BucketClick } from '../app/widgets/chart-widget.component';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div data-testid="chart-stub" [attr.data-empty]="empty()">
+      <!--
+        The real chart paints on a canvas, and a whole page export finds one to swap for its
+        photograph. A stub without it would let that swap silently do nothing.
+      -->
+      <canvas></canvas>
       <span>{{ config().label }}</span>
       <!-- Rendered so that hint interpolation stays observable through the stub. -->
       <span data-testid="chart-hint">{{ config().hint }}</span>
@@ -48,7 +62,10 @@ import { BucketClick } from '../app/widgets/chart-widget.component';
   `,
 })
 export class ChartWidgetStubComponent {
+  private readonly snapshots = inject(ChartSnapshotRegistry);
+
   readonly config = input.required<ChartWidgetConfig>();
+  readonly widgetId = input('');
   readonly data = input<WidgetData | undefined>(undefined);
   readonly labels = input<Map<string, string>>(new Map());
   readonly loading = input(false);
@@ -57,6 +74,22 @@ export class ChartWidgetStubComponent {
   readonly picked = output<BucketClick>();
 
   readonly empty = computed(() => isEmptyData(this.data()));
+
+  constructor() {
+    /*
+     * Registers a stand-in photograph. The real component asks ECharts, which jsdom cannot run,
+     * but a page level export still has to be observable: without this the whole page HTML would
+     * carry no image and the test proving charts survive the trip could not exist.
+     */
+    effect((onCleanup) => {
+      const id = this.widgetId();
+      if (!id) {
+        return;
+      }
+      this.snapshots.register(id, () => `data:image/png;base64,${id}`);
+      onCleanup(() => this.snapshots.unregister(id));
+    });
+  }
 
   readonly bucketCount = computed(() => {
     const data = this.data();

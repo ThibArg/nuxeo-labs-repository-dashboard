@@ -40,6 +40,38 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
           Refresh
         </button>
 
+        @if (exportable()) {
+          <!--
+            A native <details> rather than a scripted menu: the browser already closes it on
+            Escape and on a click outside, and it is reachable by keyboard without any code.
+          -->
+          <details class="nxd-menu" #menu>
+            <summary class="nxd-toolbar-button">
+              <svg
+                viewBox="0 0 24 24"
+                class="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M12 3v12m0 0 4-4m-4 4-4-4M4 19h16" />
+              </svg>
+              Export page
+            </summary>
+            <div class="nxd-menu-panel">
+              <button type="button" (click)="menu.open = false; exportHtml.emit()">
+                Standalone HTML file
+              </button>
+              <button type="button" (click)="menu.open = false; print.emit()">
+                Print or save as PDF
+              </button>
+            </div>
+          </details>
+        }
+
         @if (configurable()) {
           <button
             type="button"
@@ -80,7 +112,11 @@ export class PageHeaderComponent {
   readonly configurable = input(false);
   /** True when an administrator's edit is in force, which the button says rather than hides. */
   readonly overridden = input(false);
+  /** False while there is nothing on screen worth taking away. */
+  readonly exportable = input(false);
 
   readonly refresh = output<void>();
   readonly configure = output<void>();
+  readonly exportHtml = output<void>();
+  readonly print = output<void>();
 }

@@ -16,6 +16,7 @@ import {
   isFacetValuesRequest,
 } from '../../testing/fetch-stub';
 import { settle } from '../../testing/settle';
+import { DownloadCapture, captureDownloads, textOf } from '../../testing/downloads';
 
 const CONTENT = contentConfig as DashboardConfig;
 
@@ -947,6 +948,98 @@ describe('DashboardPageComponent', () => {
       const fixture = await render();
 
       expect((fixture.nativeElement as HTMLElement).textContent).toContain('Total Documents');
+    });
+  });
+  describe('whole page export', () => {
+    let capture: DownloadCapture;
+
+    beforeEach(() => (capture = captureDownloads()));
+    afterEach(() => {
+      capture.restore();
+      localStorage.clear();
+    });
+
+    async function render() {
+      stub = installFetchStub([
+        {
+          match: '/site/es/nuxeo/_search',
+          matchBody: isAggregationsRequest,
+          json: aggregationsResponse(),
+        },
+        {
+          match: 'styles.css',
+          text: '.nxd-card { border: 1px solid red }',
+          contentType: 'text/css',
+        },
+        ...supportRoutes(),
+      ]);
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = '/styles.css';
+      document.head.appendChild(link);
+
+      const fixture = TestBed.createComponent(DashboardPageComponent);
+      await settle(fixture);
+      return { fixture, link };
+    }
+
+    async function exported(): Promise<string> {
+      const { fixture, link } = await render();
+      const button = [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].find(
+        (candidate) => candidate.textContent?.trim() === 'Standalone HTML file',
+      ) as HTMLButtonElement;
+      button.click();
+      await settle(fixture);
+      link.remove();
+      return textOf(capture.files[0]);
+    }
+
+    it('writes one file named after the dashboard', async () => {
+      await exported();
+
+      expect(capture.files[0].filename).toBe('content-dashboard.html');
+    });
+
+    /* The point of the whole thing: it has to open with no server and no assets behind it. */
+    it('carries the stylesheet inline and links to nothing', async () => {
+      const html = await exported();
+
+      expect(html).toContain('.nxd-card { border: 1px solid red }');
+      expect(html).not.toContain('<link');
+      expect(html).not.toContain('<script');
+    });
+
+    it('keeps the figures that are already HTML', async () => {
+      const html = await exported();
+
+      expect(html).toContain('Total Documents');
+      expect(html).toContain((5941).toLocaleString());
+    });
+
+    /* A canvas clones blank, so a chart only survives as the image its component photographed. */
+    it('turns every chart into an embedded image', async () => {
+      const html = await exported();
+
+      expect(html).toContain('data:image/png;base64,byType');
+      expect(html).toContain('data:image/png;base64,createdTrend');
+    });
+
+    /*
+     * A file showing 5,941 documents says nothing a week later unless it says which 5,941, and the
+     * filter bar it was read beside is not in the export.
+     */
+    it('states what the figures were filtered by', async () => {
+      const html = await exported();
+
+      expect(html).toContain('Period:');
+      expect(html).toContain('dc:created');
+    });
+
+    it('leaves out the controls, which would act on a page that is gone', async () => {
+      const html = await exported();
+
+      expect(html).not.toContain('<button');
+      expect(html).not.toContain('<dialog');
     });
   });
 });

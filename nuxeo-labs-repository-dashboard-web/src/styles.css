@@ -172,6 +172,45 @@ body {
     tab-size: 2;
   }
 
+  .nxd-menu {
+    position: relative;
+  }
+
+  .nxd-menu > summary {
+    list-style: none;
+  }
+
+  .nxd-menu > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .nxd-menu-panel {
+    position: absolute;
+    right: 0;
+    z-index: 30;
+    margin-top: 0.375rem;
+    min-width: 13rem;
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+    background-color: var(--color-surface);
+    box-shadow: 0 10px 30px rgb(16 24 40 / 12%);
+  }
+
+  .nxd-menu-panel button {
+    display: block;
+    width: 100%;
+    padding: 0.5rem 0.875rem;
+    text-align: left;
+    font-size: 0.8125rem;
+    color: var(--color-ink);
+    cursor: pointer;
+  }
+
+  .nxd-menu-panel button:hover {
+    background-color: var(--color-canvas);
+  }
+
   .nxd-code-area:focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: -1px;
@@ -189,5 +228,55 @@ body {
 
   .nxd-date-input:disabled {
     opacity: 0.5;
+  }
+}
+
+/*
+ * Printing, which is also how a reader saves a PDF to pass around.
+ *
+ * Everything that acts on a page is dropped: a paper copy carrying a Refresh button and a filter
+ * dialog describes an application rather than a set of figures. The filter bar itself goes with
+ * them, which is why an exported HTML file writes the active filters out as text instead — on
+ * paper the browser's own header carries the URL, and the reader is the one who set them.
+ */
+@media print {
+  nxd-sidebar,
+  nxd-page-header button,
+  nxd-page-header details,
+  nxd-config-editor,
+  nxd-facet-group-dialog,
+  nxd-path-scope-picker,
+  nxd-filter-chips button,
+  .nxd-icon-button {
+    display: none !important;
+  }
+
+  /* The shell scrolls its own pane on screen, which clips everything past the first page. */
+  html,
+  body,
+  nxd-shell,
+  nxd-shell * {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  .nxd-card {
+    border: 1px solid #d0d5dd;
+    box-shadow: none;
+    /* A card split across two sheets is unreadable, and they are small enough never to need it. */
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Three columns of tiles fit a portrait sheet; twelve do not. */
+  .nxd-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.75rem !important;
+  }
+
+  .nxd-grid > * {
+    grid-column: span 1 !important;
   }
 }
