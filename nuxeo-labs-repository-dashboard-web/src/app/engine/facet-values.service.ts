@@ -22,6 +22,11 @@ export interface MemberValues {
   values: FacetValue[];
   /** True when the aggregation was truncated, meaning some values are missing from the list. */
   truncated: boolean;
+  /**
+   * Distinct values the field holds, so a truncated list can say how many it leaves out rather
+   * than merely warning that it does. Counted on raw values, hence before any merge.
+   */
+  total?: number;
 }
 
 export type GroupValues = Map<string, MemberValues>;
@@ -91,9 +96,13 @@ export class FacetValuesService {
     // Compiled rather than hand written, so these lists inherit every guarantee the compiler
     // makes: no `.keyword` suffix, and a shard size wide enough for an exact merge.
     const aggs = Object.fromEntries(
-      group.members.map((member) => [
-        member.id,
-        compileAgg({ terms: { field: member.field, size: member.size ?? DEFAULT_SIZE } }),
+      group.members.flatMap((member) => [
+        [
+          member.id,
+          compileAgg({ terms: { field: member.field, size: member.size ?? DEFAULT_SIZE } }),
+        ],
+        // Counts what the top N had to choose from, as the widget planner has always done.
+        [distinctKey(member.id), { cardinality: { field: member.field } }],
       ]),
     );
 
@@ -135,10 +144,15 @@ export class FacetValuesService {
         }
       }
 
+      const distinct = (
+        response.aggregations?.[distinctKey(member.id)] as EsAggregation | undefined
+      )?.value;
+
       result.set(member.id, {
         memberId: member.id,
         values,
         truncated: (aggregation?.['sum_other_doc_count'] as number | undefined) ? true : false,
+        ...(typeof distinct === 'number' ? { total: distinct } : {}),
       });
     }
 
@@ -165,4 +179,9 @@ function mergePrincipalValues(values: FacetValue[]): FacetValue[] {
   }
 
   return [...merged.values()].sort((a, b) => b.count - a.count);
+}
+
+/** Name of the sibling counting distinct values, kept out of the member id namespace. */
+function distinctKey(memberId: string): string {
+  return `${memberId}__distinct`;
 }

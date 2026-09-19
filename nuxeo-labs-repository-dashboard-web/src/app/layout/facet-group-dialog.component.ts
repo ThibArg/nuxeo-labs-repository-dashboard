@@ -69,6 +69,7 @@ import { FacetPanelComponent } from './facet-panel.component';
                 [labels]="labelsOf(member.id)"
                 [selection]="selectionOf(member.id)"
                 [truncated]="truncatedOf(member.id)"
+                [total]="totalOf(member.id)"
                 (selectionChange)="update(member.id, $event)"
               />
               @if (!last) {
@@ -159,6 +160,10 @@ export class FacetGroupDialogComponent {
 
   protected truncatedOf(memberId: string): boolean {
     return this.values().get(memberId)?.truncated ?? false;
+  }
+
+  protected totalOf(memberId: string): number | undefined {
+    return this.values().get(memberId)?.total;
   }
 
   protected labelsOf(memberId: string): Map<string, string> {

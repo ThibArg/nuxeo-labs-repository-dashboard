@@ -96,6 +96,27 @@ export class NuxeoHttpService {
     });
   }
 
+  /**
+   * Runs an Automation operation, returning its parsed result.
+   *
+   * Used for the lookups the REST API cannot answer in one call, such as `UserGroup.Suggestion`,
+   * which searches users and groups together and composes their display label server side. The
+   * abort signal lets a caller drop a reply it no longer wants, which is what keeps a fast typist
+   * from seeing answers arrive out of order.
+   */
+  async operation<T>(
+    id: string,
+    params: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    return this.request<T>(this.apiUrl(`automation/${id}`), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({ params, context: {} }),
+      ...(signal ? { signal } : {}),
+    });
+  }
+
   private async request<T>(url: string, init: RequestInit): Promise<T> {
     let response: Response;
     try {

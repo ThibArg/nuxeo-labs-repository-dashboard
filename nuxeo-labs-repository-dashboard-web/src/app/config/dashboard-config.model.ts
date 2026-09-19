@@ -182,6 +182,15 @@ export interface TermsMemberConfig {
   label: string;
   labels?: LabelStrategy;
   /**
+   * Turns the list into a directory backed picker.
+   *
+   * Values are ranked by volume rather than alphabetically, only the busiest are listed, and
+   * typing queries the server instead of filtering the downloaded page. Meant for a field whose
+   * cardinality follows the user base: three hundred claim adjusters make a checkbox list
+   * unusable, and no top N can be relied on to hold the one person a reader is looking for.
+   */
+  lookup?: 'user';
+  /**
    * Number of distinct values fetched. The OpenSearch default is 10, far too low here, so an
    * explicit value is always sent.
    */

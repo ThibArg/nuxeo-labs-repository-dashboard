@@ -78,11 +78,45 @@ describe('FacetValuesService', () => {
 
     expect(stub.calls).toHaveLength(1);
     const body = stub.bodies[0] as { aggs: Record<string, unknown> };
-    expect(Object.keys(body.aggs).sort()).toEqual(['facets', 'types']);
+    // Each member brings a sibling counting what its top N had to choose from.
+    expect(Object.keys(body.aggs).sort()).toEqual([
+      'facets',
+      'facets__distinct',
+      'types',
+      'types__distinct',
+    ]);
     expect(values.get('types')?.values).toEqual([
       { value: 'File', count: 3000 },
       { value: 'Picture', count: 1500 },
     ]);
+  });
+
+  /*
+   * "More values exist" tells a reader nothing they can act on. The count comes from a cardinality
+   * sibling, as the widget planner has always emitted — this service simply never did.
+   */
+  it('counts the values a truncated list leaves out', async () => {
+    stub = installFetchStub([
+      {
+        match: '/site/es/nuxeo/_search',
+        json: {
+          took: 3,
+          timed_out: false,
+          hits: { total: { value: 0, relation: 'eq' }, hits: [] },
+          aggregations: {
+            types: { buckets: [{ key: 'File', doc_count: 3000 }], sum_other_doc_count: 42 },
+            types__distinct: { value: 47 },
+            facets: { buckets: [] },
+            facets__distinct: { value: 0 },
+          },
+        },
+      },
+    ]);
+
+    const values = await service.load(CONFIG, GROUP, state(), 'sig');
+
+    expect(values.get('types')?.truncated).toBe(true);
+    expect(values.get('types')?.total).toBe(47);
   });
 
   it('sends an explicit size, because the OpenSearch default of 10 would truncate the list', async () => {

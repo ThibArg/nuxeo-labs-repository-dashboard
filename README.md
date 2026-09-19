@@ -67,6 +67,7 @@ A dashboard is one JSON file under
 | `metric` | `count`, `cardinality`, `sum`, `avg`, `min`, `max`, `percentile` — nested under the aggregation |
 | `scope` | Named population this widget describes, see below |
 | `labels` | `raw`, `doctype`, `lifecycle`, `user`, `boolean`, `message`, `workflowModel` |
+| `lookup` | `user` on a filter member: ranks values by volume and searches the directory as the reader types |
 | `format` | `integer`, `decimal`, `bytes`, `percent`, `duration`, `date`, `daysUntil`, `text` |
 | `filter` | Extra OpenSearch clauses for this widget only, compiled into a `filter` aggregation |
 | `secondary` | A second figure under a KPI, counted within the tile's own population |
@@ -243,7 +244,8 @@ dashboard's behalf; the filter is the tool for that, and the selection is rememb
 All members of a group are aggregated in a single request, issued the first time the dialog is
 opened rather than with the dashboard, so a user who never opens the editor never pays for it. The
 query deliberately excludes the constraints of the group being described, otherwise unchecking a
-type would remove it from its own list.
+type would remove it from its own list. Each member also asks for a `cardinality`, so a truncated
+list can say **how many** values it leaves out rather than merely warning that it does.
 
 | Action | Requests |
 | --- | --- |
@@ -251,6 +253,39 @@ type would remove it from its own list.
 | Date range change | 2 |
 | First opening of a filter dialog | 1 extra, then cached |
 | Selection change | 2 |
+
+### Filtering on a field with as many values as there are people
+
+A checkbox list works for eighteen document types. It does not work for the assignees of an
+insurance company with three hundred claim adjusters: the list is unreadable, resolving every
+label costs one request per person, and no top N can be relied on to hold the one person a reader
+is looking for.
+
+```json
+{ "id": "actors", "field": "nt:actors", "label": "Assignees",
+  "labels": "user", "lookup": "user", "size": 20 }
+```
+
+`lookup` changes three things at once:
+
+- **Values are ranked by volume**, not alphabetically. Three hundred names in alphabetical order
+  help nobody; the busiest twenty answer "who is holding up the work".
+- **The list is short**, which is what makes it affordable: twenty labels cost twenty lookups
+  instead of two hundred.
+- **Typing queries the directory**, through `UserGroup.Suggestion` — the same operation Web UI's
+  own picker calls, with the same three character threshold and 300 ms debounce, and an aborted
+  request so a fast typist never sees answers arrive out of order. It returns users and groups
+  together, composes their label server side, and hands back the prefixed identifier, which is
+  precisely the form `nt:actors` stores.
+
+The two halves answer different questions and neither replaces the other: only the index knows who
+is busiest, only the directory knows where Kate is. Selected values are pinned to the top of the
+list, so clearing the search box never hides what was just ticked, and a persisted selection stays
+visible even when its owner has dropped out of the busiest twenty.
+
+One consequence worth knowing: under `lookup` a full page is **never** collapsed back to `all`.
+Holding every row of a top N says nothing about holding every value, and collapsing would silently
+widen the filter to people who were never shown.
 
 ### Persistence
 

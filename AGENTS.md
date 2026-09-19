@@ -459,6 +459,42 @@ Three answers, all shipped:
 generated with a uniform draw, so every model is symmetric by construction. Real workflow durations
 are not; do not conclude from these figures that a per-model median is useless.
 
+## Phase 4d: filtering on a field as wide as the user base
+
+A checkbox list works for eighteen document types and collapses for three hundred claim adjusters.
+The exploration found three defects, not one: the search box inside the dialog filters **the two
+hundred values already downloaded**, so a 201st user is unreachable whatever is typed; resolving
+the labels of two hundred principals costs **201 requests**, six at a time, so thirty-four
+round trips in series; and `Select all` after a search used to tick the whole downloaded list
+rather than the five rows on screen.
+
+`lookup: 'user'` on a member is the opt-in. It ranks by volume rather than by label, cuts `size`
+to twenty — which is what brings the 201 requests down to 21 — and sends typing to
+`UserGroup.Suggestion` rather than to the local list. That operation is what `nuxeo-user-suggestion`
+calls: three characters minimum, 300 ms debounce, previous request aborted, users and groups in one
+call, `displayLabel` composed server side, and `prefixed_id` handed back — the very form `nt:actors`
+stores, so a picked value drops into the selection with nothing to convert.
+
+Four things are worth remembering before touching this again:
+
+- **The index and the directory answer different questions.** `UserGroup.Suggestion` knows nothing
+  of document counts, nor of principals present in the index but absent from the directory —
+  deleted accounts, `system` — which `facet-values.service` deliberately keeps with a zero count.
+  Neither list replaces the other, which is why both are shown.
+- **A full page is never collapsed to `all` under `lookup`.** Holding every row of a top N says
+  nothing about holding every value; collapsing would silently widen the filter to people never
+  shown. `emit()` guards it.
+- **Selected values are pinned first**, so clearing the search box does not hide what was just
+  ticked, and a persisted selection stays visible even when its owner left the busiest twenty.
+- **`total` counts raw values, before any merge.** So on a field carrying both forms of a
+  principal it can exceed the number of rows shown without anything actually missing. The line
+  only appears when `sum_other_doc_count` proves something was dropped, which bounds the error.
+
+`facet-values.service` now emits the `cardinality` sibling the widget planner has always emitted
+and it never did — hence "47 assignees in all, the 20 busiest are listed" instead of "More values
+exist than could be listed. Raise \"size\" in the dashboard configuration", a sentence addressed to
+an administrator rather than to the reader.
+
 ## Style
 Comments explain *why*, never *what*. Prefer no comment to one that restates the code, and fix a
 comment whose justification is wrong — one claimed OpenSearch flattens blobs, which it does not.
@@ -474,7 +510,7 @@ Diagnostics are live; Governance is the last placeholder, and it names its missi
 The work is pushed to `github.com/ThibArg/nuxeo-labs-repository-dashboard`, a public backup until
 the plugin is ready to be forked into `nuxeo-sandbox`; the README carries a warning saying so.
 
-Phase 4b added the Tasks dashboard: 335 tests, five live screens. Read "Phase 4b" above before
+Phase 4b added the Tasks dashboard: 348 tests, five live screens. Read "Phase 4b" above before
 touching anything about due dates — the short version is that `audit_wf` cannot answer the question
 and that a nightly job truncates the corpus to workflows still alive.
 

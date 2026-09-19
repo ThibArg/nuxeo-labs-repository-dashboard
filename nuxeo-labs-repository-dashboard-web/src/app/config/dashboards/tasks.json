@@ -13,9 +13,10 @@
         {
           "id": "actors",
           "field": "nt:actors",
-          "label": "Assigned to",
+          "label": "Assignees",
           "labels": "user",
-          "size": 200,
+          "lookup": "user",
+          "size": 20,
           "note": "A task may be assigned to a group as well as to a person."
         }
       ]
