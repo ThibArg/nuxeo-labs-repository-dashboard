@@ -1,7 +1,6 @@
 import { Routes } from '@angular/router';
 import { DashboardPageComponent } from './pages/dashboard-page.component';
 import { DiagnosticsPageComponent } from './pages/diagnostics-page.component';
-import { UpcomingPageComponent } from './pages/upcoming-page.component';
 
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'content' },
@@ -42,15 +41,15 @@ export const routes: Routes = [
   },
   {
     path: 'governance',
-    component: UpcomingPageComponent,
+    component: DashboardPageComponent,
     title: 'Governance Dashboard',
     data: {
-      heading: 'Governance Dashboard',
-      phase: 'phase 5',
-      description:
-        'Records and legal holds, moved here from the Content dashboard, alongside retention ' +
-        'policies: ecm:isRecord, ecm:hasLegalHold, a date_range aggregation over ecm:retainUntil ' +
-        'and record:ruleIds resolved against the RetentionRule documents.',
+      dashboardId: 'governance',
+      /*
+       * The page renders without the addon: ecm:isRecord, ecm:retainUntil and ecm:hasLegalHold are
+       * core fields. Only the rule breakdown needs nuxeo-retention, so the notice explains what is
+       * missing rather than hiding figures that are perfectly readable.
+       */
       requires: 'retention',
       requirementLabel: 'the nuxeo-retention package',
       requirementDocUrl: 'https://doc.nuxeo.com/nxdoc/nuxeo-retention-management/',

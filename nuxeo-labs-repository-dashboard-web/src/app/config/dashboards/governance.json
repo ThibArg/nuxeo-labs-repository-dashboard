@@ -1,0 +1,259 @@
+{
+  "id": "governance",
+  "label": "Governance Dashboard",
+  "subtitle": "Live documents only. A record can be neither versioned nor published, so versions and proxies never carry one; trashed documents are left out so that the totals describe the working repository. \"Governed by a rule\" means the Record facet, which only Retention.AttachRule sets — Document.Retain and Document.Hold make a record without it.",
+  "index": "nuxeo",
+  "filters": [
+    {
+      "type": "dateRange",
+      "field": "dc:created",
+      "default": "all"
+    },
+    {
+      "type": "termsGroup",
+      "id": "kind",
+      "label": "Document kinds",
+      "combine": "or",
+      "members": [
+        {
+          "id": "types",
+          "field": "ecm:primaryType",
+          "label": "Document types",
+          "labels": "doctype",
+          "size": 200
+        }
+      ]
+    }
+  ],
+  "baseFilter": [
+    {
+      "term": {
+        "ecm:isVersion": false
+      }
+    },
+    {
+      "term": {
+        "ecm:isProxy": false
+      }
+    },
+    {
+      "term": {
+        "ecm:isTrashed": false
+      }
+    }
+  ],
+  "defaultScope": "records",
+  "scopes": {
+    "all": [],
+    "records": [
+      {
+        "term": {
+          "ecm:isRecord": true
+        }
+      }
+    ],
+    "governed": [
+      {
+        "term": {
+          "ecm:mixinType": "Record"
+        }
+      }
+    ],
+    "retained": [
+      {
+        "range": {
+          "ecm:retainUntil": {
+            "gt": "now"
+          }
+        }
+      }
+    ],
+    "held": [
+      {
+        "term": {
+          "ecm:hasLegalHold": true
+        }
+      }
+    ]
+  },
+  "layout": [
+    {
+      "cells": ["liveDocuments", "records", "underRetention", "legalHold"]
+    },
+    {
+      "cells": ["expiringWeek", "expiring60", "expiringLater"]
+    },
+    {
+      "cells": ["byRule", "byType"]
+    },
+    {
+      "cells": ["recordsTable"]
+    }
+  ],
+  "widgets": {
+    "liveDocuments": {
+      "type": "kpi",
+      "label": "Live Documents",
+      "hint": "The population the figures beside it are a share of",
+      "scope": "all",
+      "span": 3
+    },
+    "records": {
+      "type": "kpi",
+      "label": "Records",
+      "hint": "Declared a record, whatever protects it",
+      "severity": "accent",
+      "scope": "records",
+      "span": 3,
+      "secondary": {
+        "filter": [
+          {
+            "term": {
+              "ecm:mixinType": "Record"
+            }
+          }
+        ],
+        "label": "{value} governed by a rule",
+        "hideWhenZero": true
+      }
+    },
+    "underRetention": {
+      "type": "kpi",
+      "label": "Under Retention",
+      "hint": "Retention date still in the future",
+      "severity": "warning",
+      "scope": "retained",
+      "span": 3
+    },
+    "legalHold": {
+      "type": "kpi",
+      "label": "Under Legal Hold",
+      "hint": "Held until someone lifts it",
+      "severity": "danger",
+      "scope": "held",
+      "span": 3
+    },
+    "expiringWeek": {
+      "type": "kpi",
+      "label": "Expiring This Week",
+      "hint": "Within the next 7 days",
+      "severity": "danger",
+      "scope": "retained",
+      "span": 4,
+      "filter": [
+        {
+          "range": {
+            "ecm:retainUntil": {
+              "lte": "now+7d"
+            }
+          }
+        }
+      ]
+    },
+    "expiring60": {
+      "type": "kpi",
+      "label": "Expiring < 60 Days",
+      "hint": "Beyond the next 7 days",
+      "severity": "warning",
+      "scope": "retained",
+      "span": 4,
+      "filter": [
+        {
+          "range": {
+            "ecm:retainUntil": {
+              "gt": "now+7d",
+              "lte": "now+60d"
+            }
+          }
+        }
+      ]
+    },
+    "expiringLater": {
+      "type": "kpi",
+      "label": "Expiring Later",
+      "hint": "The three add up to Under Retention",
+      "scope": "retained",
+      "span": 4,
+      "filter": [
+        {
+          "range": {
+            "ecm:retainUntil": {
+              "gt": "now+60d"
+            }
+          }
+        }
+      ]
+    },
+    "byRule": {
+      "type": "hbar",
+      "label": "By Retention Rule",
+      "hint": "Records a rule was attached to. A record made by hand carries no rule",
+      "span": 6,
+      "scope": "governed",
+      "labels": "document",
+      "agg": {
+        "terms": {
+          "field": "record:ruleIds",
+          "size": 10
+        }
+      }
+    },
+    "byType": {
+      "type": "donut",
+      "label": "Records by Document Type",
+      "span": 6,
+      "scope": "records",
+      "labels": "doctype",
+      "agg": {
+        "terms": {
+          "field": "ecm:primaryType",
+          "size": 10
+        }
+      }
+    },
+    "recordsTable": {
+      "type": "table",
+      "label": "Records",
+      "hint": "Soonest retention first. A record with no date is held, or no longer protected",
+      "span": 12,
+      "size": 20,
+      "scope": "records",
+      "sort": [
+        {
+          "field": "ecm:retainUntil",
+          "order": "asc"
+        }
+      ],
+      "columns": [
+        {
+          "field": "dc:title",
+          "label": "Document",
+          "link": "document"
+        },
+        {
+          "field": "ecm:primaryType",
+          "label": "Type",
+          "labels": "doctype",
+          "width": "w-32"
+        },
+        {
+          "field": "record:ruleIds",
+          "label": "Retention rule",
+          "labels": "document"
+        },
+        {
+          "field": "ecm:retainUntil",
+          "label": "Retained until",
+          "format": "daysUntil",
+          "width": "w-36"
+        },
+        {
+          "field": "ecm:hasLegalHold",
+          "label": "Legal hold",
+          "labels": "boolean",
+          "width": "w-28"
+        }
+      ]
+    }
+  }
+}

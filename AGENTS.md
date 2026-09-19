@@ -261,18 +261,25 @@ Answer the user in French, using *vous*.
 
 ## Where things stand
 
-Five live screens — Content, Users, Workflows, Tasks, Diagnostics — plus Governance, which is
-still a placeholder naming its missing prerequisite. Build green, 353 tests over 27 files.
+Six live screens — Content, Users, Workflows, Tasks, Governance, Diagnostics. Build green, 370
+tests over 28 files. `UpcomingPageComponent` is gone with the last placeholder; the requirement
+notice it used to carry is now tested where it lives, in `requirement-notice.component.spec.ts`.
 
 The work is pushed to `github.com/ThibArg/nuxeo-labs-repository-dashboard`, a public backup until
 the plugin is ready to be forked into `nuxeo-sandbox`; the README carries a warning saying so, and
 `AGENTS.md` is deliberately **not** gitignored in this repository, so keep it free of credentials.
 
-**Phase 5, the Governance dashboard, is next, and it now has data to be built against.** The
-record and legal hold tiles are already out of `content.json`, so it starts from a blank page
-rather than from a move; it may well need `DataTableComponent`, which `tasks.json` already
-exercises. Then phase 2 (cross filtering on bucket click, active filter chips, path scope, CSV and
-PNG export) and phase 3 (configuration editor with a field picker fed by `/api/v1/config/schemas`).
+**Phase 5 shipped, so phase 2 is next** (cross filtering on bucket click, active filter chips,
+path scope, CSV and PNG export), then phase 3 (configuration editor with a field picker fed by
+`/api/v1/config/schemas`).
+
+`governance.json` reads the repository index under a `baseFilter` of live, untrashed,
+non-versioned, non-proxy documents. That last pair is near-tautological and deliberately kept: a
+record can be neither checked in nor published, so no version and no proxy ever carries one, which
+means the scopes never double count the way Content's proxies do. Its scopes are `all`, `records`,
+`governed` (the `Record` facet), `retained` and `held`, and the three horizon tiles partition
+`retained` exactly — a spec evaluates scope and widget filter together, since the lower bound of
+every tile comes from the scope alone.
 
 **The obstacle both files used to name is lifted.** The sandbox held no record, no legal hold, no
 `ecm:retainUntil` and no `RetentionRule` at all, so a Governance page would have rendered a column

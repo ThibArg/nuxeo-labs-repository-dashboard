@@ -10,9 +10,9 @@ The dashboard is a standalone Angular application packaged as a Nuxeo bundle. Ch
 are described by configuration rather than hard coded, and every widget of a page is batched into
 a single OpenSearch aggregation request.
 
-> **Status: five screens live.** Content, Users, Workflows and Tasks are complete and
-> configuration driven, alongside Diagnostics. Governance is still a placeholder naming its
-> prerequisite. The configuration editor and cross filtering land next, see [Roadmap](#roadmap).
+> **Status: six screens live.** Content, Users, Workflows, Tasks and Governance are complete and
+> configuration driven, alongside Diagnostics. The configuration editor and cross filtering land
+> next, see [Roadmap](#roadmap).
 
 ## Screens
 
@@ -313,7 +313,7 @@ start there rather than with this table.
 | `nuxeo.search.client.default.name=opensearch` | Same package | Nothing works |
 | Administrator session | — | Nothing works |
 | `nuxeo.passthrough.elasticsearch.audit.enabled=true` | The `nuxeo-audit-opensearch1` package, through its `opensearch1-audit` template | Users and Workflows dashboards reduced to a notice naming the prerequisite |
-| `RetentionRule` document type | The `nuxeo-retention` package | Governance dashboard reduced to a notice naming the package |
+| `RetentionRule` document type | The `nuxeo-retention` package | Governance keeps its records, retention and legal hold figures, which read core fields, and carries a notice naming the package; only the rule breakdown stays empty |
 | Web UI | The `nuxeo-web-ui` package, declared as a dependency | No Administration menu entry; the dashboard stays reachable by URL |
 
 Why administrators only: for a non administrator the passthrough rewrites the query to inject an
@@ -790,7 +790,7 @@ still appear in an audit index, through `Framework.doPrivileged` with no argumen
 | 4b | Tasks dashboard, on open tasks and due dates | done |
 | 4c | A median beside the mean, and a per model breakdown, where an aggregate mixes populations | done |
 | 4d | Directory backed filtering for a field with as many values as there are people | done |
-| 5 | Governance dashboard, on records, legal holds and retention | next |
+| 5 | Governance dashboard, on records, legal holds and retention | done |
 
 ## Licence
 

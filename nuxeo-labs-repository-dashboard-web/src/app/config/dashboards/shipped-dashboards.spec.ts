@@ -1,4 +1,5 @@
 import contentConfig from './content.json';
+import governanceConfig from './governance.json';
 import tasksConfig from './tasks.json';
 import usersConfig from './users.json';
 import workflowsConfig from './workflows.json';
@@ -18,6 +19,7 @@ import { planDashboard } from '../../engine/query-planner';
  */
 const DASHBOARDS: [string, DashboardConfig][] = [
   ['content.json', contentConfig as DashboardConfig],
+  ['governance.json', governanceConfig as DashboardConfig],
   ['tasks.json', tasksConfig as DashboardConfig],
   ['users.json', usersConfig as DashboardConfig],
   ['workflows.json', workflowsConfig as DashboardConfig],
