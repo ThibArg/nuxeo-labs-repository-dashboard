@@ -85,9 +85,6 @@
     },
     {
       "cells": ["byRule", "byType"]
-    },
-    {
-      "cells": ["recordsTable"]
     }
   ],
   "widgets": {
@@ -210,50 +207,6 @@
           "size": 10
         }
       }
-    },
-    "recordsTable": {
-      "type": "table",
-      "label": "Records",
-      "hint": "Soonest retention first. A record with no date is held, or no longer protected",
-      "span": 12,
-      "size": 20,
-      "scope": "records",
-      "sort": [
-        {
-          "field": "ecm:retainUntil",
-          "order": "asc"
-        }
-      ],
-      "columns": [
-        {
-          "field": "dc:title",
-          "label": "Document",
-          "link": "document"
-        },
-        {
-          "field": "ecm:primaryType",
-          "label": "Type",
-          "labels": "doctype",
-          "width": "w-32"
-        },
-        {
-          "field": "record:ruleIds",
-          "label": "Retention rule",
-          "labels": "document"
-        },
-        {
-          "field": "ecm:retainUntil",
-          "label": "Retained until",
-          "format": "daysUntil",
-          "width": "w-36"
-        },
-        {
-          "field": "ecm:hasLegalHold",
-          "label": "Legal hold",
-          "labels": "boolean",
-          "width": "w-28"
-        }
-      ]
     }
   }
 }

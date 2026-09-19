@@ -20,7 +20,6 @@ import {
   healthyServerRoutes,
   installFetchStub,
   isAggregationsRequest,
-  isHitsRequest,
 } from '../../testing/fetch-stub';
 import { settle } from '../../testing/settle';
 
@@ -59,38 +58,6 @@ function aggregationsResponse(): unknown {
   };
 }
 
-function hitsResponse(): unknown {
-  return {
-    took: 3,
-    timed_out: false,
-    hits: {
-      total: { value: 22, relation: 'eq' },
-      hits: [
-        {
-          _id: 'r1',
-          _source: {
-            'ecm:uuid': 'r1',
-            'dc:title': 'Invoice 002',
-            'ecm:primaryType': 'File',
-            'record:ruleIds': [SHORT_RULE],
-            'ecm:retainUntil': '2026-09-24T15:41:48.791Z',
-            'ecm:hasLegalHold': false,
-          },
-        },
-        {
-          _id: 'r2',
-          _source: {
-            'ecm:uuid': 'r2',
-            'dc:title': 'Litigation exhibit 021',
-            'ecm:primaryType': 'File',
-            'ecm:hasLegalHold': true,
-          },
-        },
-      ],
-    },
-  };
-}
-
 function supportRoutes(): StubRoute[] {
   return [
     { match: 'assets/dashboards/governance.json', json: governanceConfig },
@@ -109,27 +76,16 @@ describe('governance.json', () => {
     expect([...declared].filter((id) => !referenced.has(id))).toEqual([]);
   });
 
-  it('reads the repository in one aggregation request, plus the table it cannot batch', () => {
-    const { requests } = planDashboard(GOVERNANCE, defaultFilterState(GOVERNANCE));
-
-    expect(requests.map((request) => request.index)).toEqual(['nuxeo', 'nuxeo']);
-    expect(requests.filter((request) => request.kind === 'hits')).toHaveLength(1);
-  });
-
   /*
-   * `dc:title` is `text` with fielddata rather than a keyword, so aggregating on it answers
-   * something quite unlike the other fields. The table reads it out of `_source`, where it is
-   * perfectly usable, and nothing else touches it.
+   * A table would be the one widget allowed to add a round trip, and this page carries none: the
+   * grid answers "how much", which is a question a single batch of aggregations settles.
    */
-  it('reads dc:title from the source and never aggregates on it', () => {
+  it('reads the whole page with a single search', () => {
     const { requests } = planDashboard(GOVERNANCE, defaultFilterState(GOVERNANCE));
-    const aggregations = requests.filter((request) => request.kind === 'aggregations');
-    const table = requests.find((request) => request.kind === 'hits');
 
-    expect(JSON.stringify(aggregations.map((request) => request.body.aggs))).not.toContain(
-      'dc:title',
-    );
-    expect(table?.body._source).toContain('dc:title');
+    expect(requests).toHaveLength(1);
+    expect(requests[0].index).toBe('nuxeo');
+    expect(requests[0].kind).toBe('aggregations');
   });
 
   /*
@@ -248,7 +204,6 @@ describe('Governance dashboard', () => {
         matchBody: isAggregationsRequest,
         json: aggregationsResponse(),
       },
-      { match: '/site/es/nuxeo/_search', matchBody: isHitsRequest, json: hitsResponse() },
       ...supportRoutes(),
       // Last, because they end on a catch-all for every `/site/es/` call.
       ...preflightRoutes,
@@ -259,7 +214,7 @@ describe('Governance dashboard', () => {
     return fixture;
   }
 
-  it('renders the tiles, the breakdowns and the table', async () => {
+  it('renders the tiles and the breakdowns', async () => {
     const text = ((await render()).nativeElement as HTMLElement).textContent ?? '';
 
     expect(text).toContain('Governance Dashboard');
@@ -280,15 +235,6 @@ describe('Governance dashboard', () => {
     expect(text).toContain('Invoices — 5 days');
     expect(text).toContain('HR files — 2 years');
     expect(text).not.toContain(SHORT_RULE);
-  });
-
-  it('names the rule and the legal hold in the table', async () => {
-    const table = ((await render()).nativeElement as HTMLElement).querySelector('table');
-
-    expect(table?.textContent).toContain('Invoice 002');
-    expect(table?.textContent).toContain('Invoices — 5 days');
-    // A record with no retention is held, and the column has to say so rather than stay blank.
-    expect(table?.textContent).toContain('Yes');
   });
 
   /*

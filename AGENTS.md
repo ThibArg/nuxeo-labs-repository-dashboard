@@ -198,6 +198,10 @@ it now carries six against two, which merge to eight. Every count in this file i
   a `terms` ordered by it needs `metric.50` in the order path, not `metric`. **That ordering path
   is the one thing no shipped configuration exercises**: all seven `terms` of `workflows.json` sort
   by `avg`, so it has never been confronted with a live index.
+- **`link: "document"` and `labels: "boolean"` ship with no example either.** Both had one, in the
+  Governance record table, and lost it when that widget was dropped. They stay covered by
+  `data-table.component.spec.ts` and `label.service.spec.ts`, so this is not a gap in the suite —
+  it is the same caveat as the order path above: nothing has put them on a real screen.
 - **`@children` trails a write by about a second.** Listing a container straight after creating
   twenty-three documents in it answered six. `CURRENT_DOC_CHILDREN` is declared a
   `coreQueryPageProvider` and no Elasticsearch override of it exists anywhere in the LTS 2025 tree,
@@ -226,6 +230,7 @@ about the choices behind them.
 | `LabelService` caches the in-flight promise, not the answer | Widgets resolve their buckets in parallel, so three charts naming the same author start before any has replied. Caching the answer deduplicates nothing at that moment |
 | Merging the two forms of a principal adds counts only | Two averages recombine only with their weights, so `labels: "user"` together with a `metric` raises a plan error naming the reason rather than merging a wrong figure |
 | A mixed aggregate always ships with a breakdown beside it | An aggregate over unlike populations describes none of its members: on five workflow models spanning two orders of magnitude the mean lands where no model is |
+| No dashboard lists records until it can paginate | Twenty rows under a badge reading ten thousand describe nothing, and no sort makes the other 9,980 reachable. Answering "how much" is the grid's job; reaching the documents needs paging and export |
 
 ## Blob volumetry, set aside
 
