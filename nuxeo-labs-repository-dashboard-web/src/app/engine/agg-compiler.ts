@@ -11,8 +11,41 @@ import { EsClause } from './es-query';
 /** Name of the nested single value metric aggregation. */
 export const METRIC_AGG = 'metric';
 
+/** Name of the aggregation counting the distinct terms a `terms` bucket list had to choose from. */
+export const DISTINCT_AGG = 'distinct';
+
+/**
+ * Candidate list each shard contributes to the merge.
+ *
+ * A `terms` aggregation ranks locally on every shard, so the coordinating node can only build an
+ * exact top N if each shard hands over more candidates than the final list holds. OpenSearch
+ * defaults to `size * 1.5 + 10`, which is thin: on the five shard audit index that is twenty-five
+ * candidates per shard, enough for a term to be missed and for a returned count to be short.
+ */
+export function shardSizeFor(size: number): number {
+  return Math.max(size * 5, 100);
+}
+
 /** Name of the aggregation nested under a per widget `filter` wrapper. */
 export const INNER_AGG = 'inner';
+
+/**
+ * Instants a `date_histogram` must span, whatever the data holds.
+ *
+ * Derived from the active period, never written in a configuration file: the bounds are a fact
+ * about what the reader asked to see, not something an administrator should be able to set. This
+ * is also what keeps `AggConfig` a closed union.
+ *
+ * Epoch milliseconds, and not a date string: OpenSearch parses a string bound with the
+ * aggregation's own `format`, so a histogram declaring `yyyy-MM-dd` — as every chart here does, to
+ * get readable bucket keys — rejects an ISO instant with a 400. Verified against a live index.
+ */
+export interface HistogramBounds {
+  /** Only a histogram on this very field is padded; see `compileAgg`. */
+  field: string;
+  min?: number;
+  max?: number;
+}
 
 export class UnsupportedAggregationError extends Error {
   constructor(detail: string) {
@@ -75,6 +108,26 @@ export function compileMetric(metric: MetricConfig | undefined): EsClause | null
   return { [operator]: { field: assertAggregatableField(field) } };
 }
 
+/**
+ * The `extended_bounds` body, or undefined when there is nothing to pad.
+ *
+ * `max` is the start of the last selected day, never the exclusive upper bound of the query: the
+ * latter is the start of the following day, and would make the chart grow an empty bucket for a
+ * day the reader did not ask about.
+ */
+function extendedBounds(
+  field: string,
+  bounds: HistogramBounds | null | undefined,
+): EsClause | undefined {
+  if (!bounds || bounds.field !== field || (bounds.min === undefined && bounds.max === undefined)) {
+    return undefined;
+  }
+  return {
+    ...(bounds.min !== undefined ? { min: bounds.min } : {}),
+    ...(bounds.max !== undefined ? { max: bounds.max } : {}),
+  };
+}
+
 function compileTermsOrder(
   order: TermsOrder | undefined,
   hasMetric: boolean,
@@ -103,9 +156,18 @@ function compileTermsOrder(
 /**
  * Compiles an aggregation, optionally nesting a single value metric under it.
  *
+ * @param bounds period the reader selected. A `date_histogram` only spans the days where
+ *               something happened, so a quiet start of period silently shortens the chart;
+ *               `extended_bounds` fixes that. It is applied only when the histogram groups by the
+ *               very field the date filter constrains, since for any other field the selected
+ *               period says nothing about where the buckets should be.
  * @returns the aggregation body, ready to be placed under an `aggs` key.
  */
-export function compileAgg(agg: AggConfig, metric?: MetricConfig): EsClause {
+export function compileAgg(
+  agg: AggConfig,
+  metric?: MetricConfig,
+  bounds?: HistogramBounds | null,
+): EsClause {
   const compiledMetric = compileMetric(metric);
   const withMetric = (body: EsClause): EsClause =>
     compiledMetric ? { ...body, aggs: { [METRIC_AGG]: compiledMetric } } : body;
@@ -115,6 +177,7 @@ export function compileAgg(agg: AggConfig, metric?: MetricConfig): EsClause {
     const terms: EsClause = { field: assertAggregatableField(field) };
     if (size !== undefined) {
       terms['size'] = size;
+      terms['shard_size'] = shardSizeFor(size);
     }
     const compiledOrder = compileTermsOrder(order, compiledMetric !== null);
     if (compiledOrder) {
@@ -139,6 +202,10 @@ export function compileAgg(agg: AggConfig, metric?: MetricConfig): EsClause {
     const zone = time_zone ? assertTimeZone(time_zone) : browserTimeZone();
     if (zone) {
       histogram['time_zone'] = zone;
+    }
+    const extended = extendedBounds(field, bounds);
+    if (extended) {
+      histogram['extended_bounds'] = extended;
     }
     return withMetric({ date_histogram: histogram });
   }

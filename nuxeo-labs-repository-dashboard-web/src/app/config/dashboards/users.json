@@ -1,0 +1,127 @@
+{
+  "id": "users",
+  "label": "Users Dashboard",
+  "index": "audit",
+  "filters": [
+    {
+      "type": "dateRange",
+      "field": "eventDate",
+      "default": "30d"
+    }
+  ],
+  "layout": [
+    {
+      "cells": ["uniqueLoginsPerDay"]
+    },
+    {
+      "cells": ["topUsers", "loginFailures"]
+    },
+    {
+      "cells": ["creationsByUser", "modificationsByUser"]
+    }
+  ],
+  "widgets": {
+    "uniqueLoginsPerDay": {
+      "type": "line",
+      "label": "Unique Users per Day",
+      "hint": "Distinct users with a successful login ({range})",
+      "span": 12,
+      "filter": [
+        {
+          "term": {
+            "eventId": "loginSuccess"
+          }
+        }
+      ],
+      "metric": {
+        "cardinality": "principalName"
+      },
+      "agg": {
+        "date_histogram": {
+          "field": "eventDate",
+          "calendar_interval": "day",
+          "format": "yyyy-MM-dd"
+        }
+      }
+    },
+    "topUsers": {
+      "type": "ranked-list",
+      "label": "Most Active Users",
+      "hint": "By number of successful logins",
+      "span": 6,
+      "labels": "user",
+      "filter": [
+        {
+          "term": {
+            "eventId": "loginSuccess"
+          }
+        }
+      ],
+      "agg": {
+        "terms": {
+          "field": "principalName",
+          "size": 10
+        }
+      }
+    },
+    "loginFailures": {
+      "type": "ranked-list",
+      "label": "Failed Logins",
+      "hint": "The login exactly as it was typed, which may match no account",
+      "span": 6,
+      "filter": [
+        {
+          "term": {
+            "eventId": "loginFailed"
+          }
+        }
+      ],
+      "agg": {
+        "terms": {
+          "field": "principalName",
+          "size": 10
+        }
+      }
+    },
+    "creationsByUser": {
+      "type": "hbar",
+      "label": "Documents Created by User",
+      "hint": "Versions and published proxies are counted too",
+      "span": 6,
+      "labels": "user",
+      "filter": [
+        {
+          "term": {
+            "eventId": "documentCreated"
+          }
+        }
+      ],
+      "agg": {
+        "terms": {
+          "field": "principalName",
+          "size": 10
+        }
+      }
+    },
+    "modificationsByUser": {
+      "type": "hbar",
+      "label": "Documents Modified by User",
+      "hint": "Credited to the original user, not to a borrowed identity",
+      "span": 6,
+      "labels": "user",
+      "filter": [
+        {
+          "term": {
+            "eventId": "documentModified"
+          }
+        }
+      ],
+      "agg": {
+        "terms": {
+          "field": "principalName",
+          "size": 10
+        }
+      }
+    }
+  }
+}

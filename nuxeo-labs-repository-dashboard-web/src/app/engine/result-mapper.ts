@@ -7,7 +7,7 @@
  * exposes both `doc_count` and `metric`.
  */
 import { EsAggregation, EsBucket, EsResponse, totalHits } from '../core/nuxeo.types';
-import { INNER_AGG, METRIC_AGG } from './agg-compiler';
+import { DISTINCT_AGG, INNER_AGG, METRIC_AGG } from './agg-compiler';
 import { PlannedRequest, SECONDARY_AGG, WidgetPlan } from './query-planner';
 
 export interface DataBucket {
@@ -25,7 +25,14 @@ export interface TableRow {
 
 export type WidgetData =
   | { kind: 'scalar'; value: number; secondary?: number }
-  | { kind: 'buckets'; buckets: DataBucket[] }
+  | {
+      kind: 'buckets';
+      buckets: DataBucket[];
+      /** Values the top N left out, so a truncated list can say so. Zero when it is complete. */
+      others?: number;
+      /** Documents those omitted values account for, read from `sum_other_doc_count`. */
+      otherDocs?: number;
+    }
   | { kind: 'rows'; rows: TableRow[]; total: number };
 
 export function isEmptyData(data: WidgetData | undefined): boolean {
@@ -102,7 +109,20 @@ export function readAggregationWidget(
   const node = (plan.wrapped && (root[INNER_AGG] as EsAggregation | undefined)) || root;
 
   if (node.buckets) {
-    return { kind: 'buckets', buckets: normaliseBuckets(node.buckets) };
+    const buckets = normaliseBuckets(node.buckets);
+    /*
+     * The count of distinct values hangs off the wrapper, never off the bucket list itself, so it
+     * is read from the root. `sum_other_doc_count` sits on the list and weighs what was dropped.
+     */
+    const distinct = metricValue(root[DISTINCT_AGG] as EsAggregation | undefined);
+    const otherDocs = node['sum_other_doc_count'];
+
+    return {
+      kind: 'buckets',
+      buckets,
+      ...(distinct === null ? {} : { others: Math.max(0, distinct - buckets.length) }),
+      ...(typeof otherDocs === 'number' ? { otherDocs } : {}),
+    };
   }
 
   /*

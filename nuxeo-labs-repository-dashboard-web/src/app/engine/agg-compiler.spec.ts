@@ -5,6 +5,7 @@ import {
   browserTimeZone,
   compileAgg,
   compileMetric,
+  shardSizeFor,
 } from './agg-compiler';
 
 describe('agg-compiler', () => {
@@ -40,15 +41,34 @@ describe('agg-compiler', () => {
         terms: { field: 'dc:creator', size: 5, script: 'doc["x"].value' },
       } as unknown as AggConfig;
 
-      expect(compileAgg(agg)).toEqual({ terms: { field: 'dc:creator', size: 5 } });
+      expect(compileAgg(agg)).toEqual({
+        terms: { field: 'dc:creator', size: 5, shard_size: shardSizeFor(5) },
+      });
     });
   });
 
   describe('terms', () => {
     it('omits the order when the default count descending is wanted', () => {
       expect(compileAgg({ terms: { field: 'ecm:primaryType', size: 10 } })).toEqual({
-        terms: { field: 'ecm:primaryType', size: 10 },
+        terms: { field: 'ecm:primaryType', size: 10, shard_size: shardSizeFor(10) },
       });
+    });
+
+    /*
+     * Each shard ranks locally, so the coordinator needs a wider candidate list than the final
+     * one to merge an exact top N. OpenSearch defaults to `size * 1.5 + 10`, which on the five
+     * shard audit index is twenty-five candidates per shard.
+     */
+    it('asks each shard for more candidates than the list will hold', () => {
+      const { terms } = compileAgg({ terms: { field: 'a', size: 10 } }) as {
+        terms: { size: number; shard_size: number };
+      };
+
+      expect(terms.shard_size).toBeGreaterThan(terms.size * 1.5 + 10);
+    });
+
+    it('leaves the shard size out when no size was asked for', () => {
+      expect(compileAgg({ terms: { field: 'a' } })).toEqual({ terms: { field: 'a' } });
     });
 
     it('maps the declared orders onto the OpenSearch syntax', () => {

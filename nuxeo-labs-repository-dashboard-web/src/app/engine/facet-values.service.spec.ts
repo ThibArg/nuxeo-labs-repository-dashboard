@@ -33,7 +33,7 @@ const GROUP: TermsGroupConfig = termsGroups(CONFIG)[0];
 
 function state(overrides: Partial<FilterState> = {}): FilterState {
   return {
-    range: { id: 'all', label: 'All time', from: null },
+    range: { id: 'all', label: 'All time', from: null, to: null },
     groups: { kind: { types: { mode: 'all' }, facets: { mode: 'all' } } },
     ...overrides,
   };
@@ -135,11 +135,14 @@ describe('FacetValuesService', () => {
     await service.load(
       CONFIG,
       GROUP,
-      state({ range: { id: '30d', label: 'Last 30 days', from: 'now-30d' } }),
+      state({ range: { id: '30d', label: 'Last 30 days', from: '2026-08-20', to: '2026-09-18' } }),
       'sig-30d',
     );
 
-    expect(JSON.stringify(stub.bodies[0])).toContain('now-30d');
+    const clauses = (stub.bodies[0] as any).query.bool.filter;
+    expect(clauses).toContainEqual({
+      range: { 'dc:created': { gte: expect.any(String), lt: expect.any(String) } },
+    });
   });
 
   it('keeps a selected value that disappeared from the index, with a zero count', async () => {
@@ -195,7 +198,7 @@ describe('FacetValuesService', () => {
       const b = FacetValuesService.signatureOf(
         CONFIG,
         GROUP,
-        state({ range: { id: '30d', label: '', from: 'now-30d' } }),
+        state({ range: { id: '30d', label: '', from: '2026-08-20', to: '2026-09-18' } }),
       );
       expect(a).not.toBe(b);
     });

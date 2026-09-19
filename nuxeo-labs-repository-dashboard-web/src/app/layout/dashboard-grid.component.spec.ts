@@ -5,8 +5,13 @@ import { ChartWidgetComponent } from '../widgets/chart-widget.component';
 import { WidgetOutletComponent } from '../widgets/widget-outlet.component';
 import { ChartWidgetStubComponent } from '../../testing/chart-widget.stub';
 
-const ALL: DateRangeOption = { id: 'all', label: 'All time', from: null };
-const LAST_30: DateRangeOption = { id: '30d', label: 'Last 30 days', from: 'now-30d' };
+const ALL: DateRangeOption = { id: 'all', label: 'All time', from: null, to: null };
+const LAST_30: DateRangeOption = {
+  id: '30d',
+  label: 'Last 30 days',
+  from: '2026-08-20',
+  to: '2026-09-18',
+};
 
 function config(overrides: Partial<DashboardConfig> = {}): DashboardConfig {
   return {

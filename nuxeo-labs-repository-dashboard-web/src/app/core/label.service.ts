@@ -31,7 +31,7 @@ export class LabelService {
   private messages: Record<string, string> | null = null;
   private messagesPromise: Promise<void> | null = null;
 
-  private readonly userCache = new Map<string, string>();
+  private readonly userCache = new Map<string, Promise<string>>();
 
   /** Loads Web UI's translation bundle once. Failures are swallowed on purpose. */
   async loadMessages(): Promise<void> {
@@ -98,28 +98,30 @@ export class LabelService {
     }
   }
 
-  /** Looks users up through the REST API, caching both hits and misses. */
+  /**
+   * Looks users up through the REST API, caching both hits and misses.
+   *
+   * The cache holds the in-flight promise rather than the answer, because several widgets resolve
+   * their buckets in parallel: caching the answer would let three charts naming the same author
+   * each issue their own request, since none of them has returned yet when the others start.
+   */
   async resolveUsers(ids: string[]): Promise<Map<string, string>> {
-    const labels = new Map<string, string>();
-    const pending = ids.filter((id) => {
-      const cached = this.userCache.get(id);
-      if (cached !== undefined) {
-        labels.set(id, cached);
-        return false;
-      }
-      return true;
-    });
+    const unique = [...new Set(ids)];
+    const missing = unique.filter((id) => !this.userCache.has(id));
 
-    for (let i = 0; i < pending.length; i += USER_LOOKUP_CONCURRENCY) {
-      const slice = pending.slice(i, i + USER_LOOKUP_CONCURRENCY);
-      const resolved = await Promise.all(slice.map((id) => this.fetchUserLabel(id)));
-      slice.forEach((id, index) => {
-        const label = resolved[index];
-        this.userCache.set(id, label);
-        labels.set(id, label);
-      });
+    for (let i = 0; i < missing.length; i += USER_LOOKUP_CONCURRENCY) {
+      const slice = missing.slice(i, i + USER_LOOKUP_CONCURRENCY);
+      // Registered before the first await, so a concurrent caller joins instead of refetching.
+      slice.forEach((id) => this.userCache.set(id, this.fetchUserLabel(id)));
+      await Promise.all(slice.map((id) => this.userCache.get(id)!));
     }
 
+    const labels = new Map<string, string>();
+    await Promise.all(
+      unique.map(async (id) => {
+        labels.set(id, await this.userCache.get(id)!);
+      }),
+    );
     return labels;
   }
 

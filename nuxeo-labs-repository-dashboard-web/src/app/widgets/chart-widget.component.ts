@@ -3,6 +3,7 @@ import { NgxEchartsDirective } from 'ngx-echarts';
 import { ChartWidgetConfig } from '../config/dashboard-config.model';
 import { DataBucket, WidgetData, isEmptyData } from '../engine/result-mapper';
 import { buildChartOption } from './chart-options';
+import { truncationDetail, truncationFooter } from './truncation';
 import { WidgetHostComponent } from './widget-host.component';
 
 /** Renders the bucket based chart types backed by ECharts. */
@@ -18,6 +19,8 @@ import { WidgetHostComponent } from './widget-host.component';
       [loading]="loading()"
       [error]="error()"
       [empty]="empty()"
+      [footer]="footer()"
+      [footerTitle]="footerTitle()"
     >
       <div echarts [options]="option()" [autoResize]="true" class="h-64 w-full"></div>
     </nxd-widget-host>
@@ -26,6 +29,9 @@ import { WidgetHostComponent } from './widget-host.component';
 export class ChartWidgetComponent {
   readonly config = input.required<ChartWidgetConfig>();
   readonly data = input<WidgetData | undefined>(undefined);
+
+  protected readonly footer = computed(() => truncationFooter(this.data()));
+  protected readonly footerTitle = computed(() => truncationDetail(this.data()));
   readonly labels = input<Map<string, string>>(new Map());
   readonly loading = input(false);
   readonly error = input<string | null>(null);

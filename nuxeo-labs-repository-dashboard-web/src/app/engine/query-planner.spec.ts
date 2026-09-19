@@ -5,11 +5,11 @@ import { SECONDARY_AGG, planDashboard } from './query-planner';
 const NO_GROUPS = { kind: { types: { mode: 'all' as const }, facets: { mode: 'all' as const } } };
 
 const RANGE_ALL: FilterState = {
-  range: { id: 'all', label: 'All time', from: null },
+  range: { id: 'all', label: 'All time', from: null, to: null },
   groups: NO_GROUPS,
 };
 const RANGE_30D: FilterState = {
-  range: { id: '30d', label: 'Last 30 days', from: 'now-30d' },
+  range: { id: '30d', label: 'Last 30 days', from: '2026-08-20', to: '2026-09-18' },
   groups: NO_GROUPS,
 };
 
@@ -105,16 +105,89 @@ describe('planDashboard', () => {
       bool: {
         filter: [
           { term: { 'ecm:isVersion': false } },
-          { range: { 'dc:created': { gte: 'now-30d' } } },
+          { range: { 'dc:created': { gte: expect.any(String), lt: expect.any(String) } } },
         ],
       },
     });
-    expect(JSON.stringify(body.aggs)).not.toContain('now-30d');
+    // The trend aggregates on the same field, so the absence of a bound is what must be asserted.
+    expect(JSON.stringify(body.aggs)).not.toContain('"gte"');
   });
 
   it('omits the date clause when the range is unbounded', () => {
     const body = planDashboard(config(), RANGE_ALL).requests[0].body;
     expect(JSON.stringify(body.query)).not.toContain('dc:created');
+  });
+
+  describe('daily charts span the selected period', () => {
+    function histogram(filters: FilterState, dashboard = config()) {
+      const aggs = planDashboard(dashboard, filters).requests[0].body.aggs as Record<string, any>;
+      return aggs['trend'].date_histogram;
+    }
+
+    it('pads the chart so a quiet start of period does not shorten it', () => {
+      // Without bounds a histogram only spans the days that hold a document.
+      expect(histogram(RANGE_30D).extended_bounds).toEqual({
+        min: new Date('2026-08-20T00:00:00').getTime(),
+        max: new Date('2026-09-18T00:00:00').getTime(),
+      });
+    });
+
+    /*
+     * OpenSearch parses a string bound with the aggregation's own `format`. Every chart here
+     * declares `yyyy-MM-dd` to get readable bucket keys, so an ISO instant is rejected with a 400:
+     * "unparsed text found at index 10". Epoch milliseconds escape the format entirely.
+     */
+    it('states the bounds as numbers, which the aggregation format cannot misread', () => {
+      const { extended_bounds } = histogram(RANGE_30D);
+
+      expect(typeof extended_bounds.min).toBe('number');
+      expect(typeof extended_bounds.max).toBe('number');
+    });
+
+    it('stops at the last selected day rather than inventing one beyond it', () => {
+      const body = planDashboard(config(), RANGE_30D).requests[0].body;
+      const aggs = body.aggs as Record<string, any>;
+      const queryEnd = (body.query as any).bool.filter.find((clause: any) => clause.range).range[
+        'dc:created'
+      ].lt;
+
+      // The query ends at the start of the day after the last one; a bucket there would be a day
+      // nobody asked about.
+      expect(aggs['trend'].date_histogram.extended_bounds.max).toBeLessThan(
+        new Date(queryEnd).getTime(),
+      );
+    });
+
+    it('leaves a histogram on another field alone', () => {
+      const onModified = config({
+        layout: [{ cells: ['trend'] }],
+        widgets: {
+          trend: {
+            type: 'area',
+            label: 'Trend',
+            agg: { date_histogram: { field: 'dc:modified', calendar_interval: 'day' } },
+          },
+        },
+      });
+
+      // A document created in the period may well have been modified outside it.
+      expect(histogram(RANGE_30D, onModified).extended_bounds).toBeUndefined();
+    });
+
+    it('pads nothing when the period is unbounded', () => {
+      expect(histogram(RANGE_ALL).extended_bounds).toBeUndefined();
+    });
+
+    it('pads only the known side when a single bound is typed', () => {
+      const openEnded: FilterState = {
+        ...RANGE_ALL,
+        range: { id: 'custom', label: '', from: '2026-08-20', to: null },
+      };
+
+      expect(histogram(openEnded).extended_bounds).toEqual({
+        min: new Date('2026-08-20T00:00:00').getTime(),
+      });
+    });
   });
 
   it('gives each table its own request, since tables need hits', () => {
@@ -417,7 +490,7 @@ describe('planDashboard', () => {
 
       expect(clauses).toEqual([
         { term: { 'ecm:isVersion': false } },
-        { range: { 'dc:created': { gte: 'now-30d' } } },
+        { range: { 'dc:created': { gte: expect.any(String), lt: expect.any(String) } } },
         { terms: { 'ecm:primaryType': ['File'] } },
       ]);
     });

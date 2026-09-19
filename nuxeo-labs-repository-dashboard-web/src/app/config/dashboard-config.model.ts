@@ -157,7 +157,7 @@ export interface DateRangeFilterConfig {
   type: 'dateRange';
   field: string;
   label?: string;
-  /** Identifier of a `DATE_RANGE_OPTIONS` entry. Defaults to `all`. */
+  /** Identifier of a `DATE_RANGE_SHORTCUTS` entry. Defaults to `all`. */
   default?: string;
 }
 
@@ -248,20 +248,108 @@ export function scopeClauses(config: DashboardConfig, widget: WidgetConfig): EsC
 
 /* ==================== Runtime filter state ==================== */
 
+/**
+ * The period every widget of a dashboard is restricted to.
+ *
+ * Bounds are calendar days in the reader's own zone, both inclusive, rather than the date math a
+ * server would evaluate. Two reasons: a reader who picks "1 to 18 September" means whole local
+ * days, not a window ending at the current time of day; and only concrete days can be shown in,
+ * and edited through, the two date fields of the picker.
+ */
 export interface DateRangeOption {
   id: string;
   label: string;
-  /** Date math lower bound, or null for no bound at all. */
+  /** Inclusive first day, `YYYY-MM-DD`, or null for no lower bound. */
   from: string | null;
+  /** Inclusive last day, `YYYY-MM-DD`, or null for no upper bound. */
+  to: string | null;
 }
 
-export const DATE_RANGE_OPTIONS: DateRangeOption[] = [
-  { id: 'all', label: 'All time', from: null },
-  { id: '7d', label: 'Last 7 days', from: 'now-7d' },
-  { id: '30d', label: 'Last 30 days', from: 'now-30d' },
-  { id: '90d', label: 'Last 90 days', from: 'now-90d' },
-  { id: '12m', label: 'Last 12 months', from: 'now-12M' },
+/** Identifier the picker gives a range whose days were typed rather than chosen. */
+export const CUSTOM_RANGE_ID = 'custom';
+
+/**
+ * A named period, resolved against today when it is selected.
+ *
+ * Declaring the span rather than the days is what lets a shortcut fill the two date fields: the
+ * reader sees which days the figures actually cover.
+ */
+export interface DateRangeShortcut {
+  id: string;
+  label: string;
+  /** Number of calendar days ending today, today included. Mutually exclusive with `months`. */
+  days?: number;
+  /** Number of calendar months back from today. */
+  months?: number;
+}
+
+export const DATE_RANGE_SHORTCUTS: DateRangeShortcut[] = [
+  { id: 'all', label: 'All time' },
+  { id: '7d', label: 'Last 7 days', days: 7 },
+  { id: '30d', label: 'Last 30 days', days: 30 },
+  { id: '90d', label: 'Last 90 days', days: 90 },
+  { id: '12m', label: 'Last 12 months', months: 12 },
 ];
+
+/** `YYYY-MM-DD` of a date, read in the local zone rather than in UTC. */
+export function toLocalDay(date: Date): string {
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+export function resolveShortcut(shortcut: DateRangeShortcut, today = new Date()): DateRangeOption {
+  if (shortcut.days === undefined && shortcut.months === undefined) {
+    return { id: shortcut.id, label: shortcut.label, from: null, to: null };
+  }
+
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  if (shortcut.months !== undefined) {
+    start.setMonth(start.getMonth() - shortcut.months);
+  } else {
+    // Today counts as one of the days, so "last 7 days" starts six days ago.
+    start.setDate(start.getDate() - (shortcut.days! - 1));
+  }
+
+  return { id: shortcut.id, label: shortcut.label, from: toLocalDay(start), to: toLocalDay(today) };
+}
+
+/** Human readable rendering of a typed period, used wherever `{range}` is interpolated. */
+export function formatDayRange(from: string | null, to: string | null): string {
+  const day = (value: string) =>
+    new Date(`${value}T00:00:00`).toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+
+  if (from && to) {
+    return from === to ? day(from) : `${day(from)} – ${day(to)}`;
+  }
+  if (from) {
+    return `Since ${day(from)}`;
+  }
+  if (to) {
+    return `Until ${day(to)}`;
+  }
+  return 'All time';
+}
+
+/**
+ * A period whose days were typed.
+ *
+ * Bounds arriving in the wrong order are swapped rather than refused: the picker constrains its
+ * own inputs, but a swap keeps any other caller from producing a range that matches nothing.
+ */
+export function customRange(from: string | null, to: string | null): DateRangeOption {
+  const [start, end] = from && to && from > to ? [to, from] : [from, to];
+  return {
+    id: CUSTOM_RANGE_ID,
+    label: formatDayRange(start, end),
+    from: start,
+    to: end,
+  };
+}
 
 /**
  * Selection of one term list.
@@ -283,8 +371,10 @@ export interface FilterState {
   groups: Record<string, GroupSelection>;
 }
 
-export function dateRangeOption(id: string | undefined): DateRangeOption {
-  return DATE_RANGE_OPTIONS.find((option) => option.id === id) ?? DATE_RANGE_OPTIONS[0];
+/** Resolves a configured shortcut id against today, falling back to the first shortcut. */
+export function dateRangeOption(id: string | undefined, today = new Date()): DateRangeOption {
+  const shortcut = DATE_RANGE_SHORTCUTS.find((entry) => entry.id === id) ?? DATE_RANGE_SHORTCUTS[0];
+  return resolveShortcut(shortcut, today);
 }
 
 export function dateRangeFilter(config: DashboardConfig): DateRangeFilterConfig | null {
@@ -295,10 +385,15 @@ export function termsGroups(config: DashboardConfig): TermsGroupConfig[] {
   return (config.filters ?? []).filter((filter) => filter.type === 'termsGroup');
 }
 
-/** Initial state: the configured default range, and no constraint on any group. */
-export function defaultFilterState(config?: DashboardConfig): FilterState {
+/**
+ * Initial state: the configured default range, and no constraint on any group.
+ *
+ * `today` is injectable so that a test can assert which days a shortcut resolves to without
+ * freezing the clock of the whole suite.
+ */
+export function defaultFilterState(config?: DashboardConfig, today = new Date()): FilterState {
   if (!config) {
-    return { range: DATE_RANGE_OPTIONS[0], groups: {} };
+    return { range: dateRangeOption(undefined, today), groups: {} };
   }
 
   const groups: Record<string, GroupSelection> = {};
@@ -306,7 +401,7 @@ export function defaultFilterState(config?: DashboardConfig): FilterState {
     groups[group.id] = Object.fromEntries(group.members.map((member) => [member.id, SELECT_ALL]));
   }
 
-  return { range: dateRangeOption(dateRangeFilter(config)?.default), groups };
+  return { range: dateRangeOption(dateRangeFilter(config)?.default, today), groups };
 }
 
 /** Selection of one member, defaulting to "no constraint". */

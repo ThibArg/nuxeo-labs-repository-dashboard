@@ -3,6 +3,7 @@ import { ChartWidgetConfig } from '../config/dashboard-config.model';
 import { formatNumber } from '../core/format';
 import { WidgetData, isEmptyData } from '../engine/result-mapper';
 import { chartPalette } from './chart-options';
+import { truncationDetail, truncationFooter } from './truncation';
 import { WidgetHostComponent } from './widget-host.component';
 
 interface RankedEntry {
@@ -33,6 +34,8 @@ interface RankedEntry {
       [loading]="loading()"
       [error]="error()"
       [empty]="empty()"
+      [footer]="footer()"
+      [footerTitle]="footerTitle()"
     >
       <ul class="flex flex-col gap-3">
         @for (entry of entries(); track entry.key) {
@@ -55,6 +58,9 @@ interface RankedEntry {
 export class RankedListComponent {
   readonly config = input.required<ChartWidgetConfig>();
   readonly data = input<WidgetData | undefined>(undefined);
+
+  protected readonly footer = computed(() => truncationFooter(this.data()));
+  protected readonly footerTitle = computed(() => truncationDetail(this.data()));
   readonly labels = input<Map<string, string>>(new Map());
   readonly loading = input(false);
   readonly error = input<string | null>(null);

@@ -43,6 +43,12 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
           <ng-content />
         }
       </div>
+
+      @if (!loading() && !error() && footer(); as text) {
+        <p class="mt-3 shrink-0 text-xs text-ink-subtle" [title]="footerTitle() || text">
+          {{ text }}
+        </p>
+      }
     </section>
   `,
 })
@@ -54,6 +60,11 @@ export class WidgetHostComponent {
   readonly error = input<string | null>(null);
   readonly empty = input(false);
   readonly emptyLabel = input('No data for the current filters');
+
+  /** Discreet line under the content, used to own up to a truncated list. */
+  readonly footer = input<string | null>(null);
+  /** Fuller explanation, shown on hover. */
+  readonly footerTitle = input<string | null>(null);
 
   /** Heights of the loading placeholder bars, as a share of the available box. */
   protected readonly skeleton = [18, 34, 26, 44, 30];

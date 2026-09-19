@@ -73,7 +73,65 @@ export function underPath(path: string): EsClause {
   };
 }
 
-/** Lower bounded date range, using OpenSearch date math such as `now-30d`. */
-export function sinceFilter(field: string, from: string): EsClause {
-  return { range: { [field]: { gte: from } } };
+/**
+ * Midnight opening a local calendar day.
+ *
+ * Parsed without a zone suffix, so the runtime reads it in the reader's own zone, and stepped with
+ * `setDate` rather than by 86 400 000 ms: a day is 23 or 25 hours long around a daylight saving
+ * change.
+ */
+function localDay(day: string, plusDays = 0): Date {
+  const date = new Date(`${day}T00:00:00`);
+  if (plusDays) {
+    date.setDate(date.getDate() + plusDays);
+  }
+  return date;
+}
+
+/** Start of a local calendar day, as the UTC instant OpenSearch stores. */
+export function startOfLocalDay(day: string, plusDays = 0): string {
+  return localDay(day, plusDays).toISOString();
+}
+
+/**
+ * Same instant, in epoch milliseconds.
+ *
+ * Needed by `extended_bounds`, which OpenSearch parses with the aggregation's own `format` when
+ * the bound is a string. Our histograms declare `yyyy-MM-dd` to get readable bucket keys, so an
+ * ISO instant is refused outright — "unparsed text found at index 10". A number is read as epoch
+ * milliseconds and escapes the format entirely.
+ */
+export function startOfLocalDayMillis(day: string, plusDays = 0): number {
+  return localDay(day, plusDays).getTime();
+}
+
+/**
+ * Inclusive day range, expressed as a half open interval of instants.
+ *
+ * Dates are indexed as UTC instants — `eventDate` in the audit index is written by a formatter
+ * pinned to UTC — while the reader picks calendar days in their own zone. Sending the start of the
+ * day *after* the last one, with `lt`, covers that final day entirely, including its local
+ * evening, without a `23:59:59.999` approximation and without relying on how OpenSearch rounds a
+ * date given at day precision.
+ *
+ * @returns null when neither bound is set, so that "All time" adds no clause at all.
+ */
+export function dayRangeFilter(
+  field: string,
+  from: string | null,
+  to: string | null,
+): EsClause | null {
+  if (!from && !to) {
+    return null;
+  }
+
+  const bounds: Record<string, string> = {};
+  if (from) {
+    bounds['gte'] = startOfLocalDay(from);
+  }
+  if (to) {
+    bounds['lt'] = startOfLocalDay(to, 1);
+  }
+
+  return { range: { [field]: bounds } };
 }

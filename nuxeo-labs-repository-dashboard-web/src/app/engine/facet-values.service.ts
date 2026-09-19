@@ -7,6 +7,7 @@ import {
 } from '../config/dashboard-config.model';
 import { NuxeoHttpService } from '../core/nuxeo-http.service';
 import { EsAggregation, EsBucket } from '../core/nuxeo.types';
+import { compileAgg } from './agg-compiler';
 import { boolFilter } from './es-query';
 import { globalFilters } from './query-planner';
 
@@ -86,10 +87,12 @@ export class FacetValuesService {
     group: TermsGroupConfig,
     filters: FilterState,
   ): Promise<GroupValues> {
+    // Compiled rather than hand written, so these lists inherit every guarantee the compiler
+    // makes: no `.keyword` suffix, and a shard size wide enough for an exact merge.
     const aggs = Object.fromEntries(
       group.members.map((member) => [
         member.id,
-        { terms: { field: member.field, size: member.size ?? DEFAULT_SIZE } },
+        compileAgg({ terms: { field: member.field, size: member.size ?? DEFAULT_SIZE } }),
       ]),
     );
 

@@ -1,5 +1,9 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { PageHeaderComponent } from '../layout/page-header.component';
+import {
+  PreflightFeature,
+  RequirementNoticeComponent,
+} from '../layout/requirement-notice.component';
 
 /**
  * Placeholder for the dashboards delivered in later phases.
@@ -9,7 +13,7 @@ import { PageHeaderComponent } from '../layout/page-header.component';
  */
 @Component({
   selector: 'nxd-upcoming-page',
-  imports: [PageHeaderComponent],
+  imports: [PageHeaderComponent, RequirementNoticeComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <nxd-page-header [title]="heading()" />
@@ -18,6 +22,13 @@ import { PageHeaderComponent } from '../layout/page-header.component';
         <p class="text-sm font-medium text-ink">Planned for {{ phase() }}.</p>
         <p class="mt-2 max-w-2xl text-sm text-ink-muted">{{ description() }}</p>
       </div>
+
+      <nxd-requirement-notice
+        class="mt-4 block"
+        [requires]="requires()"
+        [label]="requirementLabel()"
+        [docUrl]="requirementDocUrl()"
+      />
     </section>
   `,
 })
@@ -25,4 +36,8 @@ export class UpcomingPageComponent {
   readonly heading = input('');
   readonly phase = input('');
   readonly description = input('');
+
+  readonly requires = input<PreflightFeature | ''>('');
+  readonly requirementLabel = input('');
+  readonly requirementDocUrl = input('');
 }

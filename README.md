@@ -1,5 +1,8 @@
 # Nuxeo Labs Repository Dashboard
 
+> **This is WORK IN PROGRESS, using GitHub as backup for now.**
+> It will be forked into `nuxeo-sandbox` once it is ready, and this warning will go away then.
+
 An administrator facing analytics dashboard for a Nuxeo repository, served by the platform at
 `/nuxeo/dashboard/` and reachable from the Web UI Administration menu.
 
@@ -7,17 +10,18 @@ The dashboard is a standalone Angular application packaged as a Nuxeo bundle. Ch
 are described by configuration rather than hard coded, and every widget of a page is batched into
 a single OpenSearch aggregation request.
 
-> **Status: phase 1.** The Content dashboard is complete and configuration driven. The Process and
-> Governance dashboards, the configuration editor and cross filtering land next, see
+> **Status: phase 1.** The Content and Users dashboards are complete and configuration driven. The
+> Process and Governance dashboards, the configuration editor and cross filtering land next, see
 > [Roadmap](#roadmap).
 
 ## Screens
 
 | Screen | Data source |
 | --- | --- |
-| **Content** | Repository index: repository composition (live, trashed, versions, proxies), `ecm:primaryType`, `ecm:currentLifeCycleState`, `dc:created`, `dc:creator`, `dc:expired`, `file:content.length`, `ecm:isRecord`, `ecm:hasLegalHold` |
+| **Content** | Repository index: repository composition (live, trashed, versions, proxies), `ecm:primaryType`, `ecm:currentLifeCycleState`, `dc:created`, `dc:modified`, `dc:creator`, `dc:expired` |
+| **Users** | Audit index: `loginSuccess`, `loginFailed`, `documentCreated` and `documentModified`, grouped by `principalName` over `eventDate` |
 | **Process** | `audit_wf` passthrough view: `extended.timeSinceWfStarted`, `extended.timeSinceTaskStarted`, `extended.taskActor`, `extended.modelName` |
-| **Governance** | `ecm:isRecord`, `ecm:retainUntil`, `ecm:hasLegalHold`, and `record:ruleIds` resolved against the `RetentionRule` documents |
+| **Governance** | `ecm:isRecord`, `ecm:hasLegalHold`, `ecm:retainUntil`, and `record:ruleIds` resolved against the `RetentionRule` documents |
 | **Diagnostics** | The preflight report, always available |
 
 ## Configuring a dashboard
@@ -272,8 +276,8 @@ start there rather than with this table.
 | `nuxeo.passthrough.elasticsearch.enabled=true` | The `nuxeo-search-client-opensearch1` package, through its `opensearch1-search-client` template | Nothing works |
 | `nuxeo.search.client.default.name=opensearch` | Same package | Nothing works |
 | Administrator session | — | Nothing works |
-| `nuxeo.passthrough.elasticsearch.audit.enabled=true` | The `nuxeo-audit-opensearch1` package, through its `opensearch1-audit` template | Process dashboard hidden |
-| `RetentionRule` document type | The `nuxeo-retention` package | Governance dashboard hidden |
+| `nuxeo.passthrough.elasticsearch.audit.enabled=true` | The `nuxeo-audit-opensearch1` package, through its `opensearch1-audit` template | Users and Process dashboards reduced to a notice naming the prerequisite |
+| `RetentionRule` document type | The `nuxeo-retention` package | Governance dashboard reduced to a notice naming the package |
 | Web UI | The `nuxeo-web-ui` package, declared as a dependency | No Administration menu entry; the dashboard stays reachable by URL |
 
 Why administrators only: for a non administrator the passthrough rewrites the query to inject an
@@ -338,7 +342,7 @@ no unit test can reach.
 1. **Bundle loaded** — `grep nuxeo-labs-repository-dashboard server.log`, no preprocessing error
 2. **Application responds** — `/nuxeo/dashboard/` renders the shell and its sidebar
 3. **Diagnostics** — the six checks, ideally all green
-4. **Real figures** — the six Content tiles match what the repository holds
+4. **Real figures** — the eight Content tiles match what the repository holds
 5. **Web UI entry** — *Administration → Repository Dashboard* shows up. A hard reload is needed:
    Web UI registers a service worker that caches its bundles
 6. **Deep link** — open `/nuxeo/dashboard/diagnostics` then press F5. No 404. This is what
@@ -394,7 +398,7 @@ aggregation into a single request: each widget owns a named aggregation, and one
 predicate is wrapped in a `filter` aggregation. Table widgets need `hits` and keep a request of
 their own.
 
-The Content dashboard, eleven widgets, therefore costs **two requests**:
+The Content dashboard, thirteen widgets, therefore costs **one request**:
 
 ```jsonc
 POST /nuxeo/site/es/nuxeo/_search        // Content-Type: application/json is mandatory
@@ -407,11 +411,10 @@ POST /nuxeo/site/es/nuxeo/_search        // Content-Type: application/json is ma
     { "term": { "ecm:isTrashed": false } }
   ] } },
   "aggs": {
-    "records":       { "filter": { "term": { "ecm:isRecord": true } } },
-    "expired":       { "filter": { "range": { "dc:expired": { "lt": "now" } } } },
-    "byType":        { "terms": { "field": "ecm:primaryType", "size": 10 } },
-    "storageByType": { "terms":  { "field": "ecm:primaryType", "order": { "metric": "desc" } },
-                       "aggs": { "metric": { "sum": { "field": "file:content.length" } } } }
+    "expiringWeek":    { "filter": { "range": { "dc:expired": { "gte": "now", "lte": "now+7d" } } } },
+    "expired":         { "filter": { "range": { "dc:expired": { "lt": "now" } } } },
+    "byType":          { "terms": { "field": "ecm:primaryType", "size": 10 } },
+    "topContributors": { "terms": { "field": "dc:creator", "size": 10 } }
   }
 }
 ```
@@ -438,8 +441,26 @@ rather than errors.
 - **`ignore_above`** is 256 on dynamically mapped keywords (32765 for `dc:description`). Longer
   values are stored but not indexed, so they vanish from aggregations.
 - **Complex properties use a dot**: `file:content.length`, not `file:content/length`.
+- **`thumb:thumbnail.*` and `picture:views.*` are mapped `index: false`.** They are present in
+  `_source`, so a table can display them, but no filter clause can reach them.
+- **A blob of unknown length is indexed as `-1`**, never as null: the writer always emits `length`.
+  Guard a `sum` with a `range` on `{ "gt": 0 }`.
+- **A proxy carries its target's blob.** Only `collectionMember` is proxy local, so summing
+  `file:content.length` without `ecm:isProxy: false` counts every published document twice.
+- **`extended_bounds` on a `date_histogram` must be epoch milliseconds**, never a date string: a
+  string bound is parsed with the aggregation's own `format`, so a chart formatting its keys as
+  `yyyy-MM-dd` rejects an ISO instant with a 400.
+- **A `terms` aggregation is a top N.** Each shard ranks locally, so the compiler widens
+  `shard_size` well past the OpenSearch default to make the merged ranking exact, and asks for a
+  `cardinality` alongside so a truncated chart can say how many values it left out.
 - **`ecm:retainUntil` is only written when non null**; combine it with an `exists` clause.
 - **`extended.params` in the audit index is `"enabled": false`** and cannot be aggregated.
+- **`comment` in the audit index is `text` with no keyword sub-field**: readable from `_source`,
+  never aggregatable. Every other audit field is a `keyword` set by a dynamic template.
+- **Read `eventDate`, never `logDate`.** The journal is written after commit, so `logDate` bunches
+  entries onto transaction boundaries and invents spikes.
+- **`documentCreated` is also fired by a check-in and by a publication**, so counting it per user
+  includes versions and proxies.
 - **`audit_wf` rewrites the payload even for administrators** (it injects
   `term: { category: "Routing" }`), so JSON key order is not preserved. Harmless, but do not rely
   on it.
@@ -473,6 +494,7 @@ rather than errors.
 | 1b | Filter groups: document types and facets, unioned, with persistence | done |
 | 1c | Scopes and the repository composition row | done |
 | 1d | Modification trend, range reminder, range driven layout | done |
+| 1e | Period with explicit inclusive bounds, and the Users dashboard on the audit index | done |
 | 2 | Cross filtering on bucket click, active filter chips, path scope, CSV and PNG export | next |
 | 3 | Configuration editor, with a field picker fed by `/api/v1/config/schemas` | |
 | 4 | Process dashboard | |

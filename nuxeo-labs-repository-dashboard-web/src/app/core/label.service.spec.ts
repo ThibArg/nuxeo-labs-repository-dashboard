@@ -81,6 +81,34 @@ describe('LabelService', () => {
     expect(stub.calls).toHaveLength(1);
   });
 
+  it('looks a user up once even when several widgets ask at the same time', async () => {
+    stub = installFetchStub([
+      {
+        match: '/api/v1/user/jdoe',
+        json: { id: 'jdoe', properties: { firstName: 'Jane', lastName: 'Doe' } },
+      },
+    ]);
+
+    const service = TestBed.inject(LabelService);
+    /*
+     * A dashboard resolves the buckets of every widget in parallel, so three charts naming the
+     * same author start before any of them has an answer. Caching the answer would not help here;
+     * only caching the request in flight does.
+     */
+    const [first, second, third] = await Promise.all([
+      service.resolve('user', ['jdoe']),
+      service.resolve('user', ['jdoe']),
+      service.resolve('user', ['jdoe']),
+    ]);
+
+    expect(stub.calls).toHaveLength(1);
+    expect([first, second, third].map((labels) => labels.get('jdoe'))).toEqual([
+      'Jane Doe',
+      'Jane Doe',
+      'Jane Doe',
+    ]);
+  });
+
   it('shows the raw principal when the user cannot be read', async () => {
     stub = installFetchStub([{ match: '/api/v1/user/system', status: 404, json: {} }]);
 

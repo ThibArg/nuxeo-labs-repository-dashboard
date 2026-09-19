@@ -9,6 +9,7 @@
  */
 import { EsIndex, EsSearchBody } from '../core/nuxeo.types';
 import {
+  AggConfig,
   DashboardConfig,
   FilterState,
   WidgetConfig,
@@ -19,9 +20,16 @@ import {
   scopeClauses,
   termsGroups,
 } from '../config/dashboard-config.model';
-import { INNER_AGG, METRIC_AGG, compileAgg, compileMetric } from './agg-compiler';
+import {
+  DISTINCT_AGG,
+  HistogramBounds,
+  INNER_AGG,
+  METRIC_AGG,
+  compileAgg,
+  compileMetric,
+} from './agg-compiler';
 import { compileTermsGroup } from './facet-clause';
-import { EsClause, boolFilter, sinceFilter } from './es-query';
+import { EsClause, boolFilter, dayRangeFilter, startOfLocalDayMillis } from './es-query';
 
 /** Name of the nested aggregation carrying a KPI's secondary figure. */
 export const SECONDARY_AGG = 'secondary';
@@ -79,8 +87,11 @@ export function globalFilters(
   const clauses: EsClause[] = [...(config.baseFilter ?? [])];
 
   const range = dateRangeFilter(config);
-  if (range && filters.range.from) {
-    clauses.push(sinceFilter(range.field, filters.range.from));
+  if (range) {
+    const clause = dayRangeFilter(range.field, filters.range.from, filters.range.to);
+    if (clause) {
+      clauses.push(clause);
+    }
   }
 
   for (const group of termsGroups(config)) {
@@ -96,6 +107,29 @@ export function globalFilters(
   return clauses;
 }
 
+/**
+ * Days a daily chart must span, whatever the data holds.
+ *
+ * Only the field the date filter constrains is padded. Padding a histogram on another field would
+ * be guesswork: documents created within the period may well have been modified outside it, so the
+ * selected days say nothing about where those buckets belong.
+ */
+export function histogramBounds(
+  config: DashboardConfig,
+  filters: FilterState,
+): HistogramBounds | null {
+  const range = dateRangeFilter(config);
+  const { from, to } = filters.range;
+  if (!range || (!from && !to)) {
+    return null;
+  }
+  return {
+    field: range.field,
+    ...(from ? { min: startOfLocalDayMillis(from) } : {}),
+    ...(to ? { max: startOfLocalDayMillis(to) } : {}),
+  };
+}
+
 /** Every widget id referenced by the layout, in display order, ignoring unknown ids. */
 export function layoutWidgetIds(config: DashboardConfig): string[] {
   return config.layout.flatMap((row) => row.cells).filter((id) => id in config.widgets);
@@ -103,6 +137,7 @@ export function layoutWidgetIds(config: DashboardConfig): string[] {
 
 export function planDashboard(config: DashboardConfig, filters: FilterState): DashboardPlan {
   const shared = globalFilters(config, filters);
+  const bounds = histogramBounds(config, filters);
   const requests: PlannedRequest[] = [];
   const widgets = new Map<string, WidgetPlan>();
   const errors = new Map<string, string>();
@@ -132,7 +167,7 @@ export function planDashboard(config: DashboardConfig, filters: FilterState): Da
     }
 
     try {
-      const planned = planAggregationWidget(config, widgetId, widget);
+      const planned = planAggregationWidget(config, widgetId, widget, bounds);
       if (planned.agg) {
         aggs[widgetId] = planned.agg;
       }
@@ -181,6 +216,7 @@ function planAggregationWidget(
   config: DashboardConfig,
   widgetId: string,
   widget: WidgetConfig,
+  bounds: HistogramBounds | null,
 ): AggregationWidgetPlan {
   // The scope narrows the shared query before the widget's own predicate does.
   const ownFilter = [...scopeClauses(config, widget), ...(widget.filter ?? [])];
@@ -229,14 +265,24 @@ function planAggregationWidget(
   }
 
   if (isChartWidget(widget)) {
-    const inner = compileAgg(widget.agg, widget.metric);
+    const inner = compileAgg(widget.agg, widget.metric, bounds);
     const hasMetric = compileMetric(widget.metric) !== null;
+    const distinct = distinctAgg(widget.agg);
 
-    if (!ownFilter.length) {
+    /*
+     * A `terms` list is a top N, so the reader deserves to know how many values it leaves out.
+     * The count of distinct values hangs off the wrapper, beside the bucket list; a widget with
+     * no predicate of its own gets a `match_all` wrapper for it, as a KPI with a secondary
+     * figure already does.
+     */
+    if (!ownFilter.length && !distinct) {
       return { agg: inner, read: 'aggregation', wrapped: false, hasMetric, hasSecondary: false };
     }
     return {
-      agg: { filter: boolFilter(ownFilter), aggs: { [INNER_AGG]: inner } },
+      agg: {
+        filter: boolFilter(ownFilter),
+        aggs: { [INNER_AGG]: inner, ...(distinct ? { [DISTINCT_AGG]: distinct } : {}) },
+      },
       read: 'aggregation',
       wrapped: true,
       hasMetric,
@@ -245,6 +291,14 @@ function planAggregationWidget(
   }
 
   throw new Error(`Widget "${widgetId}" has an unsupported type`);
+}
+
+/** Counts the values a `terms` list had to choose from, so the omitted ones can be announced. */
+function distinctAgg(agg: AggConfig): EsClause | null {
+  if (!('terms' in agg) || agg.terms.size === undefined) {
+    return null;
+  }
+  return { cardinality: { field: agg.terms.field } };
 }
 
 function tableRequestId(config: DashboardConfig, widgetId: string): string {

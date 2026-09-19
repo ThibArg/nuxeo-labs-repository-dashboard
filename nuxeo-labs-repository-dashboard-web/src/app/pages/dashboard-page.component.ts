@@ -27,6 +27,10 @@ import { DateRangePickerComponent } from '../layout/date-range-picker.component'
 import { FacetGroupButtonComponent } from '../layout/facet-group-button.component';
 import { FacetGroupDialogComponent } from '../layout/facet-group-dialog.component';
 import { PageHeaderComponent } from '../layout/page-header.component';
+import {
+  PreflightFeature,
+  RequirementNoticeComponent,
+} from '../layout/requirement-notice.component';
 
 /** Member id to (raw value -> label), for one group. */
 type GroupLabels = Map<string, Map<string, string>>;
@@ -45,6 +49,7 @@ type GroupLabels = Map<string, Map<string, string>>;
     FacetGroupButtonComponent,
     FacetGroupDialogComponent,
     PageHeaderComponent,
+    RequirementNoticeComponent,
   ],
   providers: [DashboardRunner],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -57,6 +62,13 @@ type GroupLabels = Map<string, Map<string, string>>;
     />
 
     <section class="px-8 pb-8">
+      <nxd-requirement-notice
+        class="mb-5 block"
+        [requires]="requires()"
+        [label]="requirementLabel()"
+        [docUrl]="requirementDocUrl()"
+      />
+
       @if (configError(); as message) {
         <div class="nxd-card border-danger-soft bg-danger-soft p-4 text-sm text-danger">
           <p class="font-semibold">This dashboard could not be loaded.</p>
@@ -130,6 +142,11 @@ export class DashboardPageComponent {
 
   /** Bound from the route data through `withComponentInputBinding()`. */
   readonly dashboardId = input('content');
+
+  /** Server prerequisite this dashboard needs, surfaced as a notice when the preflight missed it. */
+  readonly requires = input<PreflightFeature | ''>('');
+  readonly requirementLabel = input('');
+  readonly requirementDocUrl = input('');
 
   readonly config = signal<DashboardConfig | null>(null);
   readonly configError = signal<string | null>(null);

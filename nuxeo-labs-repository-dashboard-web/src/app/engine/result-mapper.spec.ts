@@ -1,5 +1,5 @@
 import { EsResponse } from '../core/nuxeo.types';
-import { INNER_AGG, METRIC_AGG } from './agg-compiler';
+import { DISTINCT_AGG, INNER_AGG, METRIC_AGG } from './agg-compiler';
 import { WidgetPlan } from './query-planner';
 import { isEmptyData, readAggregationWidget, readHitsWidget } from './result-mapper';
 
@@ -72,6 +72,44 @@ describe('result-mapper', () => {
         { key: 'File', value: 10, docCount: 10 },
         { key: 'Note', value: 3, docCount: 3 },
       ],
+    });
+  });
+
+  describe('a top N owns up to what it left out', () => {
+    function truncated(distinct: number, shown: string[], otherDocs: number) {
+      return readAggregationWidget(
+        response({
+          w: {
+            [DISTINCT_AGG]: { value: distinct },
+            [INNER_AGG]: {
+              sum_other_doc_count: otherDocs,
+              buckets: shown.map((key) => ({ key, doc_count: 5 })),
+            },
+          },
+        }),
+        plan({ wrapped: true }),
+      );
+    }
+
+    it('counts the values the list could not hold', () => {
+      expect(truncated(47, ['kate', 'josh'], 1240)).toMatchObject({
+        others: 45,
+        otherDocs: 1240,
+      });
+    });
+
+    it('reports nothing left out when the list is complete', () => {
+      expect(truncated(2, ['kate', 'josh'], 0)).toMatchObject({ others: 0, otherDocs: 0 });
+    });
+
+    // A histogram has no top N, so no count of distinct values is asked for and none is expected.
+    it('stays silent when the widget never counted distinct values', () => {
+      const data = readAggregationWidget(
+        response({ w: { buckets: [{ key: 'a', doc_count: 1 }] } }),
+        plan(),
+      );
+
+      expect(data).not.toHaveProperty('others');
     });
   });
 

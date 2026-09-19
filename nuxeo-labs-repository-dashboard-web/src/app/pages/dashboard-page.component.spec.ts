@@ -19,6 +19,14 @@ import { settle } from '../../testing/settle';
 
 const CONTENT = contentConfig as DashboardConfig;
 
+/** Midnight, `offset` calendar days from today, as the instant a request carries. */
+function startOfDay(offset: number): string {
+  const day = new Date();
+  day.setHours(0, 0, 0, 0);
+  day.setDate(day.getDate() + offset);
+  return day.toISOString();
+}
+
 /** Aggregations response covering every widget declared in content.json. */
 function aggregationsResponse(): unknown {
   return {
@@ -30,9 +38,7 @@ function aggregationsResponse(): unknown {
       trashed: { doc_count: 120 },
       versions: { doc_count: 700, secondary: { doc_count: 0 } },
       proxies: { doc_count: 300, secondary: { doc_count: 10 } },
-      records: { doc_count: 42 },
-      legalHold: { doc_count: 3 },
-      expiringWeek: { doc_count: 2 },
+      expiringWeek: { doc_count: 42 },
       expiring60: { doc_count: 19 },
       expired: { doc_count: 7 },
       byType: {
@@ -55,9 +61,6 @@ function aggregationsResponse(): unknown {
         ],
       },
       topContributors: { buckets: [{ key: 'jdoe', doc_count: 900 }] },
-      storageByType: {
-        buckets: [{ key: 'Picture', doc_count: 1500, metric: { value: 5_000_000_000 } }],
-      },
     },
   };
 }
@@ -179,6 +182,72 @@ describe('content.json', () => {
     });
   });
 
+  describe('expiry row', () => {
+    /*
+     * The three tiles read the same field, so a reader adds them up. They must therefore partition
+     * the timeline: the sixty day figure is what remains once the weekly one is set aside, not a
+     * total that restates it.
+     */
+    const TILES = ['expired', 'expiringWeek', 'expiring60'];
+    const DAY = 86_400_000;
+    const NOW = Date.UTC(2026, 8, 18, 10, 0, 0);
+
+    /** Resolves the date math the tiles use, which is limited to `now` and `now±Nd`. */
+    function resolve(math: string): number {
+      const parsed = /^now(?:([+-])(\d+)d)?$/.exec(math);
+      if (!parsed) {
+        throw new Error(`Unsupported date math: ${math}`);
+      }
+      const [, sign, days] = parsed;
+      return sign ? NOW + (sign === '-' ? -1 : 1) * Number(days) * DAY : NOW;
+    }
+
+    function counts(widgetId: string, expiry: number): boolean {
+      const clause = CONTENT.widgets[widgetId].filter![0] as {
+        range: Record<string, Record<string, string>>;
+      };
+
+      return Object.entries(clause.range['dc:expired']).every(([operator, math]) => {
+        const bound = resolve(math);
+        switch (operator) {
+          case 'gte':
+            return expiry >= bound;
+          case 'gt':
+            return expiry > bound;
+          case 'lte':
+            return expiry <= bound;
+          case 'lt':
+            return expiry < bound;
+          default:
+            throw new Error(`Unsupported bound: ${operator}`);
+        }
+      });
+    }
+
+    const CASES: { name: string; days: number; tiles: string[] }[] = [
+      { name: 'expired yesterday', days: -1, tiles: ['expired'] },
+      { name: 'expiring in three days', days: 3, tiles: ['expiringWeek'] },
+      // The week ends on an inclusive bound, so this is where a double count would show.
+      { name: 'expiring exactly seven days from now', days: 7, tiles: ['expiringWeek'] },
+      { name: 'expiring in thirty days', days: 30, tiles: ['expiring60'] },
+      { name: 'expiring in ninety days', days: 90, tiles: [] },
+    ];
+
+    it('counts a document in at most one tile', () => {
+      for (const { name, days, tiles } of CASES) {
+        expect(
+          TILES.filter((id) => counts(id, NOW + days * DAY)),
+          name,
+        ).toEqual(tiles);
+      }
+    });
+
+    it('tells the reader that the sixty day tile starts where the weekly one stops', () => {
+      expect(CONTENT.widgets['expiringWeek'].hint).toBe('Within the next 7 days');
+      expect(CONTENT.widgets['expiring60'].hint).toBe('Beyond the next 7 days');
+    });
+  });
+
   it('fills complete grid lines, for every date range', () => {
     for (const range of ['all', '7d', '30d', '90d', '12m']) {
       for (const row of CONTENT.layout) {
@@ -238,7 +307,7 @@ describe('DashboardPageComponent', () => {
     expect(text).toContain((5941).toLocaleString()); // hits.total feeds the Total tile
     expect(text).toContain('42'); // filter aggregation
     expect(text).toContain('Jane Doe'); // user label resolution
-    expect(text).toContain('5.0 GB'); // bytes formatting of the nested sum metric
+    expect(text).toContain((900).toLocaleString()); // bucket aggregation
   });
 
   it('renders a composition row whose parts add up to the total', async () => {
@@ -365,7 +434,19 @@ describe('DashboardPageComponent', () => {
 
     const bodies = stub.bodies.filter(isAggregationsRequest);
     expect(bodies).toHaveLength(2);
-    expect(JSON.stringify(bodies[1])).toContain('now-30d');
+
+    // "All time" carries no bound at all.
+    expect(JSON.stringify((bodies[0] as any).query)).not.toContain('dc:created');
+
+    /*
+     * The shortcut resolves to thirty calendar days ending today: from the start of the day
+     * twenty-nine days ago, up to the start of tomorrow, which is what makes today inclusive.
+     */
+    const bounds = (bodies[1] as any).query.bool.filter.find((clause: any) => clause.range).range[
+      'dc:created'
+    ];
+    expect(bounds.gte).toBe(startOfDay(-29));
+    expect(bounds.lt).toBe(startOfDay(1));
   });
 
   describe('document kind filter', () => {

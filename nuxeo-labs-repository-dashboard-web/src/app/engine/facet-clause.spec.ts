@@ -13,7 +13,10 @@ const GROUP: TermsGroupConfig = {
 };
 
 function state(selection: GroupSelection): FilterState {
-  return { range: { id: 'all', label: 'All time', from: null }, groups: { kind: selection } };
+  return {
+    range: { id: 'all', label: 'All time', from: null, to: null },
+    groups: { kind: selection },
+  };
 }
 
 const ALL: GroupSelection = { types: { mode: 'all' }, facets: { mode: 'all' } };
@@ -93,7 +96,10 @@ describe('compileTermsGroup', () => {
 
   it('treats a missing group in the state as unconstrained', () => {
     expect(
-      compileTermsGroup(GROUP, { range: { id: 'all', label: '', from: null }, groups: {} }),
+      compileTermsGroup(GROUP, {
+        range: { id: 'all', label: '', from: null, to: null },
+        groups: {},
+      }),
     ).toBeNull();
   });
 });
