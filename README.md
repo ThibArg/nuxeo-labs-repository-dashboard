@@ -435,6 +435,15 @@ which the bundle renders as "Choose Participants". `workflowModel` composes one 
 name, `wf.<name with a lower case initial>.<name>`, which is how Web UI's own workflow layouts
 address it.
 
+That key is written into the model's `dc:title` by Studio at generation time; nothing in the
+platform composes it, and the bundle holding it belongs to the Studio project rather than to Web
+UI. A model whose project is not deployed on the server therefore resolves to nothing — as do
+Nuxeo's own test fixtures, which carry a literal title. `workflowModel` then falls back to the
+words of the identifier rather than to the identifier itself, so `ClaimReview` reads "Claim
+Review" instead of sitting next to a properly translated "Parallel Document Review". An initialism
+stays whole, `HRRequest` reading "HR Request", and a name already containing a space or an
+underscore is left exactly as it was written.
+
 `extended.action` deliberately gets **no** strategy. The audit records the button's `name`
 (`approve`, `reject`, `validate`), while the i18n key sits in the button's `label` and never leaves
 the model definition. Declaring a strategy there would promise a translation that can never happen.

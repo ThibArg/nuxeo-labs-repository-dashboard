@@ -65,11 +65,46 @@ describe('LabelService', () => {
 
     const labels = await TestBed.inject(LabelService).resolve('workflowModel', [
       'ParallelDocumentReview',
-      'MyStudioWorkflow',
     ]);
 
     expect(labels.get('ParallelDocumentReview')).toBe('Parallel Document Review');
-    expect(labels.get('MyStudioWorkflow')).toBe('MyStudioWorkflow');
+  });
+
+  /*
+   * Studio writes the key into the model's `dc:title`, and the bundle holding it belongs to the
+   * Studio project rather than to Web UI. A model whose project is not deployed therefore resolves
+   * to nothing, and its identifier would sit next to properly translated names.
+   */
+  it('reads an untranslated model as words rather than as an identifier', async () => {
+    stub = installFetchStub([{ match: '/ui/i18n/messages.json', json: MESSAGES }]);
+
+    const labels = await TestBed.inject(LabelService).resolve('workflowModel', [
+      'ClaimReview',
+      'RequestDownload',
+      'AdHoc',
+      'HRRequest',
+      'Invoice',
+    ]);
+
+    expect(labels.get('ClaimReview')).toBe('Claim Review');
+    expect(labels.get('RequestDownload')).toBe('Request Download');
+    expect(labels.get('AdHoc')).toBe('Ad Hoc');
+    // An initialism stays whole: H R Request would be worse than the identifier itself.
+    expect(labels.get('HRRequest')).toBe('HR Request');
+    expect(labels.get('Invoice')).toBe('Invoice');
+  });
+
+  it('prefers a real translation over splitting the identifier', async () => {
+    stub = installFetchStub([
+      {
+        match: '/ui/i18n/messages.json',
+        json: { 'wf.claimReview.ClaimReview': 'Insurance Claim' },
+      },
+    ]);
+
+    const labels = await TestBed.inject(LabelService).resolve('workflowModel', ['ClaimReview']);
+
+    expect(labels.get('ClaimReview')).toBe('Insurance Claim');
   });
 
   it('loads the translation bundle once for several resolutions', async () => {

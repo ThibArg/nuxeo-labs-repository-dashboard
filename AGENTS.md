@@ -277,8 +277,18 @@ Participants" — hence the `message` label strategy. But `action` is `status`, 
 (`GraphRunner.java:136`): `approve`, `reject`, `validate`, `NA`, `start_review`, `submit`. The i18n
 key lives in the button's `label` (`ParallelDocumentReview/Task328d/document.xml:27-30`) and never
 leaves the model definition. `taskOutcomes` therefore declares no strategy at all, and a test says
-so, because a strategy there would promise a translation that can never happen. Model names are not
-keys either but compose into one, `wf.<lcfirst(name)>.<name>` — the `workflowModel` strategy.
+so, because a strategy there would promise a translation that can never happen.
+
+**The `workflowModel` key is not composed by the platform, it is written by Studio.** Nothing in
+`nuxeo-platform-document-routing` builds `wf.<lcfirst(name)>.<name>`; Studio writes it into the
+model's `dc:title` at generation time, and the bundle carrying it belongs to the Studio project,
+not to Web UI. Nuxeo's own test fixtures — `MainWF`, `ChildWF`, `myRoute` — carry a literal title
+instead, and the dataviz demo's `TravelExpenseValidation` names a task `wf.travelExpenses.create`,
+whose prefix does not even match its model. The convention is therefore observed on the two shipped
+models and guaranteed nowhere. That is why `translateWorkflowModel` falls back to
+`splitIdentifier`: an untranslated `ClaimReview` reads "Claim Review" rather than sitting next to
+"Parallel Document Review" as a bare identifier. Web UI has the same problem and does not solve it
+— `nuxeo-tasks-list.js:141` calls `i18n(task.workflowModelName)` on a value that is not a key.
 
 **`docType` and `docUUID` name the route or the task, never the business document.** On the real
 index `docType` only ever holds `DocumentRoute` or `RoutingTask`, so a "documents entering a
@@ -311,7 +321,7 @@ administrator anyway, but a screenshot taken as somebody else will look broken f
 `audit_wf` held twenty genuine entries: ten `afterWorkflowStarted` and ten
 `afterWorkflowTaskCreated`, all signed `Administrator`, all within 514 milliseconds of one another
 on 2026-09-18. Nothing had ever completed or been cancelled, so every duration widget rendered
-empty. 1560 entries covering 230 instances over 88 days were generated and bulk loaded straight
+empty. 2173 entries covering 450 instances over 88 days were generated and bulk loaded straight
 into OpenSearch — the passthrough is read only and rejects any index it does not declare, so it
 cannot serve for this; OpenSearch is not published on a host port either, and is reached through
 `docker exec` on the `opensearch` container. The state before that load is kept in
@@ -320,6 +330,18 @@ is how they can be removed again. The generated actors are `Josh`, `Julie`, `ala
 `kate`: `test-ai` is the agent's own account, and `Administrator` was left out so that his ten
 genuine workflows do not put him at the top of a list he has no business leading. **A distribution
 or a daily curve read there reflects what was written, not how Nuxeo behaves.**
+
+**Three of the five models on that server exist in no repository.** Only
+`ParallelDocumentReview` and `SerialDocumentReview` are deployed; `RequestDownload`, `AdHoc` and
+`ClaimReview` live in the audit index and nowhere else. This works because the dashboard reads
+`audit_wf` and only `audit_wf` — it never checks that a model exists, and the filter builds its own
+list by aggregating `extended.modelName`. Two consequences worth knowing before a demo: filtering
+on "Claim Review" leads to no document anybody can open in Web UI, and the Started tile counts
+events rather than instances that exist. The three invented models name their tasks in plain words
+(`Assess Claim`, `Approve Download Request`) rather than with an i18n key, because a key nobody
+translates would render as `wf.claimReview.assessClaim.title` on screen. Their durations are
+deliberately spread apart — `RequestDownload` settles in hours, `ClaimReview` drags on for weeks —
+so that the duration histogram has more than one populated bucket.
 
 ## Style
 
@@ -341,7 +363,8 @@ Three things landed outside `workflows.json` and are worth knowing about, becaus
 workflow specific:
 
 - **`LabelStrategy` gained `message` and `workflowModel`.** Both read Web UI's bundle, like
-  `doctype` and `lifecycle`, and fall back to the raw key.
+  `doctype` and `lifecycle`. `message` falls back to the raw key; `workflowModel` falls back to the
+  words of the identifier, for the reason given in the phase 4 section.
 - **An average over an empty set now renders a dash, not a zero.** `metricUndefinedWhenEmpty`
   (`agg-compiler.ts`) marks `avg`, `min` and `max`; the plan carries the flag and `result-mapper`
   turns their `null` into `NaN`, which every formatter already renders as `—`. A count, a

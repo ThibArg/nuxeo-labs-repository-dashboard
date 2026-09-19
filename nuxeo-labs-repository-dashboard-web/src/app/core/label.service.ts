@@ -69,8 +69,19 @@ export class LabelService {
     return this.lookup(key, key);
   }
 
+  /**
+   * Translates a workflow model name, falling back to its words rather than to its identifier.
+   *
+   * Studio writes the `wf.<name with a lower case initial>.<name>` key into the model's `dc:title`
+   * at generation time; nothing in the platform composes it, and the bundle that holds it belongs
+   * to the Studio project rather than to Web UI. A model whose project is not deployed here — and
+   * Nuxeo's own test fixtures, which carry a literal title — therefore resolves to nothing, and
+   * `ClaimReview` would sit next to `Parallel Document Review`. Splitting the identifier is a
+   * poorer answer than a translation, and a much better one than showing the identifier.
+   */
   translateWorkflowModel(name: string): string {
-    return this.lookup(`wf.${name.charAt(0).toLowerCase()}${name.slice(1)}.${name}`, name);
+    const key = `wf.${name.charAt(0).toLowerCase()}${name.slice(1)}.${name}`;
+    return this.lookup(key, splitIdentifier(name));
   }
 
   private lookup(key: string, fallback: string): string {
@@ -163,4 +174,18 @@ export class LabelService {
       return id;
     }
   }
+}
+
+/**
+ * Splits a CamelCase identifier into words: `ClaimReview` reads `Claim Review`.
+ *
+ * The second replacement keeps an initialism whole, so `HRRequest` becomes `HR Request` rather
+ * than `H R Request`. An identifier already containing a space or an underscore is left alone,
+ * since whoever named it that way meant it.
+ */
+function splitIdentifier(name: string): string {
+  if (/[\s_-]/.test(name)) {
+    return name;
+  }
+  return name.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');
 }
