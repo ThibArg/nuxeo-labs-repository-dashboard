@@ -104,10 +104,12 @@ export class DataTableComponent {
     column: ColumnConfig,
   ): RenderedCell {
     const raw = readSource(source, column.field);
-    const translated = column.labels
-      ? this.labels().get(column.field)?.get(String(raw))
-      : undefined;
-    const text = translated ?? formatCell(raw, column.format);
+    const resolved = column.labels ? this.labels().get(column.field) : undefined;
+
+    const one = (value: unknown): string =>
+      resolved?.get(String(value)) ?? formatCell(value, column.format);
+    // A multivalued property is labelled element by element, then joined as `formatCell` would.
+    const text = Array.isArray(raw) && resolved ? raw.map(one).join(', ') : one(raw);
 
     return {
       text,

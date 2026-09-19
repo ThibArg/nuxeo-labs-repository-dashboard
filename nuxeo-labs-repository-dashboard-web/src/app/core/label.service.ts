@@ -7,6 +7,13 @@ interface NxUserEntity {
   properties?: { firstName?: string | null; lastName?: string | null; username?: string | null };
 }
 
+interface NxGroupEntity {
+  id?: string;
+  name?: string;
+  /** Sits at the root of the entity; `properties.grouplabel` is null when none was set. */
+  grouplabel?: string | null;
+}
+
 /** How many user lookups run at once, to avoid flooding the server on a wide `dc:creator` facet. */
 const USER_LOOKUP_CONCURRENCY = 6;
 
@@ -125,7 +132,7 @@ export class LabelService {
         return labels;
 
       case 'user':
-        return this.resolveUsers(unique);
+        return this.resolvePrincipals(unique);
 
       case 'raw':
       case undefined:
@@ -135,20 +142,21 @@ export class LabelService {
   }
 
   /**
-   * Looks users up through the REST API, caching both hits and misses.
+   * Looks principals up through the REST API, caching both hits and misses.
    *
    * The cache holds the in-flight promise rather than the answer, because several widgets resolve
    * their buckets in parallel: caching the answer would let three charts naming the same author
-   * each issue their own request, since none of them has returned yet when the others start.
+   * each issue their own request, since none of them has returned yet when the others start. It is
+   * keyed by the raw value, so `jdoe` and `user:jdoe` are two entries resolving to one label.
    */
-  async resolveUsers(ids: string[]): Promise<Map<string, string>> {
+  async resolvePrincipals(ids: string[]): Promise<Map<string, string>> {
     const unique = [...new Set(ids)];
     const missing = unique.filter((id) => !this.userCache.has(id));
 
     for (let i = 0; i < missing.length; i += USER_LOOKUP_CONCURRENCY) {
       const slice = missing.slice(i, i + USER_LOOKUP_CONCURRENCY);
       // Registered before the first await, so a concurrent caller joins instead of refetching.
-      slice.forEach((id) => this.userCache.set(id, this.fetchUserLabel(id)));
+      slice.forEach((id) => this.userCache.set(id, this.fetchPrincipalLabel(id)));
       await Promise.all(slice.map((id) => this.userCache.get(id)!));
     }
 
@@ -161,19 +169,39 @@ export class LabelService {
     return labels;
   }
 
-  private async fetchUserLabel(id: string): Promise<string> {
+  private async fetchPrincipalLabel(raw: string): Promise<string> {
+    const { group, name } = parsePrincipal(raw);
     try {
-      const user = await this.http.get<NxUserEntity>(`user/${encodeURIComponent(id)}`);
+      if (group) {
+        const entity = await this.http.get<NxGroupEntity>(`group/${encodeURIComponent(name)}`);
+        return entity.grouplabel?.trim() || name;
+      }
+      const user = await this.http.get<NxUserEntity>(`user/${encodeURIComponent(name)}`);
       const fullName = [user.properties?.firstName, user.properties?.lastName]
         .filter(Boolean)
         .join(' ')
         .trim();
-      return fullName || id;
+      return fullName || name;
     } catch {
-      // Deleted user, or a technical principal such as "system": show the raw id.
-      return id;
+      // Deleted principal, or a technical one such as "system": show the bare name, never a prefix.
+      return name;
     }
   }
+}
+
+/**
+ * Reads the `user:` or `group:` prefix Nuxeo puts on a task assignee.
+ *
+ * `nt:actors` holds prefixed identifiers — the parameter is literally named `prefixedActorIds` in
+ * `CreateTaskUnrestricted` — so looking `user:jdoe` up as a user id answers a 404 and the chart
+ * falls back to showing the prefix. A bare value is treated as a user, which is what `dc:creator`
+ * and the audit's `principalName` hold.
+ */
+function parsePrincipal(raw: string): { group: boolean; name: string } {
+  if (raw.startsWith('group:')) {
+    return { group: true, name: raw.slice('group:'.length) };
+  }
+  return { group: false, name: raw.startsWith('user:') ? raw.slice('user:'.length) : raw };
 }
 
 /**

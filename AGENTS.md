@@ -343,8 +343,66 @@ translates would render as `wf.claimReview.assessClaim.title` on screen. Their d
 deliberately spread apart — `RequestDownload` settles in hours, `ClaimReview` drags on for weeks —
 so that the duration histogram has more than one populated bucket.
 
-## Style
+## Phase 4b: the Tasks dashboard
 
+Built and shipped, at `/tasks`, on the **repository** index. It exists because the obvious place
+for it does not work, and that is the first thing to know.
+
+**Overdue cannot be read from `audit_wf`.** `extended.dueDate` is declared only on the five events
+the injected `category: "Routing"` filter excludes — verified on the live index, where the ten
+entries carrying it are all `workflowTaskAssigned` of category `eventDocumentCategory`. The due
+date lives on the task *document*: `nt:dueDate`, indexed as a `date`, alongside `nt:actors`,
+`nt:name`, `nt:directive`, `nt:initiator`, `nt:processId` and `nt:type`.
+
+**"Overdue, workflow still running" versus "overdue, workflow finished" is a distinction with no
+content.** An open task cannot outlive its workflow: `DocumentRoutingWorkflowDoneListener` cancels
+the remaining tasks *in the very transaction* that sets the route to `done` — its declaration says
+`async="true"` but the class implements `EventListener`, so `EventListenerDescriptor.java:142-148`
+forces `isPostCommit = false` and the attribute is ignored. `GraphRunner.cancel` does the same on
+cancellation, node by node. The second bucket would always be zero. And on a *finished* task,
+"overdue" means nothing without comparing two fields: the `task` schema has no completion date at
+all (fourteen properties, none of them an end date), `dc:modified` stands in for it, and
+`nt:dueDate < dc:modified` needs a script — which `AggConfig` refuses, rightly.
+
+**A nightly job deletes finished workflows and all their tasks.** `workflowInstancesCleanup` runs
+at 23:59, selects routes in `done` or `canceled`, deletes them, and `DocumentRouteOrphanedListener`
+then removes every task carrying their `nt:processId` **whatever its state** — the query has no
+lifecycle clause. `nuxeo.routing.disable.cleanup.workflow.instances=true` keeps them; the line is
+commented out in the shipped `nuxeo.conf`, so the sweep is on by default. This is why the dashboard
+counts open tasks only, and says so in its `subtitle` rather than in a comment nobody reads. The
+README carries the full explanation under "Tasks live only as long as their workflow".
+
+**`nt:actors` holds prefixed identifiers**, `user:jdoe` or `group:sales` — the parameter is
+literally named `prefixedActorIds` in `CreateTaskUnrestricted`. Without stripping, the `user`
+strategy asks for `/api/v1/user/user:jdoe`, earns a 404 and shows the prefix. That would have hit
+every real server, not only this demo. `parsePrincipal` now splits it and routes a group to
+`/api/v1/group/{name}`, reading `grouplabel` **at the root** of the entity — `properties.grouplabel`
+is null when none was set. A failed lookup falls back to the bare name, never to the prefix.
+
+**A task carries no workflow model name.** `nt:processName` looks like it should and does not: it
+receives the node's *notification template*, usually empty (`GraphRunner.java:394-397` against the
+signature in `TaskService.java:151-154`). Only `nt:processId` leads to the instance, so grouping
+overdue tasks by model would need a join. The platform itself reloads the route to get the name
+(`TaskWriter.java:110-130`).
+
+**Two traps when counting lateness.** A node with no `taskDueDateExpr` produces `nt:dueDate =
+now` (`GraphNodeImpl.java:708-712`), so its tasks are overdue a second after creation; the two
+shipped models set the expression, a Studio model need not. And `nt:dueDate` has no explicit entry
+in `opensearch1-doc-mapping.json`, so it relies on OpenSearch's dynamic date detection — verified
+`"type": "date"` on the live index before anything was built on it.
+
+**The dashboard carries no period filter**, deliberately: lateness is a present state, not a dated
+event, and a period would hide the oldest tasks, which are the ones worth seeing. It is the first
+shipped configuration without a `dateRange`, which is why `shipped-dashboards.spec.ts` now asserts
+the *count* of `extended_bounds` rather than their presence.
+
+**It is also the first real use of `DataTableComponent`**, kept and tested since phase 1. The
+overdue table exposed a genuine defect: a multivalued column resolved its labels through
+`String(value)`, so `nt:actors` became the key `user:jdoe,group:sales` and matched nothing. Both
+the runner and the cell renderer now work element by element, which benefits any multivalued
+column.
+
+## Style
 Comments explain *why*, never *what*. Prefer no comment to one that restates the code, and fix a
 comment whose justification is wrong — one claimed OpenSearch flattens blobs, which it does not.
 
@@ -358,6 +416,10 @@ Phase 4 is complete: build green, 283 tests, package produced. Content, Users, W
 Diagnostics are live; Governance is the last placeholder, and it names its missing prerequisite.
 The work is pushed to `github.com/ThibArg/nuxeo-labs-repository-dashboard`, a public backup until
 the plugin is ready to be forked into `nuxeo-sandbox`; the README carries a warning saying so.
+
+Phase 4b added the Tasks dashboard: 305 tests, five live screens. Read "Phase 4b" above before
+touching anything about due dates — the short version is that `audit_wf` cannot answer the question
+and that a nightly job truncates the corpus to workflows still alive.
 
 Three things landed outside `workflows.json` and are worth knowing about, because they are not
 workflow specific:
@@ -378,9 +440,8 @@ legal hold tiles out of Content. Then phase 2 (cross filtering on bucket click, 
 path scope, CSV and PNG export) and phase 3 (configuration editor with a field picker fed by
 `/api/v1/config/schemas`).
 
-The `DataTableComponent` is still unused by any shipped configuration — the expired documents table
-was removed on request, and Workflows deliberately carries no table, since `docUUID` names the route
-rather than the business document. It is kept, and tested, for phase 5.
+The `DataTableComponent` is no longer dead configuration: `tasks.json` uses it for the overdue
+table, which is what surfaced the multivalued label defect. Governance may well need it too.
 
 Blob size tiles were asked for, investigated and set aside; the findings are recorded above, under
 "Blob volumetry, set aside". Read that section before answering any question about blob volume.

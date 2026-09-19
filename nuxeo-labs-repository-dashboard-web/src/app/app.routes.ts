@@ -23,6 +23,12 @@ export const routes: Routes = [
     },
   },
   {
+    path: 'tasks',
+    component: DashboardPageComponent,
+    title: 'Tasks Dashboard',
+    data: { dashboardId: 'tasks', requires: 'repository' },
+  },
+  {
     path: 'users',
     component: DashboardPageComponent,
     title: 'Users Dashboard',

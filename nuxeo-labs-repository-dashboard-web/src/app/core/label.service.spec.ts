@@ -133,6 +133,46 @@ describe('LabelService', () => {
     expect(stub.calls).toHaveLength(1);
   });
 
+  /*
+   * `nt:actors` holds prefixed identifiers — the parameter is literally named `prefixedActorIds`
+   * in `CreateTaskUnrestricted`. Looking `user:jdoe` up as a user id answers a 404, so without
+   * this the chart would show the prefix on every real server, not only on a demo one.
+   */
+  it('strips the prefix Nuxeo puts on a task assignee', async () => {
+    stub = installFetchStub([
+      {
+        match: '/api/v1/user/jdoe',
+        json: { id: 'jdoe', properties: { firstName: 'Jane', lastName: 'Doe' } },
+      },
+    ]);
+
+    const labels = await TestBed.inject(LabelService).resolve('user', ['user:jdoe']);
+
+    expect(labels.get('user:jdoe')).toBe('Jane Doe');
+    expect(stub.calls[0].url).toContain('/api/v1/user/jdoe');
+    expect(stub.calls[0].url).not.toContain('user%3A');
+  });
+
+  it('resolves a group assignee against the group endpoint', async () => {
+    stub = installFetchStub([
+      { match: '/api/v1/group/sales', json: { id: 'sales', grouplabel: 'Sales Team' } },
+    ]);
+
+    const labels = await TestBed.inject(LabelService).resolve('user', ['group:sales']);
+
+    expect(labels.get('group:sales')).toBe('Sales Team');
+    // Looking a group up as a user would spend a request to earn a 404.
+    expect(stub.calls.filter((call) => call.url.includes('/api/v1/user/'))).toEqual([]);
+  });
+
+  it('shows the bare name, never the prefix, when a principal cannot be resolved', async () => {
+    stub = installFetchStub([{ match: '/api/v1/user/ghost', status: 404, json: {} }]);
+
+    const labels = await TestBed.inject(LabelService).resolve('user', ['user:ghost']);
+
+    expect(labels.get('user:ghost')).toBe('ghost');
+  });
+
   it('caches user lookups across calls', async () => {
     stub = installFetchStub([
       {

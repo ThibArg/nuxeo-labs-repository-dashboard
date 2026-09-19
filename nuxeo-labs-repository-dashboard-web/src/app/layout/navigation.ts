@@ -29,6 +29,16 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     /*
+     * Reads the repository rather than the audit, so it needs no passthrough beyond the one
+     * Content already requires.
+     */
+    path: '/tasks',
+    label: 'Tasks',
+    requires: 'repository',
+    icon: 'M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2m-6 7 2 2 4-4',
+  },
+  {
+    /*
      * Not gated on the audit feature, for the same reason as Governance: the page itself names
      * what is missing, which a greyed out entry cannot do.
      */

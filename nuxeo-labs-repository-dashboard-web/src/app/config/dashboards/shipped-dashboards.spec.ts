@@ -1,7 +1,13 @@
 import contentConfig from './content.json';
+import tasksConfig from './tasks.json';
 import usersConfig from './users.json';
 import workflowsConfig from './workflows.json';
-import { DashboardConfig, FilterState, customRange } from '../dashboard-config.model';
+import {
+  DashboardConfig,
+  FilterState,
+  customRange,
+  dateRangeFilter,
+} from '../dashboard-config.model';
 import { planDashboard } from '../../engine/query-planner';
 
 /**
@@ -12,6 +18,7 @@ import { planDashboard } from '../../engine/query-planner';
  */
 const DASHBOARDS: [string, DashboardConfig][] = [
   ['content.json', contentConfig as DashboardConfig],
+  ['tasks.json', tasksConfig as DashboardConfig],
   ['users.json', usersConfig as DashboardConfig],
   ['workflows.json', workflowsConfig as DashboardConfig],
 ];
@@ -57,13 +64,24 @@ describe.each(DASHBOARDS)('%s', (_name, config) => {
    * here declares a day pattern to get readable bucket keys, so an ISO instant comes back as a 400
    * — the very failure that took the Users page down. Numbers are read as epoch milliseconds and
    * cannot be misread, whatever the format says.
+   *
+   * Only a histogram on the very field the period constrains gets padded: for any other field the
+   * selected days say nothing. The count is asserted rather than a mere presence, so a dashboard
+   * carrying no date filter at all — Tasks — is checked to emit no bounds instead of being skipped.
    */
   it('states histogram bounds as numbers, never as a date string', () => {
-    const bounds = everyAggregation(config)
+    const aggs = everyAggregation(config);
+    const dateField = dateRangeFilter(config)?.field;
+    const paddable = aggs.filter(
+      (node) =>
+        dateField !== undefined &&
+        (node as { date_histogram?: { field?: string } }).date_histogram?.field === dateField,
+    );
+    const bounds = aggs
       .map((node) => (node as { extended_bounds?: Record<string, unknown> }).extended_bounds)
       .filter((value): value is Record<string, unknown> => value !== undefined);
 
-    expect(bounds.length).toBeGreaterThan(0);
+    expect(bounds).toHaveLength(paddable.length);
     for (const bound of bounds) {
       expect(Object.values(bound).map((value) => typeof value)).not.toContain('string');
     }

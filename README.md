@@ -21,6 +21,7 @@ a single OpenSearch aggregation request.
 | **Content** | Repository index: repository composition (live, trashed, versions, proxies), `ecm:primaryType`, `ecm:currentLifeCycleState`, `dc:created`, `dc:modified`, `dc:creator`, `dc:expired` |
 | **Users** | Audit index: `loginSuccess`, `loginFailed`, `documentCreated` and `documentModified`, grouped by `principalName` over `eventDate` |
 | **Workflows** | `audit_wf` passthrough view: workflow state derived from `eventId`, `extended.modelName`, `extended.workflowInitiator`, `extended.taskName`, `extended.action`, and durations from `extended.timeSinceWfStarted` and `extended.timeSinceTaskStarted` |
+| **Tasks** | Repository index: open tasks only, through the `Task` facet — `nt:dueDate`, `nt:actors`, `nt:name`, `nt:directive` |
 | **Governance** | `ecm:isRecord`, `ecm:hasLegalHold`, `ecm:retainUntil`, and `record:ruleIds` resolved against the `RetentionRule` documents |
 | **Diagnostics** | The preflight report, always available |
 
@@ -455,6 +456,40 @@ and a maximum are not: OpenSearch answers `null`, and the dashboard renders that
 than as `0`. Without this, an average duration tile would read `0 s` on a server where no workflow
 has ever completed, which no reader can tell apart from a genuinely instantaneous workflow.
 
+### Tasks live only as long as their workflow
+
+**A scheduled job deletes finished workflows every night, and every task they carry with them.**
+This is stock Nuxeo behaviour, not a setting of this plugin, and it decides what the Tasks
+dashboard can honestly show.
+
+The scheduler `workflowInstancesCleanup` runs at **23:59 daily**. It selects the routes whose state
+is `done` or `canceled`, deletes them, and `DocumentRouteOrphanedListener` then removes every task
+carrying their `nt:processId` — **whatever its state**, `ended`, `cancelled` or even `opened`.
+
+```
+# nuxeo.conf — keep finished workflow instances, and their tasks, in the repository
+nuxeo.routing.disable.cleanup.workflow.instances=true
+```
+
+The line is commented out in the shipped `nuxeo.conf`, so **the cleanup is active by default**.
+Two related switches exist: `nuxeo.routing.cleanup.workflow.instances.orphan=true` widens the sweep
+to every route, orphaned ones included, even while they are still running; and
+`DELETE /api/v1/management/workflows/orphaned` triggers it on demand.
+
+Three consequences, which the Tasks dashboard states in its own subtitle:
+
+- **It counts open tasks only.** A "completed tasks" tile would read ten in the afternoon and zero
+  the next morning, which is worse than showing nothing.
+- **History belongs to the Workflows dashboard**, which reads the audit index. The audit keeps its
+  entries when the repository loses its documents, so the two screens are complementary rather
+  than redundant: Workflows tells what happened, Tasks shows what is waiting.
+- **Nothing in a document says which regime is in force.** On a server where the property has been
+  set, finished tasks accumulate and a repository-wide count means something quite different.
+
+One more trap, unrelated to the cleanup: a workflow node with no due date expression produces a
+task whose `nt:dueDate` is *the moment it was created*, so it counts as overdue a second later. The
+two shipped models set the expression; a Studio model need not.
+
 ### Indexing rules worth knowing
 
 Taken from the LTS 2025 `opensearch1-doc-mapping.json`; getting these wrong produces empty results
@@ -545,6 +580,7 @@ rather than errors.
 | 2 | Cross filtering on bucket click, active filter chips, path scope, CSV and PNG export | next |
 | 3 | Configuration editor, with a field picker fed by `/api/v1/config/schemas` | |
 | 4 | Workflows dashboard | done |
+| 4b | Tasks dashboard, on open tasks and due dates | done |
 | 5 | Governance dashboard | |
 
 ## Licence

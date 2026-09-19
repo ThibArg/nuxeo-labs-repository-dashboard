@@ -155,8 +155,15 @@ export class DashboardRunner {
         columnLabels.set(widgetId, perColumn);
 
         for (const column of widget.columns.filter(hasLabelStrategy)) {
+          /*
+           * A multivalued property is resolved element by element: `nt:actors` holds a list, and
+           * stringifying the array whole would ask the server for `user:jdoe,group:sales`.
+           */
           const values = widgetData.rows
-            .map((row) => readSource(row.source, column.field))
+            .flatMap((row) => {
+              const value = readSource(row.source, column.field);
+              return Array.isArray(value) ? value : [value];
+            })
             .filter((value) => value !== undefined && value !== null)
             .map(String);
 
