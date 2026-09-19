@@ -1,515 +1,220 @@
 # Working on this repository
 
-Read `README.md` first: it documents the product, the configuration format, the deployment
-contributions and the Nuxeo indexing rules. This file only covers what the README deliberately
-leaves out, plus why the design is what it is.
+Read `README.md` first. It documents the product, the configuration schema, the deployment
+contributions, the label strategies and — under "Indexing rules worth knowing" and "Who an action
+is credited to" — every field-level trap the queries depend on. This file carries only what the
+README does not: how to drive the build, how the tests are wired, what must not be undone, and
+which roads were already walked and abandoned.
 
 ## Commands
 
 ```bash
-mvn clean install                 # builds everything and runs the Angular tests
+mvn clean install                 # builds both modules and runs the Angular tests
 mvn clean install -DskipTests     # skips them
 ```
 
-Node is not a prerequisite: `frontend-maven-plugin` downloads a pinned version into
-`nuxeo-labs-repository-dashboard-web/node/`. To run npm directly, put it on the path first,
-otherwise you get the system node, which is too old for Angular 22:
+Node is not a prerequisite: `frontend-maven-plugin` downloads a pinned version — parent `pom.xml`,
+`frontend-plugin.node.version` — into `nuxeo-labs-repository-dashboard-web/node/`. To run npm
+directly, put it on the path first, otherwise you get the system node, which is too old for
+Angular 22:
 
 ```bash
 cd nuxeo-labs-repository-dashboard-web
 export PATH="$PWD/node:$PATH"
-npm test          # vitest + jsdom
-npm run build
-npm run format    # prettier, run it before committing
-npm start         # dev server on :4200, proxying /nuxeo to the server in .env
+npm test                                      # 27 files, vitest + jsdom
+npm test -- --watch=false --include src/app/engine/agg-compiler.spec.ts   # one file
+npm test -- --watch=false --filter 'never emits a .keyword'               # one behaviour
+npm run build                                 # this is the typecheck
+npm run format                                # prettier; run it before committing
+npm start                                     # :4200, proxying /nuxeo to the server in .env
 ```
+
+- **`ng test` defaults `--watch` to true in a TTY**, so an interactive `npm test` never returns.
+  Pass `--watch=false` whenever the run must end. `--include` and `--filter` are Angular builder
+  options, not vitest flags.
+- **There is no linter and no `typecheck` script.** `npm run build` compiles with `strict`,
+  `noUnusedLocals` and `strictTemplates`, and is the only thing that type-checks the application.
+- **Nothing in the Maven build runs `format:check`**, so a badly formatted commit still goes green.
+- `npm start` needs `.env` (`cp .env.example .env`). It is gitignored; never commit credentials.
+- `src/proxy.conf.mjs` is outside the Prettier glob, which only covers `src/**/*.{ts,html,css,json}`.
+
+Commits are single-line imperative subjects of about sixty characters with no prefix, stating the
+behaviour that changed, followed by a body arguing the reasoning and citing the evidence. Match it.
+
+## How it is wired
+
+- **No Java at all.** Four resources under `nuxeo-labs-repository-dashboard-web/nuxeo/` deploy the
+  SPA; the jar carries the Angular output under `nuxeo.war/dashboard/`. The README's "Deployment"
+  table says which resource does what.
+- **One `index` per dashboard config**, so a page cannot read the repository and the audit in the
+  same breath (`query-planner.ts`). That is a real limit, not an oversight: it is why a
+  trustworthy "workflows running now" figure is impossible on the Workflows page.
+- **Dashboards are JSON** in `src/app/config/dashboards/`, copied to `assets/dashboards/` by
+  `angular.json` and fetched at runtime. The specs `import` those very files, so a shipped
+  configuration cannot drift from what is tested.
 
 ## Testing conventions
 
-Everything lives in `src/testing/`.
+Helpers live in `src/testing/`. Use them rather than inventing equivalents.
 
 - **`installFetchStub(routes)`** replaces `globalThis.fetch`. Routes match on a URL substring and,
-  when needed, on the parsed request body: a dashboard issues its aggregation batch and its facet
-  values query against the very same `_search` URL. Use the `isAggregationsRequest`,
-  `isFacetValuesRequest` and `isHitsRequest` predicates rather than inventing new ones.
-- **`ChartWidgetStubComponent`** replaces the real chart in component tests, through
-  `TestBed.overrideComponent(WidgetOutletComponent, …)`. ECharts paints on a canvas that jsdom does
-  not provide. Chart rendering is covered where it belongs: `buildChartOption` is a pure function
-  and is unit tested directly. The stub renders the label and the hint, so hint interpolation stays
-  observable.
+  when needed, on the parsed body: a dashboard issues its aggregation batch, its facet values query
+  and its table query against the very same `_search` URL. Use the `isAggregationsRequest`,
+  `isFacetValuesRequest` and `isHitsRequest` predicates.
 - **`settle(fixture)`** drains the asynchronous work a page starts. The application is zoneless and
-  talks to the server through plain `fetch`, so `whenStable()` alone does not know about those
+  talks to the server through plain `fetch`, so `whenStable()` alone knows nothing of those
   promises.
-- **`setup.ts`** polyfills `ResizeObserver` and the modal behaviour of `<dialog>`, neither of which
-  jsdom implements.
+- **`ChartWidgetStubComponent`**, installed through
+  `TestBed.overrideComponent(WidgetOutletComponent, …)`, replaces the real chart: ECharts paints on
+  a canvas jsdom does not provide. It renders the label, the hint **and** the resolved bucket
+  labels, so all three stay observable. Option building is tested directly, `buildChartOption`
+  being pure.
+- **`setup.ts`** polyfills `ResizeObserver` and the modal behaviour of `<dialog>`.
 
-Name tests as statements of behaviour, not of implementation. A test that cannot observe what it
-claims to verify is worse than no test: the range reminder passed silently until the chart stub
-was made to render the hint.
-
-## Traps
-
-- **Never add `<require>org.nuxeo.web.ui</require>` to `dashboard-webresources-contrib.xml`.**
-  Inside a component, `require` names a component, and no component is named `org.nuxeo.web.ui` —
-  that is only the bundle symbolic name. The component stays pending and, since
-  `nuxeo.start.strict` defaults to true, the server refuses to start. The file carries a comment
-  saying so; leave it there.
-- **Never append `.keyword` to a field.** Nuxeo maps strings straight to `keyword` through a
-  dynamic template, so the suffix matches nothing, silently. `agg-compiler.ts` rejects it.
-- **`_source` returns complex properties as objects** (`"file:content": { "length": … }`) while
-  aggregations address them with a dotted name (`file:content.length`). `readSource` handles both.
-  Verified against a live index.
-- **`dc:title` is `text` with `fielddata: true`.** Never aggregate on it; read it from `_source`.
-- **A `terms` aggregation is a top N, and an approximate one.** Each shard ranks locally and hands
-  over `shard_size` candidates, `size * 1.5 + 10` by default, which is thin on the five shard audit
-  index. `compileAgg` widens it to `max(size * 5, 100)` so the merged ranking is exact. The count of
-  omitted values comes from a `cardinality` sibling, never from `sum_other_doc_count`, which counts
-  documents rather than values.
-- **`extended_bounds` must be epoch milliseconds, never a date string.** OpenSearch parses a string
-  bound with the *aggregation's own* `format`, and every chart here declares `yyyy-MM-dd` to get
-  readable bucket keys. An ISO instant therefore comes back as a 400, `unparsed text found at
-  index 10`. This took the Users page down, and Content with it on any bounded period.
-  `shipped-dashboards.spec.ts` guards it for every configuration that ships.
-- **A proxy carries its target's blob.** Only `collectionMember` is proxy-local
-  (`CoreExtensions.xml:91-93`); `file` is read through. Summing `file:content.length` over `all`
-  therefore counts every proxy twice. `ecm:isProxy: false` is the only remedy.
-- **A blob of unknown length is indexed as `-1`**, not as null nor as an absent key:
-  `SimpleManagedBlob.getLength()` returns `-1` and the writer always emits the field
-  (`JSONPropertyWriter.java:328`). A plain `sum` is reduced by one byte per such blob.
-- **`thumb:thumbnail.*` and `picture:views.*` are mapped `index: false`**
-  (`opensearch1-doc-mapping.json:3-18`). They sit in `_source`, so a table can read them, but no
-  filter clause can reach them.
-
-### The audit index
-
-- **`comment` is `text` with no keyword sub-field** (`opensearch1-audit-mapping.json:29-37`): any
-  aggregation on it fails outright. Every other field is a `keyword` posted by a single dynamic
-  template (`:2-12`), so `eventId`, `principalName`, `category` and `docType` all aggregate.
-  `extended.params` is `enabled: false` and is reachable by nothing.
-- **Read `eventDate`, never `logDate`.** `logDate` is stamped when the journal is written, after
-  commit (`AuditComponent.java:314`), so a long transaction bunches its entries onto one instant
-  and the chart grows spikes that never happened.
-- **`documentCreated` is also fired by a check-in and by a proxy creation**
-  (`AbstractSession.java:1988,2150`), and nothing in the audit entry tells them apart. Counting it
-  per user therefore includes versions and published proxies; the widget hint says so.
-- **`principalName` is `getActingUser()`**, which is `originatingUser ?? name`
-  (`UserPrincipal.java:209-211`). The two differ in exactly one living case: a `SystemPrincipal`,
-  whose `getName()` is invariably `system` while `getActingUser()` names the human behind the
-  action. That is what credits an asynchronous Work, an `UnrestrictedSessionRunner` or a
-  `CoreInstance.doPrivileged(repo, …)` to the user who triggered it instead of to a technical
-  account. **It is not about impersonation**, and an earlier note here claimed the opposite:
-  `Auth.LoginAs(name)` credits the *assumed* identity, since `Framework.loginUser` takes the
-  principal from the directory and leaves `originatingUser` null — the administrator vanishes
-  without trace. `Auth.LoginAs()` with no argument does the reverse, building
-  `SystemPrincipal(origUser)`: the two branches of one operation disagree. The admin centre's
-  "Login as" no longer exists in LTS 2025 — `switchUser()` waits on a request *attribute* named
-  `deputy` that nothing in the tree sets. And `system` still surfaces, through
-  `Framework.doPrivileged` with no argument and through the `documentCreated` entries
-  `syncLogCreationEntries` rebuilds. See the README under "Who an action is credited to".
-- **A failed login carries the login that was typed.** `NuxeoAuthenticationFilter.java:182` builds
-  the principal from the submitted name before knowing whether it is valid. Token authentication
-  is the exception: `principalName` may be empty, the token landing in `comment` (`:197-199`), so
-  an unnamed bucket can appear in the failed logins list. It is left visible on purpose — a list of
-  authentication failures must not drop attempts in silence.
-- **The `perf` server template disables `loginSuccess` and `logout`**, but not `loginFailed`
-  (`templates/perf/.../audit-config.xml:3-8`). On such a server the Users page is half empty for a
-  reason no message can explain.
+Name a test as a statement of behaviour, not of implementation. A test that cannot observe what it
+claims to verify is worse than no test: the range reminder passed silently until the chart stub was
+made to render hints, and a broken `LabelStrategy` passed until it rendered bucket labels.
 
 ## Invariants the tests protect
 
 - **One request per dashboard.** Adding a widget must not add a round trip. Table widgets are the
-  exception, because they need `hits`.
-- **`AggConfig` stays a closed union.** No raw DSL reaches the server.
-- **The composition scopes stay a partition**: `liveNotTrashed + trashed + versions + proxies` must
-  equal `all`. A test evaluates the clauses against four synthetic documents rather than trusting a
+  only exception, because they need `hits`.
+- **`AggConfig` stays a closed union, and `agg-compiler.ts` stays its only compiler.** No raw DSL
+  reaches the passthrough, which would forward `script` verbatim for an administrator.
+  `facet-values.service.ts` once built its own JSON and so escaped every guarantee; it no longer
+  does.
+- **Content's composition scopes are a partition**: `liveNotTrashed + trashed + versions + proxies`
+  equals `all`. The test evaluates the clauses against synthetic documents rather than trusting a
   reading of the JSON.
-- **The expiry tiles stay a partition too**: a document is counted by `expired`, `expiringWeek` or
-  `expiring60`, never by two. The sixty day window starts at `gt: now+7d`, so J+7 belongs to the
-  week alone. A reader adds these three figures up, so an overlap is a wrong answer, not a detail.
-- **Grid rows fill whole lines**: the spans of a row sum to a multiple of twelve, for every date
-  range.
+- **The expiry tiles are a partition too** — `expired`, `expiringWeek`, `expiring60`, never two.
+  The sixty day window starts at `gt: now+7d`, so J+7 belongs to the week alone. A reader adds the
+  three figures up, so an overlap is a wrong answer, not a detail.
+- **Workflows scopes are mutually exclusive but *not* exhaustive**: three reachable events fall
+  outside them, so that spec asserts exclusivity only.
+- **Grid rows fill whole lines**: the spans of a row sum to a multiple of twelve, for every range.
+- **`shipped-dashboards.spec.ts`** re-checks every shipped file: no `.keyword`, numeric
+  `extended_bounds`, a widget per layout cell, a `cardinality` beside every top N. It asserts the
+  *count* of `extended_bounds`, since `tasks.json` deliberately has no `dateRange`.
 
 ## Verifying against a real server
 
-A local Nuxeo is usually running. Ask the user for the URL and credentials, use them in the session
-only, and **never write them to disk** — not in `.env`, not in a config file, not in a comment.
-Read-only calls are enough: `POST /nuxeo/site/es/nuxeo/_search`, and `GET` on `/api/v1/me`,
-`/capabilities`, `/user/{id}`, `/config/types/{name}`, `/ui/i18n/messages.json`.
-
-This matters because the unit tests run against fixtures written from reading the Nuxeo sources,
-which is circular. Confronting them with a real index is what found that `_source` nests blobs, that
-`time_zone` was missing, and that `extended_bounds` cannot be a date string.
+A local Nuxeo is usually running. Ask the user for the URL and credentials, use them **in the
+session only, and never write them to disk** — not in `.env`, not in a config file, not in a
+comment. Read-only calls are enough: `POST /nuxeo/site/es/{index}/_search`, and `GET` on
+`/api/v1/me`, `/capabilities`, `/user/{id}`, `/group/{name}`, `/config/types/{name}`,
+`/config/schemas`, `/ui/i18n/messages.json`.
 
 **Any newly emitted request shape must be run once against the real index before it is called
-done.** A test asserting the shape of a payload proves only that we build what we meant to build,
-never that OpenSearch accepts it — and it happily enshrines a mistake, as the `extended_bounds`
-assertions did. The cheapest way is a throwaway spec that plans the request with the real planner
-and `fetch`es it at `POST /nuxeo/site/es/{index}/_search`, credentials read from the environment,
-deleted once it has answered.
+done.** The fixtures were written from reading the Nuxeo sources, which is circular: a spec proves
+we build what we meant to build, never that OpenSearch accepts it, and it happily enshrines a
+mistake — the `extended_bounds` assertions did exactly that, and took two pages down. The cheapest
+check is a throwaway spec that plans with the real planner and `fetch`es the result, deleted once
+it has answered. Confronting fixtures with a live index is what found that `_source` nests complex
+properties as objects while aggregations address them with a dot, that `time_zone` was missing, and
+that a bound cannot be a date string.
 
-Two paths the current test dataset cannot exercise, so do not read a passing run as proof:
+Two paths the dataset cannot exercise, so a green run proves nothing about them: **`time_zone`**,
+every document having been created between 07:00 and 12:00 UTC so no bucket moves — use a control
+zone at UTC−10; and **"N targeting trashed" on proxies**, which needs a proxy on a *live* document
+later trashed, proxies on versions inheriting a flag that stays false.
 
-- **`time_zone`** — the documents were all created between 07:00 and 12:00 UTC, so no bucket moves.
-  To prove the parameter is honoured, use a control zone at UTC−10.
-- **"N targeting trashed"** on proxies — it needs a proxy on a *live* document that is then
-  trashed. Proxies on versions inherit the version's flag, which stays false.
+**Both audit indices on the sandbox are partly fabricated and prove nothing about the platform.**
+In `audit`, `principalName` and `eventDate` of `documentCreated` and `documentModified` were taken
+from the target document, and the login events were generated outright; the prior state is kept in
+`nuxeo-audit-backup-20260918`. In `audit_wf`, 2173 entries covering 450 instances were bulk loaded
+because the twenty genuine ones had nothing completed or cancelled; prior state in
+`nuxeo-audit-backup-20260919`, and every fabricated entry carries an `id` at or above 900000.
+Loading them needed `docker exec` on the `opensearch` container: the passthrough is read-only and
+rejects any index it does not declare, and OpenSearch is not published on a host port. Three
+consequences before a demo or a conclusion: three of the five models there — `RequestDownload`,
+`AdHoc`, `ClaimReview` — exist in no repository, so filtering on them leads to documents nobody can
+open; the durations were drawn uniformly, so mean and median coincide per model by construction;
+and any distribution or daily curve read there reflects what was written.
 
-**The audit index of the sandbox is partly fabricated, so it proves nothing about the platform.**
-It was rewritten to make the Users dashboard worth looking at: on `documentCreated` and
-`documentModified`, `principalName` and `eventDate` were taken from the target document rather than
-from the action that really happened, and the login events were generated outright. A distribution
-or a daily curve observed there reflects what we wrote, not how Nuxeo behaves — inferring the
-second from the first is the same circularity this section warns against. The state before that
-rewrite is kept in the `nuxeo-audit-backup-20260918` index.
+## Facts the README does not carry
+
+- **Never add `<require>org.nuxeo.web.ui</require>` to `dashboard-webresources-contrib.xml`.**
+  Inside a component `require` names a *component*, and no component bears that name — it is only a
+  bundle symbolic name. The component would stay pending and, `nuxeo.start.strict` defaulting to
+  true, the server would refuse to start. The file documents this; leave the paragraph there.
+- **`MANIFEST.MF` needs its trailing newline**, and one `Nuxeo-Component` entry per line with a
+  single leading space on continuations. Without the newline the last header is silently dropped.
+- **"Overdue, but the workflow is finished" is an empty bucket by construction.**
+  `DocumentRoutingWorkflowDoneListener` cancels the remaining tasks in the very transaction that
+  sets the route to `done` — its `async="true"` is ignored, the class implementing `EventListener`.
+  And on a finished task "overdue" would need `nt:dueDate < dc:modified`, hence a script, which
+  `AggConfig` refuses.
+- **A task carries no workflow model name.** `nt:processName` receives the node's *notification
+  template*, usually empty; only `nt:processId` leads to the instance. Grouping tasks by model
+  needs a join the planner cannot express.
+- **A node with no `taskDueDateExpr` produces `nt:dueDate = now`**, so its tasks are overdue a
+  second after creation. Both shipped models set the expression; a Studio model need not.
+- **In `audit_wf`, `docType` and `docUUID` name the route or the task, never the business
+  document.** A "documents entering a workflow" widget was designed on the opposite assumption and
+  dropped. A table linking back to Web UI fails for the same reason: the planner always adds
+  `ecm:uuid` to `_source`, which the audit does not have.
+- **`percentiles` answers a map under `values`**, keyed as OpenSearch formats it (`"50.0"`, but
+  `"99.9"` for a fractional percent), so `result-mapper` reads the single entry rather than
+  recomposing the key; and being multi-valued, a `terms` ordered by it needs `metric.50` in the
+  order path, not `metric`.
 
 ## Design decisions, and why
 
-Do not undo these without knowing what they were for.
+Do not undo these without knowing what they were for. The README explains the mechanisms; this is
+about the choices behind them.
 
 | Decision | Reason |
 | --- | --- |
-| One request per dashboard, via `filter` aggregations | The passthrough exposes no `_msearch`. Web UI's dataviz elements issue one request per element; the cookbook's overview widget makes seven for one card |
-| Aggregations named after the widget, not Web UI's `by` key | With `by`, two widgets in one request would write to the same place. The naming is what makes batching possible |
-| `AggConfig` as a closed union rather than raw DSL | A JSON file an administrator can edit is not the same trust boundary as a Polymer template written by a developer. The passthrough forwards an administrator payload verbatim, `script` included |
-| OR between document types and facets, AND between groups | They are two alternative classifications of the same dimension. `File AND Picture facet` is empty in stock Nuxeo, since `File` does not declare that facet |
-| "All selected" compiles to *no clause*, never to every value | Otherwise a fully selected member swallows its siblings, and a facet filter does nothing while all types stay checked |
-| Scopes taken out of `baseFilter` | A widget can only narrow the shared query. With the live-document filter shared, the total could never count versions and proxies |
-| No "trashed" line under the Total tile | Proxies inherit `ecm:isTrashed` from their target, so a repository-wide count differs from the Trashed tile, with no visible explanation |
-| IANA zone name rather than a fixed offset for `time_zone` | Correct on both sides of a daylight saving change, which `+02:00` is not. Web UI's element uses the offset |
+| Aggregations named after the widget, not after Web UI's `by` key | With `by`, two widgets in one request would write to the same place. The naming is what makes batching possible |
+| "All selected" compiles to *no clause*, never to every value | Otherwise a fully selected member swallows its siblings, and a facet filter silently does nothing while all types stay checked |
+| Scopes taken out of `baseFilter` | A widget can only narrow the shared query. With the live-document filter shared, no tile could ever count versions or proxies |
+| No "trashed" line under the Total tile | Proxies inherit `ecm:isTrashed` from their target, so a repository-wide count differs from the Trashed tile with no visible explanation |
+| An IANA zone name rather than a fixed offset for `time_zone` | Correct on both sides of a daylight saving change, which `+02:00` is not. Web UI's own element uses the offset |
 | No Nuxeo JS client | CommonJS, not tree-shakable; it would pull batch upload, directories and OAuth2 for three call shapes. A `fetch` wrapper is enough |
 | No implicit exclusion of technical documents | Explicit user decision: a customer creating five `Domain` objects has reasons to see them counted. The type filter is the tool, and it is persisted |
-| Configuration stored in `src/app/config/dashboards/`, copied to assets | The tests import the file that actually ships, so it cannot drift from what is tested |
-| Records and legal holds moved from Content to Governance | User decision. They answer a compliance question, not a volumetry one, and Governance is where retention lives. Already removed from `content.json`; phase 5 starts from a blank page |
-| Governance reachable even without `nuxeo-retention` | A greyed out entry cannot tell the reader which package to install. The page names it and links to its documentation. Workflows follows the same rule since phase 4 |
-| A period is two inclusive calendar days, not date math | Only concrete days can be shown in, and edited through, the two date fields. `gte` at the start of the first day, `lt` at the start of the day after the last: the final evening is covered without a `23:59:59.999` fudge |
-| `extended_bounds` derived from the filter, never configured | A histogram only spans the days holding a document, so a quiet start of period silently shortens the chart. Deriving it keeps `AggConfig` closed, and it is applied only to the field the date filter constrains — for any other field the selected days say nothing |
-| The failed logins list resolves no name | The value is evidence: whether `admin` or `Admin` was typed matters, and a prettified name would hide it. It also spares ten doomed `/api/v1/user` lookups per run |
-| A truncated bucket list says so, with a count | Ten bars out of forty-seven users read as the whole team. The line is derived, so it is silent on a small repository and speaks on a large one. Content already hides eight document types out of eighteen |
-| `shard_size` widened rather than left to OpenSearch | The default candidate list makes a top ten merely plausible across five shards. Derived like `extended_bounds`, so no configuration can weaken it |
-| Facet values compiled by `agg-compiler` too | Its header claims to be the only place aggregation JSON is produced. `facet-values.service.ts` quietly made its own, and so escaped every guarantee the compiler gives |
-| `LabelService` caches the promise, not the answer | Widgets resolve their buckets in parallel, so three charts naming the same author start before any has replied. Caching the answer deduplicates nothing at that moment |
+| A page names its missing prerequisite instead of being greyed out | A disabled menu entry cannot tell the reader which package to install. Workflows, Users and Governance all follow this |
+| A period is two inclusive calendar days, not date math | Only concrete days can be shown in, and edited through, the two date fields. `gte` at the start of the first day, `lt` at the start of the day after the last |
+| `extended_bounds` derived from the filter, never configured | A histogram otherwise spans only the days holding a document, so a quiet start of period silently shortens the chart. Deriving it also keeps `AggConfig` closed |
+| The failed logins list resolves no name | The value is evidence: whether `admin` or `Admin` was typed matters, and a prettified name would hide it. It also spares ten doomed `/api/v1/user` lookups |
+| A truncated bucket list says so, with a count | Ten bars out of forty-seven users read as the whole team. The line is derived, so it stays silent on a small repository |
+| `LabelService` caches the in-flight promise, not the answer | Widgets resolve their buckets in parallel, so three charts naming the same author start before any has replied. Caching the answer deduplicates nothing at that moment |
+| Merging the two forms of a principal adds counts only | Two averages recombine only with their weights, so `labels: "user"` together with a `metric` raises a plan error naming the reason rather than merging a wrong figure |
+| A mixed aggregate always ships with a breakdown beside it | An aggregate over unlike populations describes none of its members: on five workflow models spanning two orders of magnitude the mean lands where no model is |
 
 ## Blob volumetry, set aside
 
-Asked for: a "Total Size" and a "Live Docs Size" tile, deduplicated, over *every* blob field rather
-than `file:content` alone. Investigated, then set aside. Do not walk this road again from scratch.
+Asked for: "Total Size" and "Live Docs Size" tiles, deduplicated, over *every* blob field.
+Investigated, then set aside. Do not walk this road again from scratch.
 
-**Why a plain sum does not answer the question.** A version holds its own copy of the blob
-(`DBSSession.java:577-625`) while the store keeps one object per digest. A document versioned ten
-times without changing its file is counted eleven times. That is not an imprecision, it is an order
-of magnitude.
-
-**Why the cookbook's method does not scale.** Its `repository-overview` widget
-(`nuxeo-studio-community-cookbook`, `repository-overview-analytics-behavior.html:209-228`) groups by
-`file:content.digest` with `"size": 1000000000`, then adds the buckets with `sum_bucket`. OpenSearch
-caps bucket counts at `search.max_buckets`, 65,536 by default, and Nuxeo sets it nowhere in the LTS
-2025 tree. Past roughly 65,000 distinct blobs the request fails with `too_many_buckets_exception`.
-
-**Why `composite` does not rescue it.** It pages correctly through `after_key`, and the passthrough
-forwards it verbatim for an administrator (`RequestValidator.java:94-105`). But several `sources`
-produce the cartesian product of their values, not their union, so one pagination per blob field is
-needed; without an index sorted on the digest, every page rescans the whole filtered set, so the
-cost is *pages × scan*; deduplicating across fields would mean holding every digest in browser
-memory; and the renditions, which weigh the most on a media repository, are `index: false`. On top
-of that the passthrough has a 20 s socket timeout with no retry at all
-(`OpenSearchRestClientFactory.java:56`, `OpenSearchRestClient.java:298-305`).
-
-**The road to take if the subject comes back.**
-`DELETE /api/v1/management/blobs/orphaned?dryRun=true` starts a bulk action; polling
-`GET /api/v1/management/bulk/{commandId}` then yields `result.totalSize`, the real size of the blob
-store, and `result.deletedSize`, its orphaned share. `GarbageCollectOrphanBlobsAction.java:114-119`
-accumulates every blob it walks, not just the orphans. Deduplicated by construction, exhaustive
-without knowing a single schema, and `dryRun` deletes nothing (`TestBlobsObject.java:171`). The
-management API is reachable by default: the port check falls back to the standard HTTP port
-(`ManagementObject.java:84-89`) and an administrator always passes (`:92-95`).
-Constraints: it needs the `queryBlobKeys` capability, hence MongoDB — VCS/SQL answers 501 — which
-`GET /api/v1/capabilities` reports without any side effect; providers in `recordMode` are skipped
-unless `records=true`; it is a full scan of the storage, so it must be triggered explicitly; and it
-is asynchronous. Above all, **the figure ignores the date range and the type filter**: it is a
-storage truth, not a documentary one. It needs a card of its own, outside the filtered grid, never
-a tile among the others.
-
-**Two more facts worth keeping.** `GET /api/v1/config/schemas` returns, in one call, every schema
-with its fields typed, a blob being literally `"blob"` or `"blob[]"`
-(`SchemaJsonWriter.java:120,140`): discovering blob fields is trivial, summing them is not. And
-`ecm:blobKeys` is **not** indexed — NXQL and DBS storage only — so there is no shortcut there. If
-`nuxeo-quota` is installed, `dss:innerSize`, `dss:sizeVersions` and `dss:sizeTrash` are indexed
-`long` fields that a plain `sum` can aggregate while honouring the dashboard filters; not
-deduplicated, but the only route to a volume without a heavy operation.
-
-## Phase 4: the Workflows dashboard
-
-Built and shipped. The page is `workflows.json`, reachable at `/workflows`; the name "Process" is
-gone everywhere. These are the facts that cost the most to establish — most were settled before a
-line was written, a few only once the code met the real index.
-
-**The passthrough hides five of the thirteen audited workflow events.**
-`RoutingAuditRequestFilter` injects `term: { category: "Routing" }` for *every* caller,
-administrators included (`RoutingAuditRequestFilter.java:90-93`). Five events are fired with no
-explicit category and therefore default to `eventDocumentCategory` (`AuditComponent.java:430-431`):
-`workflowTaskAssigned`, `workflowTaskReassigned`, `workflowTaskCompleted`, `workflowTaskDelegated`
-and `auditLogRoute`. They are audited, they sit in the index, and `audit_wf` will never return them.
-Only these eight are reachable: `afterWorkflowStarted`, `afterWorkflowFinish`,
-`beforeWorkflowCanceled`, `workflowCanceled`, `afterWorkflowTaskCreated`, `afterWorkflowTaskEnded`,
-`afterWorkflowTaskReassigned`, `afterWorkflowTaskDelegated`. Corollary: `extended.directive` and
-`extended.dueDate` are declared only on the excluded events, so no task directive and no due date
-can ever be read through this view. `workflows-dashboard.spec.ts` holds that list and asserts every
-scope is built out of it.
-
-**There is no workflow state field.** State is derived from event ids, which is what the `scopes`
-of `workflows.json` encode: started is `afterWorkflowStarted`, completed is `afterWorkflowFinish`,
-cancelled is `beforeWorkflowCanceled`. Prefer that last one to `workflowCanceled`, which is fired
-once per attached document and therefore multiplies. Unlike `content.json`, these scopes are **not
-a partition** — three reachable events are counted by none of them — so the test asserts mutual
-exclusivity only, never exhaustiveness. A trustworthy "currently running" figure cannot come from
-the audit at all: it needs `DocumentRoute` with `ecm:currentLifeCycleState = 'running'` on the
-`nuxeo` index, hence a second request on another index, which the planner does not support today —
-one index per dashboard. That is why the Started tile says "not instances running now".
-`docLifeCycle` looks like a substitute and is not: it is a snapshot at event time, and on task
-events it describes the `RoutingTask`, not the route.
-
-**Aggregatable `extended.*`**, all `keyword` unless noted: `modelName` (the primary dimension),
-`modelId`, `workflowInitiator`, `taskActor`, `taskName`, `action`, and `comment` — note that
-`extended.comment` aggregates while the top level `comment` does not. Plus `timeSinceWfStarted` and
-`timeSinceTaskStarted`, both **`long`, in milliseconds** (`RoutingAuditHelper.java:79,92`), and
-absent rather than negative when the helper cannot find the start event. `workflowVariables.*`,
-`nodeVariables.*` and `data.*` are nested objects typed leaf by leaf, so what they offer depends on
-the Studio model.
-
-**Which event carries which field**, verified in the sources rather than guessed.
-`afterWorkflowFinish` carries `timeSinceWfStarted`, `workflowInitiator`, `modelName`, `modelId` and
-`workflowVariables`, and **no** `taskName` or `action` (`DocumentRouteImpl.java:55-75`) — which is
-what makes the Average Duration tile legitimate on the completed scope. `afterWorkflowTaskEnded`
-carries both durations plus `taskName`, `action`, `taskActor` and the variables
-(`GraphRunner.java:130-155`).
-
-**`extended.taskName` is an i18n key, `extended.action` is not.** A task name really is
-`wf.parallelDocumentReview.chooseParticipants.title`, which the Web UI bundle renders as "Choose
-Participants" — hence the `message` label strategy. But `action` is `status`, the button's `name`
-(`GraphRunner.java:136`): `approve`, `reject`, `validate`, `NA`, `start_review`, `submit`. The i18n
-key lives in the button's `label` (`ParallelDocumentReview/Task328d/document.xml:27-30`) and never
-leaves the model definition. `taskOutcomes` therefore declares no strategy at all, and a test says
-so, because a strategy there would promise a translation that can never happen.
-
-**The `workflowModel` key is not composed by the platform, it is written by Studio.** Nothing in
-`nuxeo-platform-document-routing` builds `wf.<lcfirst(name)>.<name>`; Studio writes it into the
-model's `dc:title` at generation time, and the bundle carrying it belongs to the Studio project,
-not to Web UI. Nuxeo's own test fixtures — `MainWF`, `ChildWF`, `myRoute` — carry a literal title
-instead, and the dataviz demo's `TravelExpenseValidation` names a task `wf.travelExpenses.create`,
-whose prefix does not even match its model. The convention is therefore observed on the two shipped
-models and guaranteed nowhere. That is why `translateWorkflowModel` falls back to
-`splitIdentifier`: an untranslated `ClaimReview` reads "Claim Review" rather than sitting next to
-"Parallel Document Review" as a bare identifier. Web UI has the same problem and does not solve it
-— `nuxeo-tasks-list.js:141` calls `i18n(task.workflowModelName)` on a value that is not a key.
-
-**`docType` and `docUUID` name the route or the task, never the business document.** On the real
-index `docType` only ever holds `DocumentRoute` or `RoutingTask`, so a "documents entering a
-workflow" widget is impossible from this view; it was designed, then dropped for that reason. The
-same fact kills the idea of a table linking back to Web UI: the planner forces `ecm:uuid` into
-`_source` (`query-planner.ts:320`), which the audit does not have, and `docUUID` would point at the
-route anyway.
-
-**Three traps in the field list.** `extended.actors` is a `keyword[]` on
-`afterWorkflowTaskReassigned` but a single string `"[bob, alice]"` on `afterWorkflowTaskCreated`,
-because a `LinkedHashSet` falls through to `toString()` (`LogEntryJsonWriter.java:187-203`) — never
-aggregate it across both events. `extended.taskActor` mixes `getActingUser()` and
-`getOriginatingUser()` depending on the event (`GraphRunner.java:139` against `:408`), so it is
-simply absent when nobody impersonates; `topTaskPerformers` reads `principalName` instead. And the
-dynamic template's `ignore_above: 256` drops a long `taskName` or variable from every aggregation,
-silently.
-
-**Neither duration field is in the mapping**, and the only dynamic template matches strings
-(`match_mapping_type: "string"` → `keyword`). The first document written therefore fixes the type
-for good: a JSON number gives `long`, a quoted number gives `keyword` and every `avg` fails until
-the index is rebuilt. This matters to anyone fabricating entries — see below.
-
-**Non-administrators see only the models they hold `DataVisualization` on**
-(`RoutingAuditRequestFilter.java:95-108`, permission declared in
-`document-routing-security-contrib.xml:9-11`). An empty permission set compiles to
-`terms: { "extended.modelName": [] }`, so zero hits rather than an error. The dashboard requires an
-administrator anyway, but a screenshot taken as somebody else will look broken for this reason.
-
-**The workflow data on the demo server is fabricated, and proves nothing about the platform.**
-`audit_wf` held twenty genuine entries: ten `afterWorkflowStarted` and ten
-`afterWorkflowTaskCreated`, all signed `Administrator`, all within 514 milliseconds of one another
-on 2026-09-18. Nothing had ever completed or been cancelled, so every duration widget rendered
-empty. 2173 entries covering 450 instances over 88 days were generated and bulk loaded straight
-into OpenSearch — the passthrough is read only and rejects any index it does not declare, so it
-cannot serve for this; OpenSearch is not published on a host port either, and is reached through
-`docker exec` on the `opensearch` container. The state before that load is kept in
-`nuxeo-audit-backup-20260919`, and fabricated entries all carry an `id` at or above 900000, which
-is how they can be removed again. The generated actors are `Josh`, `Julie`, `alan`, `johni` and
-`kate`: `test-ai` is the agent's own account, and `Administrator` was left out so that his ten
-genuine workflows do not put him at the top of a list he has no business leading. **A distribution
-or a daily curve read there reflects what was written, not how Nuxeo behaves.**
-
-**Three of the five models on that server exist in no repository.** Only
-`ParallelDocumentReview` and `SerialDocumentReview` are deployed; `RequestDownload`, `AdHoc` and
-`ClaimReview` live in the audit index and nowhere else. This works because the dashboard reads
-`audit_wf` and only `audit_wf` — it never checks that a model exists, and the filter builds its own
-list by aggregating `extended.modelName`. Two consequences worth knowing before a demo: filtering
-on "Claim Review" leads to no document anybody can open in Web UI, and the Started tile counts
-events rather than instances that exist. The three invented models name their tasks in plain words
-(`Assess Claim`, `Approve Download Request`) rather than with an i18n key, because a key nobody
-translates would render as `wf.claimReview.assessClaim.title` on screen. Their durations are
-deliberately spread apart — `RequestDownload` settles in hours, `ClaimReview` drags on for weeks —
-so that the duration histogram has more than one populated bucket.
-
-## Phase 4b: the Tasks dashboard
-
-Built and shipped, at `/tasks`, on the **repository** index. It exists because the obvious place
-for it does not work, and that is the first thing to know.
-
-**Overdue cannot be read from `audit_wf`.** `extended.dueDate` is declared only on the five events
-the injected `category: "Routing"` filter excludes — verified on the live index, where the ten
-entries carrying it are all `workflowTaskAssigned` of category `eventDocumentCategory`. The due
-date lives on the task *document*: `nt:dueDate`, indexed as a `date`, alongside `nt:actors`,
-`nt:name`, `nt:directive`, `nt:initiator`, `nt:processId` and `nt:type`.
-
-**"Overdue, workflow still running" versus "overdue, workflow finished" is a distinction with no
-content.** An open task cannot outlive its workflow: `DocumentRoutingWorkflowDoneListener` cancels
-the remaining tasks *in the very transaction* that sets the route to `done` — its declaration says
-`async="true"` but the class implements `EventListener`, so `EventListenerDescriptor.java:142-148`
-forces `isPostCommit = false` and the attribute is ignored. `GraphRunner.cancel` does the same on
-cancellation, node by node. The second bucket would always be zero. And on a *finished* task,
-"overdue" means nothing without comparing two fields: the `task` schema has no completion date at
-all (fourteen properties, none of them an end date), `dc:modified` stands in for it, and
-`nt:dueDate < dc:modified` needs a script — which `AggConfig` refuses, rightly.
-
-**A nightly job deletes finished workflows and all their tasks.** `workflowInstancesCleanup` runs
-at 23:59, selects routes in `done` or `canceled`, deletes them, and `DocumentRouteOrphanedListener`
-then removes every task carrying their `nt:processId` **whatever its state** — the query has no
-lifecycle clause. `nuxeo.routing.disable.cleanup.workflow.instances=true` keeps them; the line is
-commented out in the shipped `nuxeo.conf`, so the sweep is on by default. This is why the dashboard
-counts open tasks only, and says so in its `subtitle` rather than in a comment nobody reads. The
-README carries the full explanation under "Tasks live only as long as their workflow".
-
-**`nt:actors` holds prefixed identifiers**, `user:jdoe` or `group:sales` — the parameter is
-literally named `prefixedActorIds` in `CreateTaskUnrestricted`. Without stripping, the `user`
-strategy asks for `/api/v1/user/user:jdoe`, earns a 404 and shows the prefix. That would have hit
-every real server, not only this demo. `parsePrincipal` now splits it and routes a group to
-`/api/v1/group/{name}`, reading `grouplabel` **at the root** of the entity — `properties.grouplabel`
-is null when none was set. A failed lookup falls back to the bare name, never to the prefix.
-
-**But the field holds *both* forms, and that is native behaviour.** `nt:actors` has no resolver and
-no normalisation, so the platform stores verbatim what the node's expression produced. A node
-assigning `workflowInitiator` stores a bare name, because `DocumentRoutingTreePersister` writes
-`getActingUser()`; a node assigning a variable fed by Web UI's picker stores a prefixed one,
-because that widget carries `prefixed`. In `ParallelDocumentReview` the forms **alternate within
-one instance**: Task2556 "Choose Participants" and Task2169 "Consolidate" are bare
-(`workflowInitiator`), Task328d "Give Opinion" is prefixed (`WorkflowVariables["participants"]`).
-`SerialDocumentReview` does the same. And `TaskServiceImpl.java:539` rewrites the list **bare** on
-a reassignment, so a single task changes form over its life.
-
-The platform reconciles them at query time rather than at write time:
-`TaskActorsHelper.getTaskActors()` builds "prefixed and unprefixed names of the principal and all
-its groups", fed to `nt:actors/* IN ?` by six page providers — every "My tasks" screen queries
-both. Where it forgets to, it is wrong: `Workflow.GetOpenTasks` compares
-`task.getActors().contains(username)` on a raw string and silently returns nothing.
-
-`core/principal.ts` therefore carries three functions. `canonicalPrincipal` keys a user by its bare
-name and a group by its prefixed one — collapsing `group:sales` to `sales` would merge it with a
-user of that name, undoing the distinction the prefix exists for. `principalForms` mirrors
-`TaskActorsHelper`, groups included. The merge is driven by `labels === 'user'`, a no-op on a field
-that never carries a prefix such as `dc:creator`. **Only counts are added**: two averages recombine
-only with their weights, so a chart combining `labels: "user"` with a `metric` raises a plan error
-naming the reason rather than merging a figure that would be wrong. And `others` is computed
-against the number of buckets the server returned, never the merged list, since the `cardinality`
-counts raw values. Measured on the sandbox: filtering on `Josh` without this finds five of his six
-open tasks.
-
-**A task carries no workflow model name.** `nt:processName` looks like it should and does not: it
-receives the node's *notification template*, usually empty (`GraphRunner.java:394-397` against the
-signature in `TaskService.java:151-154`). Only `nt:processId` leads to the instance, so grouping
-overdue tasks by model would need a join. The platform itself reloads the route to get the name
-(`TaskWriter.java:110-130`).
-
-**Two traps when counting lateness.** A node with no `taskDueDateExpr` produces `nt:dueDate =
-now` (`GraphNodeImpl.java:708-712`), so its tasks are overdue a second after creation; the two
-shipped models set the expression, a Studio model need not. And `nt:dueDate` has no explicit entry
-in `opensearch1-doc-mapping.json`, so it relies on OpenSearch's dynamic date detection — verified
-`"type": "date"` on the live index before anything was built on it.
-
-**The dashboard carries no period filter**, deliberately: lateness is a present state, not a dated
-event, and a period would hide the oldest tasks, which are the ones worth seeing. It is the first
-shipped configuration without a `dateRange`, which is why `shipped-dashboards.spec.ts` now asserts
-the *count* of `extended_bounds` rather than their presence.
-
-**It is also the first real use of `DataTableComponent`**, kept and tested since phase 1. The
-overdue table exposed a genuine defect: a multivalued column resolved its labels through
-`String(value)`, so `nt:actors` became the key `user:jdoe,group:sales` and matched nothing. Both
-the runner and the cell renderer now work element by element, which benefits any multivalued
-column.
-
-## Phase 4c: reading an aggregate over unlike populations
-
-Asked for after the Workflows dashboard shipped, and it exposed a design flaw worth remembering:
-**an aggregate over a mixed population describes none of its members.** On the sandbox the five
-models span two orders of magnitude — `RequestDownload` settles in 0.1 day, `ClaimReview` takes 34
-— so the overall mean lands at ten days, which no model approaches, while the median says one day.
-
-Three answers, all shipped:
-
-- **`MetricConfig` gained `{ percentile: { field, percent } }`.** `percent: 50` is the median,
-  `percent: 90` a service level. `metricUndefinedWhenEmpty` marks it, like `avg`. Two traps:
-  `percentiles` answers a *map* under `values`, keyed as OpenSearch formats it (`"50.0"`, but
-  `"99.9"` for a fractional one), so `result-mapper` reads the single entry rather than recomposing
-  the key; and it is multi-valued, so a `terms` ordered by it needs `metric.50` in the path, not
-  `metric` — `compileTermsOrder` now takes the metric for that reason alone. Verified against the
-  passthrough, which forwards the order untouched.
-- **A breakdown beside every mixed aggregate.** `durationByModel` and `slowestSteps` are `terms`
-  carrying the same metric, ordered `metric_desc`. The tile keeps the headline figure and its hint
-  points at the breakdown.
-- **The filter bar names what it filters, and stays on screen.** It used to read "1 models", which
-  tells a reader nothing when the answer is "Claim Review"; past two values it still counts them.
-  The labels come from `LabelService` under the member's own strategy, so `workflowModel` costs no
-  request. A persisted selection is now resolved at load time, since otherwise the bar showed the
-  raw value until somebody happened to open the dialog. And the bar is `position: sticky` — the
-  scroll container is `<main class="overflow-y-auto">`, so nothing else had to move.
-
-**Median and mean coincide per model on this server, and that proves nothing.** The durations were
-generated with a uniform draw, so every model is symmetric by construction. Real workflow durations
-are not; do not conclude from these figures that a per-model median is useless.
-
-## Phase 4d: filtering on a field as wide as the user base
-
-A checkbox list works for eighteen document types and collapses for three hundred claim adjusters.
-The exploration found three defects, not one: the search box inside the dialog filters **the two
-hundred values already downloaded**, so a 201st user is unreachable whatever is typed; resolving
-the labels of two hundred principals costs **201 requests**, six at a time, so thirty-four
-round trips in series; and `Select all` after a search used to tick the whole downloaded list
-rather than the five rows on screen.
-
-`lookup: 'user'` on a member is the opt-in. It ranks by volume rather than by label, cuts `size`
-to twenty — which is what brings the 201 requests down to 21 — and sends typing to
-`UserGroup.Suggestion` rather than to the local list. That operation is what `nuxeo-user-suggestion`
-calls: three characters minimum, 300 ms debounce, previous request aborted, users and groups in one
-call, `displayLabel` composed server side, and `prefixed_id` handed back — the very form `nt:actors`
-stores, so a picked value drops into the selection with nothing to convert.
-
-Four things are worth remembering before touching this again:
-
-- **The index and the directory answer different questions.** `UserGroup.Suggestion` knows nothing
-  of document counts, nor of principals present in the index but absent from the directory —
-  deleted accounts, `system` — which `facet-values.service` deliberately keeps with a zero count.
-  Neither list replaces the other, which is why both are shown.
-- **A full page is never collapsed to `all` under `lookup`.** Holding every row of a top N says
-  nothing about holding every value; collapsing would silently widen the filter to people never
-  shown. `emit()` guards it.
-- **Selected values are pinned first**, so clearing the search box does not hide what was just
-  ticked, and a persisted selection stays visible even when its owner left the busiest twenty.
-- **`total` counts raw values, before any merge.** So on a field carrying both forms of a
-  principal it can exceed the number of rows shown without anything actually missing. The line
-  only appears when `sum_other_doc_count` proves something was dropped, which bounds the error.
-
-`facet-values.service` now emits the `cardinality` sibling the widget planner has always emitted
-and it never did — hence "47 assignees in all, the 20 busiest are listed" instead of "More values
-exist than could be listed. Raise \"size\" in the dashboard configuration", a sentence addressed to
-an administrator rather than to the reader.
+- **A plain sum answers a different question.** A version holds its own copy of the blob while the
+  store keeps one object per digest, so a document versioned ten times without changing its file is
+  counted eleven times — an order of magnitude, not an imprecision.
+- **The community cookbook's method does not scale.** It groups by `file:content.digest` with
+  `"size": 1000000000` and adds the buckets with `sum_bucket`; past `search.max_buckets`, 65,536 by
+  default and set nowhere in the LTS 2025 tree, the request fails outright.
+- **`composite` does not rescue it.** Several `sources` produce a cartesian product rather than a
+  union, so one pagination per blob field is needed; without an index sorted on the digest every
+  page rescans the filtered set; deduplicating across fields means holding every digest in browser
+  memory; renditions, the heaviest on a media repository, are `index: false`; and the passthrough
+  has a 20 s socket timeout with no retry.
+- **The road to take if it comes back.** `DELETE /api/v1/management/blobs/orphaned?dryRun=true`
+  starts a bulk action; polling `GET /api/v1/management/bulk/{commandId}` yields `result.totalSize`
+  and `result.deletedSize`. Deduplicated by construction, exhaustive without knowing a schema, and
+  `dryRun` deletes nothing. It needs the `queryBlobKeys` capability, hence MongoDB — VCS answers
+  501 — which `GET /api/v1/capabilities` reports without a side effect. Above all **the figure
+  ignores the date range and the type filter**: it is a storage truth, not a documentary one, so it
+  needs a card of its own outside the filtered grid, never a tile among the others.
+- Two facts worth keeping: `GET /api/v1/config/schemas` types every field in one call, a blob being
+  literally `"blob"` or `"blob[]"`; and `ecm:blobKeys` is **not** indexed, so there is no shortcut
+  there. With `nuxeo-quota` installed, `dss:innerSize`, `dss:sizeVersions` and `dss:sizeTrash` are
+  indexed `long` fields a plain `sum` can aggregate under the dashboard filters — not deduplicated,
+  but the only route to a volume without a heavy operation.
 
 ## Style
+
 Comments explain *why*, never *what*. Prefer no comment to one that restates the code, and fix a
-comment whose justification is wrong — one claimed OpenSearch flattens blobs, which it does not.
+comment whose justification is wrong — one claimed OpenSearch flattens blobs, which it does not,
+and another claimed `principalName` protected against impersonation, which it does not either.
 
 No emoji. Four-space indentation does not apply here; Prettier owns formatting.
 
@@ -517,36 +222,16 @@ Answer the user in French, using *vous*.
 
 ## Where things stand
 
-Phase 4 is complete: build green, 283 tests, package produced. Content, Users, Workflows and
-Diagnostics are live; Governance is the last placeholder, and it names its missing prerequisite.
+Five live screens — Content, Users, Workflows, Tasks, Diagnostics — plus Governance, which is
+still a placeholder naming its missing prerequisite. Build green, 348 tests over 27 files.
+
 The work is pushed to `github.com/ThibArg/nuxeo-labs-repository-dashboard`, a public backup until
-the plugin is ready to be forked into `nuxeo-sandbox`; the README carries a warning saying so.
+the plugin is ready to be forked into `nuxeo-sandbox`; the README carries a warning saying so, and
+`AGENTS.md` is deliberately **not** gitignored in this repository, so keep it free of credentials.
 
-Phase 4b added the Tasks dashboard: 348 tests, five live screens. Read "Phase 4b" above before
-touching anything about due dates — the short version is that `audit_wf` cannot answer the question
-and that a nightly job truncates the corpus to workflows still alive.
-
-Three things landed outside `workflows.json` and are worth knowing about, because they are not
-workflow specific:
-
-- **`LabelStrategy` gained `message` and `workflowModel`.** Both read Web UI's bundle, like
-  `doctype` and `lifecycle`. `message` falls back to the raw key; `workflowModel` falls back to the
-  words of the identifier, for the reason given in the phase 4 section.
-- **An average over an empty set now renders a dash, not a zero.** `metricUndefinedWhenEmpty`
-  (`agg-compiler.ts`) marks `avg`, `min`, `max` and `percentile`; the plan carries the flag and
-  `result-mapper` turns their `null` into `NaN`, which every formatter already renders as `—`. A
-  count, a cardinality and a sum still answer zero, because zero is their correct value.
-- **`ChartWidgetStubComponent` now renders resolved bucket labels.** It swallowed them before, so a
-  broken `LabelStrategy` passed in silence — the same blind spot the hint had. A chart test can now
-  observe what it claims to verify.
-
-**Phase 5, the Governance dashboard, is what comes next.** The record and legal hold tiles are
-already out of Content, so it starts from a blank page rather than from a move. Then phase 2
-(cross filtering on bucket click, active filter chips, path scope, CSV and PNG export) and phase 3
-(configuration editor with a field picker fed by `/api/v1/config/schemas`).
-
-The `DataTableComponent` is no longer dead configuration: `tasks.json` uses it for the overdue
-table, which is what surfaced the multivalued label defect. Governance may well need it too.
-
-Blob size tiles were asked for, investigated and set aside; the findings are recorded above, under
-"Blob volumetry, set aside". Read that section before answering any question about blob volume.
+**Phase 5, the Governance dashboard, is next.** The record and legal hold tiles are already out of
+`content.json`, so it starts from a blank page rather than from a move; it may well need
+`DataTableComponent`, which `tasks.json` already exercises. Then phase 2 (cross filtering on bucket
+click, active filter chips, path scope, CSV and PNG export) and phase 3 (configuration editor with
+a field picker fed by `/api/v1/config/schemas`). The README's status banner still says "phase 4"
+and lists only three dashboards; it predates 4b–4d.
