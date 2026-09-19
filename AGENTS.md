@@ -21,7 +21,7 @@ Angular 22:
 ```bash
 cd nuxeo-labs-repository-dashboard-web
 export PATH="$PWD/node:$PATH"
-npm test                                      # 27 files, vitest + jsdom
+npm test                                      # 28 files, vitest + jsdom
 npm test -- --watch=false --include src/app/engine/agg-compiler.spec.ts   # one file
 npm test -- --watch=false --filter 'never emits a .keyword'               # one behaviour
 npm run build                                 # this is the typecheck
@@ -34,6 +34,13 @@ npm start                                     # :4200, proxying /nuxeo to the se
   options, not vitest flags.
 - **There is no linter and no `typecheck` script.** `npm run build` compiles with `strict`,
   `noUnusedLocals` and `strictTemplates`, and is the only thing that type-checks the application.
+- **`npm run build` produces nothing deployable.** It fills `dist/`, which nothing installs: the
+  `nuxeo.war/dashboard/` tree inside the jar is written by `mvn install` alone. A change that
+  compiles is therefore not a change that ships, and the symptom of forgetting is the *previous*
+  screen rather than an error — the Governance page was reported empty on a server whose jar
+  predated its configuration file by two hours, still serving the placeholder it replaced. Trust
+  the artefact rather than the console:
+  `unzip -l nuxeo-labs-repository-dashboard-web/target/*.jar | grep assets/dashboards`.
 - **Nothing in the Maven build runs `format:check`**, so a badly formatted commit still goes green.
 - `npm start` needs `.env` (`cp .env.example .env`). It is gitignored; never commit credentials.
 - `src/proxy.conf.mjs` is outside the Prettier glob, which only covers `src/**/*.{ts,html,css,json}`.
