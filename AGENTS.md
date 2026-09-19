@@ -142,6 +142,14 @@ Two paths the current test dataset cannot exercise, so do not read a passing run
 - **"N targeting trashed"** on proxies — it needs a proxy on a *live* document that is then
   trashed. Proxies on versions inherit the version's flag, which stays false.
 
+**The audit index of the sandbox is partly fabricated, so it proves nothing about the platform.**
+It was rewritten to make the Users dashboard worth looking at: on `documentCreated` and
+`documentModified`, `principalName` and `eventDate` were taken from the target document rather than
+from the action that really happened, and the login events were generated outright. A distribution
+or a daily curve observed there reflects what we wrote, not how Nuxeo behaves — inferring the
+second from the first is the same circularity this section warns against. The state before that
+rewrite is kept in the `nuxeo-audit-backup-20260918` index.
+
 ## Design decisions, and why
 
 Do not undo these without knowing what they were for.
