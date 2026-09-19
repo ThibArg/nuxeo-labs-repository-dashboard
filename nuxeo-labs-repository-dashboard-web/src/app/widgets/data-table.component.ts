@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { ColumnConfig, TableWidgetConfig } from '../config/dashboard-config.model';
 import { NuxeoHttpService } from '../core/nuxeo-http.service';
+import { downloadCsv, safeFilename } from '../core/export';
 import { formatCell, readSource } from '../core/format';
 import { WidgetData, isEmptyData } from '../engine/result-mapper';
 import { WidgetHostComponent } from './widget-host.component';
@@ -28,6 +29,8 @@ interface RenderedRow {
       [loading]="loading()"
       [error]="error()"
       [empty]="empty()"
+      [canExportCsv]="true"
+      (exportCsv)="onExportCsv()"
     >
       <div class="-mx-2 overflow-x-auto">
         <table class="w-full border-collapse text-sm">
@@ -85,6 +88,16 @@ export class DataTableComponent {
     }
     return data.total === 1 ? '1 document' : `${data.total.toLocaleString()} documents`;
   });
+
+  /* The rows on screen, not the total the badge names: nothing else has been fetched. */
+  protected onExportCsv(): void {
+    const columns = this.config().columns;
+    const rows: unknown[][] = [columns.map((column) => column.label)];
+    for (const row of this.rows()) {
+      rows.push(row.cells.map((cell) => cell.text));
+    }
+    downloadCsv(`${safeFilename(this.config().label)}.csv`, rows);
+  }
 
   readonly rows = computed<RenderedRow[]>(() => {
     const data = this.data();

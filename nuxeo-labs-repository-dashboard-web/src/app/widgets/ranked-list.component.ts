@@ -1,9 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { ChartWidgetConfig, pickableField } from '../config/dashboard-config.model';
+import { downloadCsv, safeFilename } from '../core/export';
 import { formatNumber } from '../core/format';
-import { WidgetData, isEmptyData } from '../engine/result-mapper';
+import { DataBucket, WidgetData, isEmptyData } from '../engine/result-mapper';
 import { BucketClick } from './chart-widget.component';
 import { chartPalette } from './chart-options';
+import { bucketRows } from './widget-export';
 import { truncationDetail, truncationFooter } from './truncation';
 import { WidgetHostComponent } from './widget-host.component';
 
@@ -37,6 +39,8 @@ interface RankedEntry {
       [empty]="empty()"
       [footer]="footer()"
       [footerTitle]="footerTitle()"
+      [canExportCsv]="true"
+      (exportCsv)="onExportCsv()"
     >
       <ul class="flex flex-col gap-3">
         @for (entry of entries(); track entry.key) {
@@ -84,6 +88,14 @@ export class RankedListComponent {
 
   protected readonly pickable = computed(() => pickableField(this.config()) !== null);
 
+  /* No PNG here: a ranked list is plain DOM, and there is no canvas to ask one of. */
+  protected onExportCsv(): void {
+    downloadCsv(
+      `${safeFilename(this.config().label)}.csv`,
+      bucketRows(this.buckets(), this.labels()),
+    );
+  }
+
   protected pick(entry: RankedEntry): void {
     const field = pickableField(this.config());
     if (field) {
@@ -96,14 +108,19 @@ export class RankedListComponent {
     }
   }
 
-  readonly entries = computed<RankedEntry[]>(() => {
+  /** The buckets actually rendered, `limit` applied, which is also what an export writes. */
+  private readonly buckets = computed<DataBucket[]>(() => {
     const data = this.data();
     if (!data || data.kind !== 'buckets') {
       return [];
     }
+    const limit = this.config().limit;
+    return limit ? data.buckets.slice(0, limit) : data.buckets;
+  });
 
+  readonly entries = computed<RankedEntry[]>(() => {
     const config = this.config();
-    const buckets = config.limit ? data.buckets.slice(0, config.limit) : data.buckets;
+    const buckets = this.buckets();
     const palette = chartPalette();
     // A single dominant bucket must not flatten every other bar to nothing visible.
     const largest = Math.max(...buckets.map((bucket) => bucket.value), 0);

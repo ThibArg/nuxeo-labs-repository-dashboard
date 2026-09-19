@@ -1,8 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ECharts } from 'echarts/core';
 import { NgxEchartsDirective } from 'ngx-echarts';
 import { ChartWidgetConfig, LabelStrategy, pickableField } from '../config/dashboard-config.model';
+import { downloadCsv, downloadDataUrl, safeFilename } from '../core/export';
 import { DataBucket, WidgetData, isEmptyData } from '../engine/result-mapper';
 import { bucketIndexAt, buildChartOption } from './chart-options';
+import { bucketRows } from './widget-export';
 import { truncationDetail, truncationFooter } from './truncation';
 import { WidgetHostComponent } from './widget-host.component';
 
@@ -30,6 +33,10 @@ export interface BucketClick {
       [empty]="empty()"
       [footer]="footer()"
       [footerTitle]="footerTitle()"
+      [canExportCsv]="true"
+      [canExportPng]="true"
+      (exportCsv)="onExportCsv()"
+      (exportPng)="onExportPng()"
     >
       <div
         echarts
@@ -37,6 +44,7 @@ export interface BucketClick {
         [autoResize]="true"
         class="h-64 w-full"
         [class.cursor-pointer]="pickable()"
+        (chartInit)="chart = $event"
         (chartClick)="onChartClick($event)"
       ></div>
     </nxd-widget-host>
@@ -53,6 +61,9 @@ export class ChartWidgetComponent {
   readonly error = input<string | null>(null);
 
   readonly picked = output<BucketClick>();
+
+  /** Held so that a PNG can be asked of the very instance on screen. */
+  protected chart: ECharts | null = null;
 
   readonly empty = computed(() => isEmptyData(this.data()));
 
@@ -81,6 +92,22 @@ export class ChartWidgetComponent {
         label: this.labels().get(bucket.key) ?? bucket.key,
         labels: this.config().labels,
       });
+    }
+  }
+
+  protected onExportCsv(): void {
+    const label = this.config().label;
+    downloadCsv(`${safeFilename(label)}.csv`, bucketRows(this.buckets(), this.labels()));
+  }
+
+  /*
+   * An explicit background, because ECharts renders onto a transparent canvas. A chart pasted into
+   * a document would otherwise show whatever is behind it, which on a dark slide is nothing at all.
+   */
+  protected onExportPng(): void {
+    const url = this.chart?.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#ffffff' });
+    if (url) {
+      downloadDataUrl(`${safeFilename(this.config().label)}.png`, url);
     }
   }
 

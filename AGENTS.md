@@ -21,7 +21,7 @@ Angular 22:
 ```bash
 cd nuxeo-labs-repository-dashboard-web
 export PATH="$PWD/node:$PATH"
-npm test                                      # 31 files, vitest + jsdom
+npm test                                      # 34 files, vitest + jsdom
 npm test -- --watch=false --include src/app/engine/agg-compiler.spec.ts   # one file
 npm test -- --watch=false --filter 'never emits a .keyword'               # one behaviour
 npm run build                                 # this is the typecheck
@@ -198,6 +198,12 @@ it now carries six against two, which merge to eight. Every count in this file i
   a `terms` ordered by it needs `metric.50` in the order path, not `metric`. **That ordering path
   is the one thing no shipped configuration exercises**: all seven `terms` of `workflows.json` sort
   by `avg`, so it has never been confronted with a live index.
+- **`Blob.text()` strips a byte order mark**, the UTF-8 decode algorithm removing one by
+  definition, so no assertion on the text of an exported CSV can ever see it. The mark is what
+  keeps Excel from reading UTF-8 as the local encoding, so it is worth proving: read the bytes.
+- **`ChartWidgetComponent` cannot be rendered under jsdom**, ECharts needing a canvas, so its CSV
+  rows are built by `bucketRows` and tested there while `getDataURL` is exercised nowhere. That
+  call, and the white background given to the PNG, have never run outside a real browser.
 - **`link: "document"` and `labels: "boolean"` ship with no example either.** Both had one, in the
   Governance record table, and lost it when that widget was dropped. They stay covered by
   `data-table.component.spec.ts` and `label.service.spec.ts`, so this is not a gap in the suite —
@@ -278,8 +284,8 @@ Answer the user in French, using *vous*.
 
 ## Where things stand
 
-Six live screens — Content, Users, Workflows, Tasks, Governance, Diagnostics. Build green, 402
-tests over 31 files. `UpcomingPageComponent` is gone with the last placeholder; the requirement
+Six live screens — Content, Users, Workflows, Tasks, Governance, Diagnostics. Build green, 421
+tests over 34 files. `UpcomingPageComponent` is gone with the last placeholder; the requirement
 notice it used to carry is now tested where it lives, in `requirement-notice.component.spec.ts`.
 
 The work is pushed to `github.com/ThibArg/nuxeo-labs-repository-dashboard`, a public backup until

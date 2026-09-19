@@ -713,8 +713,9 @@ describe('DashboardPageComponent', () => {
     it('searches both forms of a principal picked from a ranked list', async () => {
       const fixture = await render();
 
+      // Scoped to the list itself: the card header now carries an export button too.
       const rows = (fixture.nativeElement as HTMLElement).querySelectorAll(
-        'nxd-ranked-list button',
+        'nxd-ranked-list ul button',
       );
       (rows[0] as HTMLButtonElement).click();
       await settle(fixture);

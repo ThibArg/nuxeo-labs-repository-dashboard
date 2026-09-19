@@ -335,6 +335,29 @@ choosing a place to read figures about that is the right trade. The trail double
 up, and the scope is not persisted: a place is the filter a reader is most likely to forget having
 set.
 
+### Taking the figures away
+
+Every widget carrying data offers a **CSV** of exactly what it shows, and an ECharts one a **PNG**
+besides. Both are discreet until the card is hovered: an export is a rare gesture, and a row of
+icons competing with the figures would make every widget look like a toolbar. Neither is offered
+while a widget is loading, failing or empty, a file describing nothing being worse than no file.
+
+The CSV carries `key`, `label`, `value` and `documents`. The raw key sits beside the resolved label
+because the label is what a reader recognises and the key is what a query would use. Values are
+written as **numbers rather than as they were displayed**: a spreadsheet renders 1258291 as 1.2 MB
+and cannot turn "1.2 MB" back into a number. `documents` differs from `value` on any widget
+carrying a metric, where the value is an average or a sum and the count says over how many
+documents it was taken.
+
+Two details that decide whether the file opens correctly. It begins with a **byte order mark**,
+without which Excel reads UTF-8 as the local single byte encoding and every accent and em dash
+becomes mojibake. And rows end with `\r\n`, per RFC 4180, which is what keeps older Excel builds
+from reading the whole file as one line.
+
+A ranked list exports no PNG: it is plain DOM, and there is no canvas to ask one of. The PNG that
+a chart does write is given an explicit white background, ECharts rendering onto a transparent one
+— a chart pasted into a document would otherwise show whatever sits behind it.
+
 ### Persistence
 
 Selections are stored in `localStorage`, per dashboard, under `nxd.filters.<dashboard>.<group>`.
@@ -846,7 +869,7 @@ still appear in an audit index, through `Framework.doPrivileged` with no argumen
 | 1e | Period with explicit inclusive bounds, and the Users dashboard on the audit index | done |
 | 2 | Cross filtering on bucket click, with active filter chips | done |
 | 2b | Path scope | done |
-| 2c | CSV and PNG export | |
+| 2c | CSV and PNG export | done |
 | 3 | Configuration editor, with a field picker fed by `/api/v1/config/schemas` | |
 | 4 | Workflows dashboard | done |
 | 4b | Tasks dashboard, on open tasks and due dates | done |

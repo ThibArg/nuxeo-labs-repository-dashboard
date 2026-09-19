@@ -130,6 +130,35 @@ body {
     cursor: default;
   }
 
+  /*
+   * Deliberately faint until the card is hovered: an export is a rare gesture, and a row of icons
+   * competing with the figures would make every widget look like a toolbar.
+   */
+  .nxd-icon-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.375rem;
+    padding: 0.25rem;
+    color: var(--color-ink-subtle);
+    cursor: pointer;
+    opacity: 0;
+    transition:
+      opacity 120ms ease,
+      color 120ms ease,
+      background-color 120ms ease;
+  }
+
+  .nxd-card:hover .nxd-icon-button,
+  .nxd-icon-button:focus-visible {
+    opacity: 1;
+  }
+
+  .nxd-icon-button:hover {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+  }
+
   .nxd-date-input {
     border: 1px solid var(--color-border);
     border-radius: 0.5rem;
