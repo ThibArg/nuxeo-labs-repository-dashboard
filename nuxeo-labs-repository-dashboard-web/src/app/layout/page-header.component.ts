@@ -1,8 +1,10 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
 /**
- * Title bar of a dashboard page, with the Refresh / Export actions of the reference layout.
- * Export stays disabled until the export pipeline lands in a later phase.
+ * Title bar of a dashboard page.
+ *
+ * Export used to sit here, disabled, waiting for a pipeline. It landed per widget instead, only
+ * a widget knowing what it is showing, so the slot carries the configuration editor now.
  */
 @Component({
   selector: 'nxd-page-header',
@@ -38,26 +40,34 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
           Refresh
         </button>
 
-        <button
-          type="button"
-          class="nxd-toolbar-button"
-          disabled
-          title="Available in a later phase"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            class="h-4 w-4"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
+        @if (configurable()) {
+          <button
+            type="button"
+            class="nxd-toolbar-button"
+            [class.border-accent]="overridden()"
+            [class.text-accent]="overridden()"
+            [title]="
+              overridden() ? 'This dashboard is edited in this browser' : 'Edit this dashboard'
+            "
+            (click)="configure.emit()"
           >
-            <path d="M12 3v12m0 0 4-4m-4 4-4-4M4 19h16" />
-          </svg>
-          Export
-        </button>
+            <svg
+              viewBox="0 0 24 24"
+              class="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M4 7h10M18 7h2M4 17h2M10 17h10" />
+              <circle cx="16" cy="7" r="2" />
+              <circle cx="8" cy="17" r="2" />
+            </svg>
+            Configure
+          </button>
+        }
       </div>
     </header>
   `,
@@ -66,6 +76,11 @@ export class PageHeaderComponent {
   readonly title = input.required<string>();
   readonly subtitle = input<string | null>(null);
   readonly busy = input(false);
+  /** False on a page with no configuration to edit, such as Diagnostics. */
+  readonly configurable = input(false);
+  /** True when an administrator's edit is in force, which the button says rather than hides. */
+  readonly overridden = input(false);
 
   readonly refresh = output<void>();
+  readonly configure = output<void>();
 }

@@ -29,11 +29,13 @@ import { LabelService } from '../core/label.service';
 import { DashboardRunner } from '../engine/dashboard-runner.service';
 import { FacetStorageService } from '../engine/facet-storage.service';
 import { FacetValuesService, GroupValues } from '../engine/facet-values.service';
+import { DashboardOverrideService, validateConfig } from '../engine/dashboard-override.service';
 import { Container, PathBrowserService } from '../engine/path-browser.service';
 import { DashboardGridComponent } from '../layout/dashboard-grid.component';
 import { DateRangePickerComponent } from '../layout/date-range-picker.component';
 import { FacetGroupButtonComponent } from '../layout/facet-group-button.component';
 import { FacetGroupDialogComponent } from '../layout/facet-group-dialog.component';
+import { ConfigEditorComponent } from '../layout/config-editor.component';
 import { FilterChipsComponent } from '../layout/filter-chips.component';
 import { PathScopePickerComponent } from '../layout/path-scope-picker.component';
 import { PageHeaderComponent } from '../layout/page-header.component';
@@ -55,6 +57,7 @@ type GroupLabels = Map<string, Map<string, string>>;
 @Component({
   selector: 'nxd-dashboard-page',
   imports: [
+    ConfigEditorComponent,
     DashboardGridComponent,
     DateRangePickerComponent,
     FacetGroupButtonComponent,
@@ -71,7 +74,21 @@ type GroupLabels = Map<string, Map<string, string>>;
       [title]="config()?.label ?? 'Dashboard'"
       [subtitle]="subtitle()"
       [busy]="runner.loading()"
+      [configurable]="!!config()"
+      [overridden]="overridden()"
       (refresh)="reload()"
+      (configure)="openEditor()"
+    />
+
+    <nxd-config-editor
+      [source]="editorSource()"
+      [open]="editorOpen()"
+      [overridden]="overridden()"
+      [problems]="editorProblems()"
+      (edited)="validateDraft($event)"
+      (saved)="saveConfig($event)"
+      (reverted)="revertConfig()"
+      (closed)="editorOpen.set(false)"
     />
 
     <section class="px-8 pb-8">
@@ -182,6 +199,7 @@ export class DashboardPageComponent {
   private readonly configs = inject(DashboardConfigService);
   private readonly facetValues = inject(FacetValuesService);
   private readonly pathBrowser = inject(PathBrowserService);
+  private readonly overrides = inject(DashboardOverrideService);
   private readonly storage = inject(FacetStorageService);
   private readonly labelService = inject(LabelService);
   readonly runner = inject(DashboardRunner);
@@ -203,6 +221,11 @@ export class DashboardPageComponent {
   readonly browsedPath = signal(DEFAULT_PATH_ROOT);
   readonly containers = signal<Container[]>([]);
   readonly browsing = signal(false);
+
+  readonly editorOpen = signal(false);
+  readonly editorSource = signal('');
+  readonly editorProblems = signal<string[]>([]);
+  readonly overridden = signal(false);
   private readonly values = signal<Map<string, GroupValues>>(new Map());
   private readonly labels = signal<Map<string, GroupLabels>>(new Map());
 
@@ -289,6 +312,38 @@ export class DashboardPageComponent {
     this.configs.invalidate(this.dashboardId());
     this.facetValues.invalidate();
     void this.loadConfig(this.dashboardId());
+  }
+
+  /** Opens on what is in force, pretty printed, whether that is an edit or what ships. */
+  openEditor(): void {
+    const config = this.config();
+    if (!config) {
+      return;
+    }
+    this.editorSource.set(
+      this.overrides.read(this.dashboardId()) ?? JSON.stringify(config, null, 2),
+    );
+    this.editorProblems.set([]);
+    this.editorOpen.set(true);
+  }
+
+  validateDraft(json: string): void {
+    this.editorProblems.set(validateConfig(json, this.dashboardId()).problems);
+  }
+
+  saveConfig(json: string): void {
+    if (validateConfig(json, this.dashboardId()).problems.length) {
+      return;
+    }
+    this.overrides.write(this.dashboardId(), json);
+    this.editorOpen.set(false);
+    this.reload();
+  }
+
+  revertConfig(): void {
+    this.overrides.clear(this.dashboardId());
+    this.editorOpen.set(false);
+    this.reload();
   }
 
   /**
@@ -421,6 +476,7 @@ export class DashboardPageComponent {
     try {
       const config = await this.configs.load(id);
       this.config.set(config);
+      this.overridden.set(this.configs.isOverridden(id));
       this.filters.set(this.restoreFilters(id, config));
       await this.runCurrent();
       /*

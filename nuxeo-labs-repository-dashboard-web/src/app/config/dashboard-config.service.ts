@@ -1,26 +1,44 @@
 import { Injectable, inject } from '@angular/core';
 import { DOCUMENT } from '@angular/common';
+import { DashboardOverrideService, validateConfig } from '../engine/dashboard-override.service';
 import { DashboardConfig } from './dashboard-config.model';
 
 /**
- * Loads dashboard configurations.
+ * Loads dashboard configurations, an administrator's edit taking precedence over the shipped one.
  *
- * For now they are static assets shipped with the bundle. The resolution order is already in
- * place so that a later phase can let an administrator override a dashboard at runtime by storing
- * JSON in a Nuxeo document, without changing any caller.
+ * The override lives in `localStorage` today; the resolution happens here so that moving it into a
+ * Nuxeo document later changes nothing for any caller.
+ *
+ * An override that no longer compiles is **ignored rather than rendered broken**. A configuration
+ * can stop working without being touched — a widget may name a field a later Studio change
+ * removed — and a dashboard that silently falls back to what ships is far better than a column of
+ * errors nobody can escape from. The editor is where the reason is shown.
  */
 @Injectable({ providedIn: 'root' })
 export class DashboardConfigService {
   private readonly document = inject(DOCUMENT);
+  private readonly overrides = inject(DashboardOverrideService);
   private readonly cache = new Map<string, Promise<DashboardConfig>>();
 
   load(id: string): Promise<DashboardConfig> {
     let pending = this.cache.get(id);
     if (!pending) {
-      pending = this.fetchBundled(id);
+      pending = this.resolve(id);
       this.cache.set(id, pending);
     }
     return pending;
+  }
+
+  /** True when the page is showing an administrator's edit rather than what ships. */
+  isOverridden(id: string): boolean {
+    const raw = this.overrides.read(id);
+    return raw !== null && validateConfig(raw, id).config !== null;
+  }
+
+  private async resolve(id: string): Promise<DashboardConfig> {
+    const raw = this.overrides.read(id);
+    const edited = raw === null ? null : validateConfig(raw, id).config;
+    return edited ?? this.fetchBundled(id);
   }
 
   /** Drops the cache so that a refresh picks up an edited configuration. */

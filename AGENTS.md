@@ -21,7 +21,7 @@ Angular 22:
 ```bash
 cd nuxeo-labs-repository-dashboard-web
 export PATH="$PWD/node:$PATH"
-npm test                                      # 34 files, vitest + jsdom
+npm test                                      # 35 files, vitest + jsdom
 npm test -- --watch=false --include src/app/engine/agg-compiler.spec.ts   # one file
 npm test -- --watch=false --filter 'never emits a .keyword'               # one behaviour
 npm run build                                 # this is the typecheck
@@ -241,6 +241,8 @@ about the choices behind them.
 | Picks are not persisted, group selections are | A group is a stated preference with an explicit Apply; a pick is a gesture made while reading a chart. Restoring one a week later, over figures that have moved on, is noise rather than context |
 | Chips render picks only | A group's selection is already named by its own button, which is also where it is edited. A second rendering would be two places to reconcile and two to keep in sync; a pick has no button, so without a chip it could be neither seen nor undone |
 | The container picker reads the index, not `@children` | `@children` returns every child whatever its type, so finding four folders under ten thousand files means paginating through the files. `ecm:mixinType: Folderish` asks the question directly, and the dashboard already is a search client |
+| The configuration editor is a text area, not a form | The grammar is already a closed union in the model; a form would be a second description of it, drifting the first time a widget type is added. Validation runs the real planner, so editor and dashboard cannot disagree |
+| An override that stops compiling is ignored, not rendered | A configuration can break without being touched, a field having gone away. Falling back to what ships is still correct; a column of errors with no way out is not |
 | A path scope is not persisted either | It is the filter a reader is most likely to forget having set, and the one whose figures look perfectly ordinary while describing a corner of the repository |
 
 ## Blob volumetry, set aside
@@ -284,17 +286,19 @@ Answer the user in French, using *vous*.
 
 ## Where things stand
 
-Six live screens — Content, Users, Workflows, Tasks, Governance, Diagnostics. Build green, 421
-tests over 34 files. `UpcomingPageComponent` is gone with the last placeholder; the requirement
+Six live screens — Content, Users, Workflows, Tasks, Governance, Diagnostics. Build green, 441
+tests over 35 files. `UpcomingPageComponent` is gone with the last placeholder; the requirement
 notice it used to carry is now tested where it lives, in `requirement-notice.component.spec.ts`.
 
 The work is pushed to `github.com/ThibArg/nuxeo-labs-repository-dashboard`, a public backup until
 the plugin is ready to be forked into `nuxeo-sandbox`; the README carries a warning saying so, and
 `AGENTS.md` is deliberately **not** gitignored in this repository, so keep it free of credentials.
 
-**Phase 5 shipped, so phase 2 is next** (cross filtering on bucket click, active filter chips,
-path scope, CSV and PNG export), then phase 3 (configuration editor with a field picker fed by
-`/api/v1/config/schemas`).
+**Phases 2 and 3 shipped.** What is left of the roadmap is the field picker that would feed the
+configuration editor from `/api/v1/config/schemas` — 91 schemas, whose fields are `string`,
+`string[]`, `boolean`, `date`, `long`, `double`, `blob` or complex, and which would have to carry
+the mapping rules the README lists: no `.keyword`, a dot for a complex property, `dc:title`
+readable but not aggregatable.
 
 `governance.json` reads the repository index under a `baseFilter` of live, untrashed,
 non-versioned, non-proxy documents. That last pair is near-tautological and deliberately kept: a

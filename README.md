@@ -366,6 +366,31 @@ discards the stale value rather than filtering on the wrong dimension. `all` is 
 a document type created later is included automatically instead of being excluded by a snapshot of
 today's list.
 
+## Editing a dashboard
+
+**Configure**, in the title bar, opens the JSON the page is described by. Saving re-renders it
+immediately; **Use the shipped one** discards the edit for good.
+
+A text area rather than a form, deliberately. Every shape a configuration accepts is already a
+closed union in `dashboard-config.model.ts`, so a form would be a second description of the same
+grammar — one that drifts the first time a widget type is added. What the editor owes instead is a
+refusal to save anything that cannot render, and a reason for it. **Validation runs the very
+planner that renders the page**, so the editor and the dashboard cannot disagree: a `.keyword`
+suffix or a slash in a field name is refused here because the compiler refuses it there.
+
+It also checks what the planner cannot, having only the layout to walk: that the id still matches
+the page, and that cells and widgets name each other exactly.
+
+**The edit lives in this browser**, under `nxd.config.<dashboard>`, so a colleague opening the same
+page sees what ships. That is a known limit rather than a design: `DashboardConfigService` resolves
+the override before the bundled asset, and moving that store into a Nuxeo document later changes
+nothing for any caller.
+
+**An override that no longer compiles is ignored rather than rendered broken.** A configuration can
+stop working without being touched — a widget naming a field a later Studio change removed — and
+quietly falling back to what ships is far better than a column of errors nobody can escape from.
+The editor is where the reason is shown.
+
 ## Requirements
 
 - Nuxeo LTS 2025
@@ -870,7 +895,8 @@ still appear in an audit index, through `Framework.doPrivileged` with no argumen
 | 2 | Cross filtering on bucket click, with active filter chips | done |
 | 2b | Path scope | done |
 | 2c | CSV and PNG export | done |
-| 3 | Configuration editor, with a field picker fed by `/api/v1/config/schemas` | |
+| 3 | Configuration editor, JSON and validated by the real planner | done |
+| 3b | Field picker fed by `/api/v1/config/schemas` | |
 | 4 | Workflows dashboard | done |
 | 4b | Tasks dashboard, on open tasks and due dates | done |
 | 4c | A median beside the mean, and a per model breakdown, where an aggregate mixes populations | done |

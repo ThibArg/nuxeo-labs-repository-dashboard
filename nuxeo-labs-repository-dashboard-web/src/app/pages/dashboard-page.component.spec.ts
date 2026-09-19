@@ -834,4 +834,119 @@ describe('DashboardPageComponent', () => {
       expect(lastQuery()).not.toContain('ecm:path.children');
     });
   });
+  describe('configuration editor', () => {
+    afterEach(() => localStorage.clear());
+
+    function routes(): StubRoute[] {
+      return [
+        {
+          match: '/site/es/nuxeo/_search',
+          matchBody: isAggregationsRequest,
+          json: aggregationsResponse(),
+        },
+        ...supportRoutes(),
+      ];
+    }
+
+    async function render() {
+      stub = installFetchStub(routes());
+      const fixture = TestBed.createComponent(DashboardPageComponent);
+      await settle(fixture);
+      return fixture;
+    }
+
+    function buttonNamed(
+      fixture: ComponentFixture<DashboardPageComponent>,
+      text: string,
+    ): HTMLButtonElement {
+      return [...(fixture.nativeElement as HTMLElement).querySelectorAll('button')].find(
+        (button) => button.textContent?.trim() === text,
+      ) as HTMLButtonElement;
+    }
+
+    function type(fixture: ComponentFixture<DashboardPageComponent>, json: string): void {
+      const area = (fixture.nativeElement as HTMLElement).querySelector(
+        'nxd-config-editor textarea',
+      ) as HTMLTextAreaElement;
+      area.value = json;
+      area.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+    }
+
+    /** A configuration renaming a tile, which is the cheapest change that shows on screen. */
+    function renamed(): string {
+      const config = JSON.parse(JSON.stringify(contentConfig));
+      config.widgets['totalAll'].label = 'Everything At All';
+      return JSON.stringify(config, null, 2);
+    }
+
+    it('opens on the configuration in force', async () => {
+      const fixture = await render();
+
+      buttonNamed(fixture, 'Configure').click();
+      fixture.detectChanges();
+
+      const area = (fixture.nativeElement as HTMLElement).querySelector(
+        'nxd-config-editor textarea',
+      ) as HTMLTextAreaElement;
+      expect(JSON.parse(area.value).id).toBe('content');
+    });
+
+    it('renders the edited configuration instead of the shipped one', async () => {
+      const fixture = await render();
+
+      buttonNamed(fixture, 'Configure').click();
+      fixture.detectChanges();
+      type(fixture, renamed());
+      buttonNamed(fixture, 'Save').click();
+      await settle(fixture);
+
+      expect((fixture.nativeElement as HTMLElement).textContent).toContain('Everything At All');
+    });
+
+    it('refuses to save something that cannot be rendered, and says why', async () => {
+      const fixture = await render();
+
+      buttonNamed(fixture, 'Configure').click();
+      fixture.detectChanges();
+      type(fixture, '{ "id": "content" }');
+
+      expect((fixture.nativeElement as HTMLElement).textContent).toContain('"index" is required');
+      expect(buttonNamed(fixture, 'Save').disabled).toBe(true);
+    });
+
+    it('goes back to the shipped configuration for good', async () => {
+      const fixture = await render();
+
+      buttonNamed(fixture, 'Configure').click();
+      fixture.detectChanges();
+      type(fixture, renamed());
+      buttonNamed(fixture, 'Save').click();
+      await settle(fixture);
+
+      buttonNamed(fixture, 'Configure').click();
+      fixture.detectChanges();
+      buttonNamed(fixture, 'Use the shipped one').click();
+      await settle(fixture);
+
+      expect((fixture.nativeElement as HTMLElement).textContent).not.toContain('Everything At All');
+      expect(localStorage.getItem('nxd.config.content')).toBeNull();
+    });
+
+    /*
+     * A configuration can stop compiling without being touched, a widget naming a field a later
+     * Studio change removed. Rendering a column of errors nobody can escape from would be worse
+     * than quietly showing what ships, which is still correct.
+     */
+    it('falls back to what ships when a stored edit no longer compiles', async () => {
+      localStorage.setItem(
+        'nxd.config.content',
+        JSON.stringify({ v: 1, json: '{"id":"content","index":"nuxeo"}' }),
+      );
+
+      const fixture = await render();
+
+      expect((fixture.nativeElement as HTMLElement).textContent).toContain('Total Documents');
+    });
+  });
 });

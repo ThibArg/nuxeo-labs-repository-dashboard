@@ -159,6 +159,24 @@ body {
     color: var(--color-ink);
   }
 
+  .nxd-code-area {
+    width: 100%;
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+    background-color: var(--color-canvas);
+    padding: 0.75rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    color: var(--color-ink);
+    tab-size: 2;
+  }
+
+  .nxd-code-area:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -1px;
+  }
+
   .nxd-date-input {
     border: 1px solid var(--color-border);
     border-radius: 0.5rem;
