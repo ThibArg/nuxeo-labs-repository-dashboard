@@ -63,8 +63,14 @@ export type MetricConfig =
 
 /* ==================== Presentation ==================== */
 
-/** How bucket keys and column values are turned into human readable labels. */
-export type LabelStrategy = 'raw' | 'doctype' | 'lifecycle' | 'user' | 'boolean';
+/**
+ * How bucket keys and column values are turned into human readable labels.
+ *
+ * `message` translates a value that is already an i18n key, `workflowModel` composes one out of a
+ * workflow model name. Both are what the audit index holds for workflows.
+ */
+export type LabelStrategy =
+  'raw' | 'doctype' | 'lifecycle' | 'user' | 'boolean' | 'message' | 'workflowModel';
 
 export type ValueFormat =
   'integer' | 'decimal' | 'bytes' | 'percent' | 'duration' | 'date' | 'daysUntil' | 'text';

@@ -6,6 +6,8 @@ const MESSAGES = {
   'label.document.type.file': 'File',
   'label.document.type.picture': 'Picture',
   'label.ui.state.project': 'Project',
+  'wf.parallelDocumentReview.chooseParticipants.title': 'Choose Participants',
+  'wf.parallelDocumentReview.ParallelDocumentReview': 'Parallel Document Review',
 };
 
 describe('LabelService', () => {
@@ -38,6 +40,36 @@ describe('LabelService', () => {
     const labels = await TestBed.inject(LabelService).resolve('lifecycle', ['project']);
 
     expect(labels.get('project')).toBe('project');
+  });
+
+  /*
+   * `extended.taskName` and `extended.action` hold an i18n key rather than a label, so the bundle
+   * translates them as they stand. `extended.modelName` holds a name that composes into one.
+   */
+  it('translates a value that is already an i18n key', async () => {
+    stub = installFetchStub([{ match: '/ui/i18n/messages.json', json: MESSAGES }]);
+
+    const labels = await TestBed.inject(LabelService).resolve('message', [
+      'wf.parallelDocumentReview.chooseParticipants.title',
+      'wf.someStudioModel.unknownTask',
+    ]);
+
+    expect(labels.get('wf.parallelDocumentReview.chooseParticipants.title')).toBe(
+      'Choose Participants',
+    );
+    expect(labels.get('wf.someStudioModel.unknownTask')).toBe('wf.someStudioModel.unknownTask');
+  });
+
+  it('composes a workflow model name into the key Web UI uses for it', async () => {
+    stub = installFetchStub([{ match: '/ui/i18n/messages.json', json: MESSAGES }]);
+
+    const labels = await TestBed.inject(LabelService).resolve('workflowModel', [
+      'ParallelDocumentReview',
+      'MyStudioWorkflow',
+    ]);
+
+    expect(labels.get('ParallelDocumentReview')).toBe('Parallel Document Review');
+    expect(labels.get('MyStudioWorkflow')).toBe('MyStudioWorkflow');
   });
 
   it('loads the translation bundle once for several resolutions', async () => {

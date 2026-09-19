@@ -20,6 +20,12 @@ const USER_LOOKUP_CONCURRENCY = 6;
  *   formatDocType(type)        -> label.document.type.<type in lower case>
  *   formatLifecycleState(state) -> label.ui.state.<state>
  *
+ * Workflow values are already i18n keys when they come out of the audit: `extended.taskName` reads
+ * `wf.parallelDocumentReview.chooseParticipants.title` and `extended.action` names a button key,
+ * both of which the bundle translates as they stand. A model name is not a key but composes into
+ * one, `wf.<name with a lower case initial>.<name>`, which is how Web UI's own workflow layouts
+ * address it.
+ *
  * When a key is missing, or Web UI is not installed at all, the raw value is displayed. That is a
  * deliberate degradation: an administrator reading `File` rather than a translated label still
  * gets a correct dashboard.
@@ -58,6 +64,15 @@ export class LabelService {
     return this.lookup(`label.ui.state.${state}`, state);
   }
 
+  /** A value that is already an i18n key, such as `extended.taskName`. */
+  translateMessage(key: string): string {
+    return this.lookup(key, key);
+  }
+
+  translateWorkflowModel(name: string): string {
+    return this.lookup(`wf.${name.charAt(0).toLowerCase()}${name.slice(1)}.${name}`, name);
+  }
+
   private lookup(key: string, fallback: string): string {
     const translated = this.messages?.[key];
     return translated && translated !== key ? translated : fallback;
@@ -86,6 +101,16 @@ export class LabelService {
 
       case 'boolean':
         unique.forEach((key) => labels.set(key, key === 'true' || key === '1' ? 'Yes' : 'No'));
+        return labels;
+
+      case 'message':
+        await this.loadMessages();
+        unique.forEach((key) => labels.set(key, this.translateMessage(key)));
+        return labels;
+
+      case 'workflowModel':
+        await this.loadMessages();
+        unique.forEach((key) => labels.set(key, this.translateWorkflowModel(key)));
         return labels;
 
       case 'user':

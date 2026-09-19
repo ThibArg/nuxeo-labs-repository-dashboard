@@ -1,0 +1,287 @@
+{
+  "id": "workflows",
+  "label": "Workflows Dashboard",
+  "index": "audit_wf",
+  "filters": [
+    {
+      "type": "dateRange",
+      "field": "eventDate",
+      "default": "30d"
+    },
+    {
+      "type": "termsGroup",
+      "id": "models",
+      "label": "Workflow models",
+      "combine": "or",
+      "members": [
+        {
+          "id": "modelName",
+          "field": "extended.modelName",
+          "label": "Models",
+          "labels": "workflowModel",
+          "size": 50
+        }
+      ]
+    }
+  ],
+  "baseFilter": [],
+  "defaultScope": "all",
+  "scopes": {
+    "all": [],
+    "started": [
+      {
+        "term": {
+          "eventId": "afterWorkflowStarted"
+        }
+      }
+    ],
+    "completed": [
+      {
+        "term": {
+          "eventId": "afterWorkflowFinish"
+        }
+      }
+    ],
+    "cancelled": [
+      {
+        "term": {
+          "eventId": "beforeWorkflowCanceled"
+        }
+      }
+    ],
+    "taskCreated": [
+      {
+        "term": {
+          "eventId": "afterWorkflowTaskCreated"
+        }
+      }
+    ],
+    "taskEnded": [
+      {
+        "term": {
+          "eventId": "afterWorkflowTaskEnded"
+        }
+      }
+    ],
+    "taskMoved": [
+      {
+        "terms": {
+          "eventId": ["afterWorkflowTaskReassigned", "afterWorkflowTaskDelegated"]
+        }
+      }
+    ]
+  },
+  "layout": [
+    {
+      "cells": ["started", "completed", "cancelled", "averageDuration"]
+    },
+    {
+      "cells": ["tasksCreated", "tasksEnded", "averageTaskDuration", "tasksMoved"]
+    },
+    {
+      "cells": ["startedPerDay", "completedPerDay"]
+    },
+    {
+      "cells": ["byModel", "taskOutcomes"]
+    },
+    {
+      "cells": ["topInitiators", "topTaskPerformers"]
+    },
+    {
+      "cells": ["byTaskName", "durationDistribution"]
+    }
+  ],
+  "widgets": {
+    "started": {
+      "type": "kpi",
+      "label": "Workflows Started",
+      "hint": "Instances started ({range}), not instances running now",
+      "scope": "started",
+      "span": 3
+    },
+    "completed": {
+      "type": "kpi",
+      "label": "Workflows Completed",
+      "severity": "success",
+      "scope": "completed",
+      "span": 3
+    },
+    "cancelled": {
+      "type": "kpi",
+      "label": "Workflows Cancelled",
+      "severity": "warning",
+      "scope": "cancelled",
+      "span": 3
+    },
+    "averageDuration": {
+      "type": "kpi",
+      "label": "Average Duration",
+      "hint": "Completed instances only",
+      "scope": "completed",
+      "span": 3,
+      "metric": {
+        "avg": "extended.timeSinceWfStarted"
+      },
+      "format": "duration"
+    },
+    "tasksCreated": {
+      "type": "kpi",
+      "label": "Tasks Created",
+      "scope": "taskCreated",
+      "span": 3
+    },
+    "tasksEnded": {
+      "type": "kpi",
+      "label": "Tasks Ended",
+      "scope": "taskEnded",
+      "span": 3
+    },
+    "averageTaskDuration": {
+      "type": "kpi",
+      "label": "Average Task Duration",
+      "hint": "From assignment to completion",
+      "scope": "taskEnded",
+      "span": 3,
+      "metric": {
+        "avg": "extended.timeSinceTaskStarted"
+      },
+      "format": "duration"
+    },
+    "tasksMoved": {
+      "type": "kpi",
+      "label": "Reassigned or Delegated",
+      "hint": "Tasks that changed hands",
+      "scope": "taskMoved",
+      "span": 3
+    },
+    "startedPerDay": {
+      "type": "area",
+      "label": "Workflows Started per Day",
+      "hint": "Instances started per day ({range})",
+      "scope": "started",
+      "span": 6,
+      "agg": {
+        "date_histogram": {
+          "field": "eventDate",
+          "calendar_interval": "day",
+          "format": "yyyy-MM-dd"
+        }
+      }
+    },
+    "completedPerDay": {
+      "type": "area",
+      "label": "Workflows Completed per Day",
+      "hint": "Instances finished per day ({range})",
+      "scope": "completed",
+      "span": 6,
+      "agg": {
+        "date_histogram": {
+          "field": "eventDate",
+          "calendar_interval": "day",
+          "format": "yyyy-MM-dd"
+        }
+      }
+    },
+    "byModel": {
+      "type": "donut",
+      "label": "By Workflow Model",
+      "hint": "Instances started, by model",
+      "scope": "started",
+      "span": 6,
+      "labels": "workflowModel",
+      "agg": {
+        "terms": {
+          "field": "extended.modelName",
+          "size": 10
+        }
+      }
+    },
+    "taskOutcomes": {
+      "type": "donut",
+      "label": "Task Outcomes",
+      "hint": "The button the assignee pressed, by its identifier",
+      "scope": "taskEnded",
+      "span": 6,
+      "agg": {
+        "terms": {
+          "field": "extended.action",
+          "size": 10
+        }
+      }
+    },
+    "topInitiators": {
+      "type": "ranked-list",
+      "label": "Top Initiators",
+      "hint": "By number of workflows started",
+      "scope": "started",
+      "span": 6,
+      "labels": "user",
+      "agg": {
+        "terms": {
+          "field": "extended.workflowInitiator",
+          "size": 10
+        }
+      }
+    },
+    "topTaskPerformers": {
+      "type": "ranked-list",
+      "label": "Tasks Completed by User",
+      "hint": "Credited to the original user, not to a borrowed identity",
+      "scope": "taskEnded",
+      "span": 6,
+      "labels": "user",
+      "agg": {
+        "terms": {
+          "field": "principalName",
+          "size": 10
+        }
+      }
+    },
+    "byTaskName": {
+      "type": "hbar",
+      "label": "Most Frequent Tasks",
+      "hint": "By number of tasks created",
+      "scope": "taskCreated",
+      "span": 6,
+      "labels": "message",
+      "agg": {
+        "terms": {
+          "field": "extended.taskName",
+          "size": 10
+        }
+      }
+    },
+    "durationDistribution": {
+      "type": "bar",
+      "label": "Workflow Duration",
+      "hint": "Completed instances, by how long they took",
+      "scope": "completed",
+      "span": 6,
+      "agg": {
+        "range": {
+          "field": "extended.timeSinceWfStarted",
+          "ranges": [
+            {
+              "key": "< 1 hour",
+              "to": 3600000
+            },
+            {
+              "key": "1 hour to 1 day",
+              "from": 3600000,
+              "to": 86400000
+            },
+            {
+              "key": "1 to 7 days",
+              "from": 86400000,
+              "to": 604800000
+            },
+            {
+              "key": "over 7 days",
+              "from": 604800000
+            }
+          ]
+        }
+      }
+    }
+  }
+}

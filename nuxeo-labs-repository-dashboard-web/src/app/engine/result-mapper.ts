@@ -49,35 +49,46 @@ export function isEmptyData(data: WidgetData | undefined): boolean {
   }
 }
 
-/** Reads the value of a single value metric aggregation. */
-function metricValue(node: EsAggregation | undefined): number | null {
+/**
+ * Reads the value of a single value metric aggregation.
+ *
+ * @param undefinedWhenEmpty when the metric has no value over an empty set, a `null` answer means
+ *                           "not measured" and becomes `NaN`, which every formatter renders as a
+ *                           dash. Otherwise `null` is the zero of a count, a cardinality or a sum.
+ */
+function metricValue(node: EsAggregation | undefined, undefinedWhenEmpty = false): number | null {
   if (!node) {
     return null;
   }
   if (typeof node.value === 'number') {
     return node.value;
   }
-  // `cardinality` on an empty index answers null rather than 0.
   if (node.value === null) {
-    return 0;
+    return undefinedWhenEmpty ? Number.NaN : 0;
   }
   return null;
 }
 
-function bucketValue(bucket: EsBucket): { value: number; docCount: number } {
+function bucketValue(
+  bucket: EsBucket,
+  undefinedWhenEmpty: boolean,
+): { value: number; docCount: number } {
   const docCount = bucket.doc_count ?? 0;
-  const metric = metricValue(bucket[METRIC_AGG] as EsAggregation | undefined);
+  const metric = metricValue(bucket[METRIC_AGG] as EsAggregation | undefined, undefinedWhenEmpty);
   return { value: metric ?? docCount, docCount };
 }
 
 /** `terms` and friends answer an array, `filters` answers a keyed object. */
-function normaliseBuckets(buckets: EsBucket[] | Record<string, EsBucket>): DataBucket[] {
+function normaliseBuckets(
+  buckets: EsBucket[] | Record<string, EsBucket>,
+  undefinedWhenEmpty: boolean,
+): DataBucket[] {
   const entries: EsBucket[] = Array.isArray(buckets)
     ? buckets
     : Object.entries(buckets).map(([key, bucket]) => ({ ...bucket, key }));
 
   return entries.map((bucket) => {
-    const { value, docCount } = bucketValue(bucket);
+    const { value, docCount } = bucketValue(bucket, undefinedWhenEmpty);
     return {
       key: String(bucket.key_as_string ?? bucket.key),
       value,
@@ -109,7 +120,7 @@ export function readAggregationWidget(
   const node = (plan.wrapped && (root[INNER_AGG] as EsAggregation | undefined)) || root;
 
   if (node.buckets) {
-    const buckets = normaliseBuckets(node.buckets);
+    const buckets = normaliseBuckets(node.buckets, plan.metricUndefinedWhenEmpty);
     /*
      * The count of distinct values hangs off the wrapper, never off the bucket list itself, so it
      * is read from the root. `sum_other_doc_count` sits on the list and weighs what was dropped.
@@ -136,12 +147,15 @@ export function readAggregationWidget(
   const scalar = (value: number): WidgetData =>
     secondary === undefined ? { kind: 'scalar', value } : { kind: 'scalar', value, secondary };
 
-  const nested = metricValue(node[METRIC_AGG] as EsAggregation | undefined);
+  const nested = metricValue(
+    node[METRIC_AGG] as EsAggregation | undefined,
+    plan.metricUndefinedWhenEmpty,
+  );
   if (nested !== null) {
     return scalar(nested);
   }
 
-  const direct = metricValue(node);
+  const direct = metricValue(node, plan.metricUndefinedWhenEmpty);
   if (direct !== null) {
     return scalar(direct);
   }

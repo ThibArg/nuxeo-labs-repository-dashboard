@@ -168,7 +168,7 @@ Do not undo these without knowing what they were for.
 | No implicit exclusion of technical documents | Explicit user decision: a customer creating five `Domain` objects has reasons to see them counted. The type filter is the tool, and it is persisted |
 | Configuration stored in `src/app/config/dashboards/`, copied to assets | The tests import the file that actually ships, so it cannot drift from what is tested |
 | Records and legal holds moved from Content to Governance | User decision. They answer a compliance question, not a volumetry one, and Governance is where retention lives |
-| Governance reachable even without `nuxeo-retention` | A greyed out entry cannot tell the reader which package to install. The page names it and links to its documentation. Process is still gated, for now |
+| Governance reachable even without `nuxeo-retention` | A greyed out entry cannot tell the reader which package to install. The page names it and links to its documentation. Workflows follows the same rule since phase 4 |
 | A period is two inclusive calendar days, not date math | Only concrete days can be shown in, and edited through, the two date fields. `gte` at the start of the first day, `lt` at the start of the day after the last: the final evening is covered without a `23:59:59.999` fudge |
 | `extended_bounds` derived from the filter, never configured | A histogram only spans the days holding a document, so a quiet start of period silently shortens the chart. Deriving it keeps `AggConfig` closed, and it is applied only to the field the date filter constrains — for any other field the selected days say nothing |
 | The failed logins list resolves no name | The value is evidence: whether `admin` or `Admin` was typed matters, and a prettified name would hide it. It also spares ten doomed `/api/v1/user` lookups per run |
@@ -225,11 +225,11 @@ with its fields typed, a blob being literally `"blob"` or `"blob[]"`
 `long` fields that a plain `sum` can aggregate while honouring the dashboard filters; not
 deduplicated, but the only route to a volume without a heavy operation.
 
-## Phase 4: the Process dashboard, groundwork
+## Phase 4: the Workflows dashboard
 
-Researched, not started. These are the facts that cost the most to establish; read them before
-planning anything on `audit_wf`. What the page should show is still an open question — that is a
-decision for the user, not something this section settles.
+Built and shipped. The page is `workflows.json`, reachable at `/workflows`; the name "Process" is
+gone everywhere. These are the facts that cost the most to establish — most were settled before a
+line was written, a few only once the code met the real index.
 
 **The passthrough hides five of the thirteen audited workflow events.**
 `RoutingAuditRequestFilter` injects `term: { category: "Routing" }` for *every* caller,
@@ -241,14 +241,18 @@ Only these eight are reachable: `afterWorkflowStarted`, `afterWorkflowFinish`,
 `beforeWorkflowCanceled`, `workflowCanceled`, `afterWorkflowTaskCreated`, `afterWorkflowTaskEnded`,
 `afterWorkflowTaskReassigned`, `afterWorkflowTaskDelegated`. Corollary: `extended.directive` and
 `extended.dueDate` are declared only on the excluded events, so no task directive and no due date
-can ever be read through this view.
+can ever be read through this view. `workflows-dashboard.spec.ts` holds that list and asserts every
+scope is built out of it.
 
-**There is no workflow state field.** State has to be derived from event ids: started is
-`afterWorkflowStarted`, completed is `afterWorkflowFinish`, cancelled is `beforeWorkflowCanceled`.
-Prefer that last one to `workflowCanceled`, which is fired once per attached document and therefore
-multiplies. A trustworthy "currently running" figure cannot come from the audit at all: it needs
-`DocumentRoute` with `ecm:currentLifeCycleState = 'running'` on the `nuxeo` index, hence a second
-request on another index, which the planner does not support today — one index per dashboard.
+**There is no workflow state field.** State is derived from event ids, which is what the `scopes`
+of `workflows.json` encode: started is `afterWorkflowStarted`, completed is `afterWorkflowFinish`,
+cancelled is `beforeWorkflowCanceled`. Prefer that last one to `workflowCanceled`, which is fired
+once per attached document and therefore multiplies. Unlike `content.json`, these scopes are **not
+a partition** — three reachable events are counted by none of them — so the test asserts mutual
+exclusivity only, never exhaustiveness. A trustworthy "currently running" figure cannot come from
+the audit at all: it needs `DocumentRoute` with `ecm:currentLifeCycleState = 'running'` on the
+`nuxeo` index, hence a second request on another index, which the planner does not support today —
+one index per dashboard. That is why the Started tile says "not instances running now".
 `docLifeCycle` looks like a substitute and is not: it is a snapshot at event time, and on task
 events it describes the `RoutingTask`, not the route.
 
@@ -260,13 +264,42 @@ absent rather than negative when the helper cannot find the start event. `workfl
 `nodeVariables.*` and `data.*` are nested objects typed leaf by leaf, so what they offer depends on
 the Studio model.
 
-**Three traps in that list.** `extended.actors` is a `keyword[]` on `afterWorkflowTaskReassigned`
-but a single string `"[bob, alice]"` on `afterWorkflowTaskCreated`, because a `LinkedHashSet` falls
-through to `toString()` (`LogEntryJsonWriter.java:187-203`) — never aggregate it across both
-events. `extended.taskActor` mixes `getActingUser()` and `getOriginatingUser()` depending on the
-event (`GraphRunner.java:139` against `:408`), so it is simply absent when nobody impersonates. And
-the dynamic template's `ignore_above: 256` drops a long `taskName` or variable from every
-aggregation, silently.
+**Which event carries which field**, verified in the sources rather than guessed.
+`afterWorkflowFinish` carries `timeSinceWfStarted`, `workflowInitiator`, `modelName`, `modelId` and
+`workflowVariables`, and **no** `taskName` or `action` (`DocumentRouteImpl.java:55-75`) — which is
+what makes the Average Duration tile legitimate on the completed scope. `afterWorkflowTaskEnded`
+carries both durations plus `taskName`, `action`, `taskActor` and the variables
+(`GraphRunner.java:130-155`).
+
+**`extended.taskName` is an i18n key, `extended.action` is not.** A task name really is
+`wf.parallelDocumentReview.chooseParticipants.title`, which the Web UI bundle renders as "Choose
+Participants" — hence the `message` label strategy. But `action` is `status`, the button's `name`
+(`GraphRunner.java:136`): `approve`, `reject`, `validate`, `NA`, `start_review`, `submit`. The i18n
+key lives in the button's `label` (`ParallelDocumentReview/Task328d/document.xml:27-30`) and never
+leaves the model definition. `taskOutcomes` therefore declares no strategy at all, and a test says
+so, because a strategy there would promise a translation that can never happen. Model names are not
+keys either but compose into one, `wf.<lcfirst(name)>.<name>` — the `workflowModel` strategy.
+
+**`docType` and `docUUID` name the route or the task, never the business document.** On the real
+index `docType` only ever holds `DocumentRoute` or `RoutingTask`, so a "documents entering a
+workflow" widget is impossible from this view; it was designed, then dropped for that reason. The
+same fact kills the idea of a table linking back to Web UI: the planner forces `ecm:uuid` into
+`_source` (`query-planner.ts:320`), which the audit does not have, and `docUUID` would point at the
+route anyway.
+
+**Three traps in the field list.** `extended.actors` is a `keyword[]` on
+`afterWorkflowTaskReassigned` but a single string `"[bob, alice]"` on `afterWorkflowTaskCreated`,
+because a `LinkedHashSet` falls through to `toString()` (`LogEntryJsonWriter.java:187-203`) — never
+aggregate it across both events. `extended.taskActor` mixes `getActingUser()` and
+`getOriginatingUser()` depending on the event (`GraphRunner.java:139` against `:408`), so it is
+simply absent when nobody impersonates; `topTaskPerformers` reads `principalName` instead. And the
+dynamic template's `ignore_above: 256` drops a long `taskName` or variable from every aggregation,
+silently.
+
+**Neither duration field is in the mapping**, and the only dynamic template matches strings
+(`match_mapping_type: "string"` → `keyword`). The first document written therefore fixes the type
+for good: a JSON number gives `long`, a quoted number gives `keyword` and every `avg` fails until
+the index is rebuilt. This matters to anyone fabricating entries — see below.
 
 **Non-administrators see only the models they hold `DataVisualization` on**
 (`RoutingAuditRequestFilter.java:95-108`, permission declared in
@@ -274,13 +307,19 @@ aggregation, silently.
 `terms: { "extended.modelName": [] }`, so zero hits rather than an error. The dashboard requires an
 administrator anyway, but a screenshot taken as somebody else will look broken for this reason.
 
-**The demo server cannot exercise most of this.** `audit_wf` held twenty entries when this was
-written: ten `afterWorkflowStarted` and ten `afterWorkflowTaskCreated`, over
-`ParallelDocumentReview` and `SerialDocumentReview`. Nothing has ever completed or been cancelled,
-so `timeSinceWfStarted`, `timeSinceTaskStarted` and `taskActor` are absent from every row. Any
-duration, completion rate or SLA widget will render empty until workflows are actually run, or
-until audit entries are synthesised the way the login events were. Settle the data question before
-designing the widgets, not after.
+**The workflow data on the demo server is fabricated, and proves nothing about the platform.**
+`audit_wf` held twenty genuine entries: ten `afterWorkflowStarted` and ten
+`afterWorkflowTaskCreated`, all signed `Administrator`, all within 514 milliseconds of one another
+on 2026-09-18. Nothing had ever completed or been cancelled, so every duration widget rendered
+empty. 1560 entries covering 230 instances over 88 days were generated and bulk loaded straight
+into OpenSearch — the passthrough is read only and rejects any index it does not declare, so it
+cannot serve for this; OpenSearch is not published on a host port either, and is reached through
+`docker exec` on the `opensearch` container. The state before that load is kept in
+`nuxeo-audit-backup-20260919`, and fabricated entries all carry an `id` at or above 900000, which
+is how they can be removed again. The generated actors are `Josh`, `Julie`, `alan`, `johni` and
+`kate`: `test-ai` is the agent's own account, and `Administrator` was left out so that his ten
+genuine workflows do not put him at the top of a list he has no business leading. **A distribution
+or a daily curve read there reflects what was written, not how Nuxeo behaves.**
 
 ## Style
 
@@ -293,25 +332,32 @@ Answer the user in French, using *vous*.
 
 ## Where things stand
 
-Phase 1e is complete: build green, 256 tests, package produced. Content, Users and Diagnostics are
-live; Process and Governance are placeholders that name their missing prerequisite. The work is
-pushed to `github.com/ThibArg/nuxeo-labs-repository-dashboard`, a public backup until the plugin is
-ready to be forked into `nuxeo-sandbox`; the README carries a warning saying so.
+Phase 4 is complete: build green, 283 tests, package produced. Content, Users, Workflows and
+Diagnostics are live; Governance is the last placeholder, and it names its missing prerequisite.
+The work is pushed to `github.com/ThibArg/nuxeo-labs-repository-dashboard`, a public backup until
+the plugin is ready to be forked into `nuxeo-sandbox`; the README carries a warning saying so.
 
-**Phase 4, the Process dashboard, is what comes next**, and its groundwork is already done: read
-"Phase 4: the Process dashboard, groundwork" above before anything else. Two things are settled
-there and should not be re-derived — which workflow events `audit_wf` actually returns, and the
-fact that workflow state has to be derived from event ids. Two things are not settled, and both
-need the user: which widgets the page should carry, and how to get workflow data worth charting,
-since nothing on the demo server has ever completed or been cancelled.
+Three things landed outside `workflows.json` and are worth knowing about, because they are not
+workflow specific:
 
-The other phases, in order: phase 2 (cross filtering on bucket click, active filter chips, path
-scope, CSV and PNG export), phase 3 (configuration editor with a field picker fed by
-`/api/v1/config/schemas`), phase 5 (Governance dashboard, which must start with the record and
-legal hold tiles taken out of Content).
+- **`LabelStrategy` gained `message` and `workflowModel`.** Both read Web UI's bundle, like
+  `doctype` and `lifecycle`, and fall back to the raw key.
+- **An average over an empty set now renders a dash, not a zero.** `metricUndefinedWhenEmpty`
+  (`agg-compiler.ts`) marks `avg`, `min` and `max`; the plan carries the flag and `result-mapper`
+  turns their `null` into `NaN`, which every formatter already renders as `—`. A count, a
+  cardinality and a sum still answer zero, because zero is their correct value.
+- **`ChartWidgetStubComponent` now renders resolved bucket labels.** It swallowed them before, so a
+  broken `LabelStrategy` passed in silence — the same blind spot the hint had. A chart test can now
+  observe what it claims to verify.
 
-The `DataTableComponent` is currently unused by `content.json` — the expired documents table was
-removed on request — but it is kept, and tested, for phases 4 and 5.
+**Phase 5, the Governance dashboard, is what comes next.** It must start by taking the record and
+legal hold tiles out of Content. Then phase 2 (cross filtering on bucket click, active filter chips,
+path scope, CSV and PNG export) and phase 3 (configuration editor with a field picker fed by
+`/api/v1/config/schemas`).
+
+The `DataTableComponent` is still unused by any shipped configuration — the expired documents table
+was removed on request, and Workflows deliberately carries no table, since `docUUID` names the route
+rather than the business document. It is kept, and tested, for phase 5.
 
 Blob size tiles were asked for, investigated and set aside; the findings are recorded above, under
 "Blob volumetry, set aside". Read that section before answering any question about blob volume.

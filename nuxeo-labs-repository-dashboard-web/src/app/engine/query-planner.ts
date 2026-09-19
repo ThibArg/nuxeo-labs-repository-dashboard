@@ -27,6 +27,7 @@ import {
   METRIC_AGG,
   compileAgg,
   compileMetric,
+  metricUndefinedWhenEmpty,
 } from './agg-compiler';
 import { compileTermsGroup } from './facet-clause';
 import { EsClause, boolFilter, dayRangeFilter, startOfLocalDayMillis } from './es-query';
@@ -62,6 +63,11 @@ export interface WidgetPlan {
   wrapped: boolean;
   /** True when values come from a nested metric rather than `doc_count`. */
   hasMetric: boolean;
+  /**
+   * True when that metric has no value over an empty set, so the widget must say so rather than
+   * show a zero. See `metricUndefinedWhenEmpty`.
+   */
+  metricUndefinedWhenEmpty: boolean;
   /** True when a secondary figure is nested under the wrapper. */
   hasSecondary: boolean;
 }
@@ -158,6 +164,7 @@ export function planDashboard(config: DashboardConfig, filters: FilterState): Da
           read: 'hits',
           wrapped: false,
           hasMetric: false,
+          metricUndefinedWhenEmpty: false,
           hasSecondary: false,
         });
       } catch (error) {
@@ -178,6 +185,7 @@ export function planDashboard(config: DashboardConfig, filters: FilterState): Da
         read: planned.read,
         wrapped: planned.wrapped,
         hasMetric: planned.hasMetric,
+        metricUndefinedWhenEmpty: planned.metricUndefinedWhenEmpty,
         hasSecondary: planned.hasSecondary,
       });
     } catch (error) {
@@ -209,6 +217,7 @@ interface AggregationWidgetPlan {
   read: ReadStrategy;
   wrapped: boolean;
   hasMetric: boolean;
+  metricUndefinedWhenEmpty: boolean;
   hasSecondary: boolean;
 }
 
@@ -223,6 +232,7 @@ function planAggregationWidget(
 
   if (isKpiWidget(widget)) {
     const metric = compileMetric(widget.metric);
+    const undefinedWhenEmpty = metricUndefinedWhenEmpty(widget.metric);
     const secondary = widget.secondary;
 
     /*
@@ -230,7 +240,14 @@ function planAggregationWidget(
      * unscoped tile. `match_all` costs nothing and keeps a single code path.
      */
     if (!ownFilter.length && !metric && !secondary) {
-      return { agg: null, read: 'total', wrapped: false, hasMetric: false, hasSecondary: false };
+      return {
+        agg: null,
+        read: 'total',
+        wrapped: false,
+        hasMetric: false,
+        metricUndefinedWhenEmpty: false,
+        hasSecondary: false,
+      };
     }
 
     if (!ownFilter.length && metric && !secondary) {
@@ -239,6 +256,7 @@ function planAggregationWidget(
         read: 'aggregation',
         wrapped: false,
         hasMetric: true,
+        metricUndefinedWhenEmpty: undefinedWhenEmpty,
         hasSecondary: false,
       };
     }
@@ -260,6 +278,7 @@ function planAggregationWidget(
       read: 'aggregation',
       wrapped: true,
       hasMetric: metric !== null,
+      metricUndefinedWhenEmpty: metric !== null && undefinedWhenEmpty,
       hasSecondary: !!secondary,
     };
   }
@@ -267,6 +286,7 @@ function planAggregationWidget(
   if (isChartWidget(widget)) {
     const inner = compileAgg(widget.agg, widget.metric, bounds);
     const hasMetric = compileMetric(widget.metric) !== null;
+    const undefinedWhenEmpty = hasMetric && metricUndefinedWhenEmpty(widget.metric);
     const distinct = distinctAgg(widget.agg);
 
     /*
@@ -276,7 +296,14 @@ function planAggregationWidget(
      * figure already does.
      */
     if (!ownFilter.length && !distinct) {
-      return { agg: inner, read: 'aggregation', wrapped: false, hasMetric, hasSecondary: false };
+      return {
+        agg: inner,
+        read: 'aggregation',
+        wrapped: false,
+        hasMetric,
+        metricUndefinedWhenEmpty: undefinedWhenEmpty,
+        hasSecondary: false,
+      };
     }
     return {
       agg: {
@@ -286,6 +313,7 @@ function planAggregationWidget(
       read: 'aggregation',
       wrapped: true,
       hasMetric,
+      metricUndefinedWhenEmpty: undefinedWhenEmpty,
       hasSecondary: false,
     };
   }

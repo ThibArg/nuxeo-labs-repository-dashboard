@@ -12,16 +12,14 @@ export const routes: Routes = [
     data: { dashboardId: 'content' },
   },
   {
-    path: 'process',
-    component: UpcomingPageComponent,
-    title: 'Process Dashboard',
+    path: 'workflows',
+    component: DashboardPageComponent,
+    title: 'Workflows Dashboard',
     data: {
-      heading: 'Process Dashboard',
-      phase: 'phase 4',
-      description:
-        'Workflow volume, running and completed instances, overdue tasks, SLA compliance and ' +
-        'average durations, aggregated from the audit_wf passthrough view ' +
-        '(extended.timeSinceWfStarted, extended.timeSinceTaskStarted, extended.taskActor).',
+      dashboardId: 'workflows',
+      requires: 'workflow',
+      // As for Users, no documentation URL: Diagnostics carries the exact remedy.
+      requirementLabel: 'the workflow audit passthrough',
     },
   },
   {

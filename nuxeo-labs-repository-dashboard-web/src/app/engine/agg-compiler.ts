@@ -109,6 +109,18 @@ export function compileMetric(metric: MetricConfig | undefined): EsClause | null
 }
 
 /**
+ * Whether this metric has no value at all over an empty set, as opposed to having the value zero.
+ *
+ * A count, a cardinality and a sum over nothing are all legitimately zero. An average, a minimum
+ * and a maximum are not: OpenSearch answers `null`, and rendering that as `0` states a measurement
+ * that was never made. On a server where no workflow has ever completed, an average duration tile
+ * would read `0 s`, which no reader can tell apart from a genuinely instantaneous workflow.
+ */
+export function metricUndefinedWhenEmpty(metric: MetricConfig | undefined): boolean {
+  return !!metric && ('avg' in metric || 'min' in metric || 'max' in metric);
+}
+
+/**
  * The `extended_bounds` body, or undefined when there is nothing to pad.
  *
  * `max` is the start of the last selected day, never the exclusive upper bound of the query: the

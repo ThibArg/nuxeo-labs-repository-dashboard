@@ -280,7 +280,7 @@ export class PreflightService {
         status: 'warning',
         blocking: false,
         detail: describeError(error),
-        remedy: 'The Process dashboard stays hidden.',
+        remedy: 'The Workflows dashboard is reduced to a notice naming the prerequisite.',
       });
       return false;
     }

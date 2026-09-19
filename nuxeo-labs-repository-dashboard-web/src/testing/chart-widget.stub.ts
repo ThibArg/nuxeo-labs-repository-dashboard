@@ -19,6 +19,14 @@ import { WidgetData, isEmptyData } from '../app/engine/result-mapper';
       <!-- Rendered so that hint interpolation stays observable through the stub. -->
       <span data-testid="chart-hint">{{ config().hint }}</span>
       <span data-testid="chart-bucket-count">{{ bucketCount() }}</span>
+      <!--
+        Rendered for the same reason as the hint: label resolution happens before the chart is
+        built, so a stub that swallowed it would let a broken LabelStrategy pass in silence.
+        Same fallback as the real chart option builder.
+      -->
+      @for (label of bucketLabels(); track label) {
+        <span data-testid="chart-bucket-label">{{ label }}</span>
+      }
     </div>
   `,
 })
@@ -34,5 +42,14 @@ export class ChartWidgetStubComponent {
   readonly bucketCount = computed(() => {
     const data = this.data();
     return data?.kind === 'buckets' ? data.buckets.length : 0;
+  });
+
+  readonly bucketLabels = computed(() => {
+    const data = this.data();
+    if (data?.kind !== 'buckets') {
+      return [];
+    }
+    const labels = this.labels();
+    return data.buckets.map((bucket) => labels.get(bucket.key) ?? bucket.key);
   });
 }

@@ -19,10 +19,12 @@ export const NAV_ITEMS: NavItem[] = [
     icon: 'M4 5a2 2 0 0 1 2-2h5l2 2h5a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5Z',
   },
   {
-    path: '/process',
-    label: 'Process',
-    requires: 'workflow',
-    disabledHint: 'Requires the workflow audit passthrough',
+    /*
+     * Not gated either: the dashboard renders the same requirement notice as Users when the
+     * workflow audit view is unreachable, and that notice names the missing passthrough.
+     */
+    path: '/workflows',
+    label: 'Workflows',
     icon: 'M4 6h6v4H4V6Zm10 8h6v4h-6v-4ZM7 10v4h7M4 14h6v4H4v-4Z',
   },
   {

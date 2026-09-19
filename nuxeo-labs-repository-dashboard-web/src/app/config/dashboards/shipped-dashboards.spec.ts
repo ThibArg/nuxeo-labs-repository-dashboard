@@ -1,5 +1,6 @@
 import contentConfig from './content.json';
 import usersConfig from './users.json';
+import workflowsConfig from './workflows.json';
 import { DashboardConfig, FilterState, customRange } from '../dashboard-config.model';
 import { planDashboard } from '../../engine/query-planner';
 
@@ -12,6 +13,7 @@ import { planDashboard } from '../../engine/query-planner';
 const DASHBOARDS: [string, DashboardConfig][] = [
   ['content.json', contentConfig as DashboardConfig],
   ['users.json', usersConfig as DashboardConfig],
+  ['workflows.json', workflowsConfig as DashboardConfig],
 ];
 
 /** A bounded period, which is what makes the planner emit histogram bounds at all. */
@@ -71,10 +73,15 @@ describe.each(DASHBOARDS)('%s', (_name, config) => {
    * A `terms` list is a top N, and nothing on screen says so unless the count of distinct values
    * comes back with it. Every bucket list therefore asks for one, and asks each shard for a wide
    * enough candidate list that the merged ranking is exact rather than merely plausible.
+   *
+   * Only aggregations are considered: a scope may filter on `terms: { eventId: [...] }`, which is
+   * a query clause carrying neither a size nor a shard size, and has no business here.
    */
   it('lets every top N say how many values it left out, and merges them exactly', () => {
     const aggs = everyAggregation(config);
-    const lists = aggs.filter((node) => (node as { terms?: unknown }).terms !== undefined);
+    const lists = aggs.filter(
+      (node) => (node as { terms?: { field?: string } }).terms?.field !== undefined,
+    );
 
     expect(lists.length).toBeGreaterThan(0);
     for (const list of lists) {

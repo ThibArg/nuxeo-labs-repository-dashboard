@@ -8,7 +8,7 @@
     on a page is batched into a single OpenSearch aggregation request.</p>
     <p>Requires the OpenSearch search client with the passthrough enabled
     (nuxeo.passthrough.elasticsearch.enabled). The Governance dashboard additionally requires the
-    nuxeo-retention addon, and the Process dashboard the audit passthrough
+    nuxeo-retention addon, and the Workflows dashboard the audit passthrough
     (nuxeo.passthrough.elasticsearch.audit.enabled).</p>
   </description>
   <vendor>Hyland</vendor>

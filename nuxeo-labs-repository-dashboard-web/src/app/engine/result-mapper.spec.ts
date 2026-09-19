@@ -10,6 +10,7 @@ function plan(overrides: Partial<WidgetPlan> = {}): WidgetPlan {
     read: 'aggregation',
     wrapped: false,
     hasMetric: false,
+    metricUndefinedWhenEmpty: false,
     hasSecondary: false,
     ...overrides,
   };
@@ -51,6 +52,41 @@ describe('result-mapper', () => {
   it('treats a null cardinality as zero rather than as missing data', () => {
     const data = readAggregationWidget(response({ w: { value: null } }), plan());
     expect(data).toEqual({ kind: 'scalar', value: 0 });
+  });
+
+  /*
+   * A count, a cardinality and a sum over nothing are all legitimately zero. An average, a minimum
+   * and a maximum are not: rendering their null as `0` would state a measurement never made, and
+   * an average duration tile would read `0 s` on a server where no workflow has ever completed.
+   * NaN is what every formatter already turns into a dash.
+   */
+  it('treats a null average as unmeasured rather than as zero', () => {
+    const data = readAggregationWidget(
+      response({ w: { doc_count: 0, [METRIC_AGG]: { value: null } } }),
+      plan({ wrapped: true, hasMetric: true, metricUndefinedWhenEmpty: true }),
+    );
+
+    expect(data?.kind).toBe('scalar');
+    expect(Number.isNaN((data as { value: number }).value)).toBe(true);
+  });
+
+  it('leaves a bucket unmeasured too when its average has no value', () => {
+    const data = readAggregationWidget(
+      response({
+        w: {
+          buckets: [
+            { key: 'SerialDocumentReview', doc_count: 4, [METRIC_AGG]: { value: null } },
+            { key: 'ParallelDocumentReview', doc_count: 6, [METRIC_AGG]: { value: 90 } },
+          ],
+        },
+      }),
+      plan({ hasMetric: true, metricUndefinedWhenEmpty: true }),
+    );
+
+    const buckets = (data as { buckets: { key: string; value: number }[] }).buckets;
+    // Falling back to doc_count here would show 4 documents as though they lasted four units.
+    expect(Number.isNaN(buckets[0].value)).toBe(true);
+    expect(buckets[1].value).toBe(90);
   });
 
   it('maps terms buckets, using doc_count as the value', () => {

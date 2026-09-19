@@ -10,8 +10,8 @@ The dashboard is a standalone Angular application packaged as a Nuxeo bundle. Ch
 are described by configuration rather than hard coded, and every widget of a page is batched into
 a single OpenSearch aggregation request.
 
-> **Status: phase 1.** The Content and Users dashboards are complete and configuration driven. The
-> Process and Governance dashboards, the configuration editor and cross filtering land next, see
+> **Status: phase 4.** The Content, Users and Workflows dashboards are complete and configuration
+> driven. The Governance dashboard, the configuration editor and cross filtering land next, see
 > [Roadmap](#roadmap).
 
 ## Screens
@@ -20,7 +20,7 @@ a single OpenSearch aggregation request.
 | --- | --- |
 | **Content** | Repository index: repository composition (live, trashed, versions, proxies), `ecm:primaryType`, `ecm:currentLifeCycleState`, `dc:created`, `dc:modified`, `dc:creator`, `dc:expired` |
 | **Users** | Audit index: `loginSuccess`, `loginFailed`, `documentCreated` and `documentModified`, grouped by `principalName` over `eventDate` |
-| **Process** | `audit_wf` passthrough view: `extended.timeSinceWfStarted`, `extended.timeSinceTaskStarted`, `extended.taskActor`, `extended.modelName` |
+| **Workflows** | `audit_wf` passthrough view: workflow state derived from `eventId`, `extended.modelName`, `extended.workflowInitiator`, `extended.taskName`, `extended.action`, and durations from `extended.timeSinceWfStarted` and `extended.timeSinceTaskStarted` |
 | **Governance** | `ecm:isRecord`, `ecm:hasLegalHold`, `ecm:retainUntil`, and `record:ruleIds` resolved against the `RetentionRule` documents |
 | **Diagnostics** | The preflight report, always available |
 
@@ -65,7 +65,7 @@ A dashboard is one JSON file under
 | `agg.date_histogram.time_zone` | IANA zone the buckets are cut in; defaults to the reader's own |
 | `metric` | `count`, `cardinality`, `sum`, `avg`, `min`, `max` — nested under the aggregation |
 | `scope` | Named population this widget describes, see below |
-| `labels` | `raw`, `doctype`, `lifecycle`, `user`, `boolean` |
+| `labels` | `raw`, `doctype`, `lifecycle`, `user`, `boolean`, `message`, `workflowModel` |
 | `format` | `integer`, `decimal`, `bytes`, `percent`, `duration`, `date`, `daysUntil`, `text` |
 | `filter` | Extra OpenSearch clauses for this widget only, compiled into a `filter` aggregation |
 | `secondary` | A second figure under a KPI, counted within the tile's own population |
@@ -276,7 +276,7 @@ start there rather than with this table.
 | `nuxeo.passthrough.elasticsearch.enabled=true` | The `nuxeo-search-client-opensearch1` package, through its `opensearch1-search-client` template | Nothing works |
 | `nuxeo.search.client.default.name=opensearch` | Same package | Nothing works |
 | Administrator session | — | Nothing works |
-| `nuxeo.passthrough.elasticsearch.audit.enabled=true` | The `nuxeo-audit-opensearch1` package, through its `opensearch1-audit` template | Users and Process dashboards reduced to a notice naming the prerequisite |
+| `nuxeo.passthrough.elasticsearch.audit.enabled=true` | The `nuxeo-audit-opensearch1` package, through its `opensearch1-audit` template | Users and Workflows dashboards reduced to a notice naming the prerequisite |
 | `RetentionRule` document type | The `nuxeo-retention` package | Governance dashboard reduced to a notice naming the package |
 | Web UI | The `nuxeo-web-ui` package, declared as a dependency | No Administration menu entry; the dashboard stays reachable by URL |
 
@@ -429,6 +429,23 @@ Document types and lifecycle states reuse Web UI's own translation bundle, fetch
 Users are resolved through `/api/v1/user/{id}`, deduplicated and cached. Every lookup degrades to
 the raw value, so a missing translation or a deleted principal never breaks a chart.
 
+Workflow values reach the same bundle by two further strategies. `message` translates a value that
+*is* an i18n key: `extended.taskName` holds `wf.parallelDocumentReview.chooseParticipants.title`,
+which the bundle renders as "Choose Participants". `workflowModel` composes one out of a model
+name, `wf.<name with a lower case initial>.<name>`, which is how Web UI's own workflow layouts
+address it.
+
+`extended.action` deliberately gets **no** strategy. The audit records the button's `name`
+(`approve`, `reject`, `validate`), while the i18n key sits in the button's `label` and never leaves
+the model definition. Declaring a strategy there would promise a translation that can never happen.
+
+### Metrics with no value
+
+A count, a cardinality and a sum over an empty set are all legitimately zero. An average, a minimum
+and a maximum are not: OpenSearch answers `null`, and the dashboard renders that as a dash rather
+than as `0`. Without this, an average duration tile would read `0 s` on a server where no workflow
+has ever completed, which no reader can tell apart from a genuinely instantaneous workflow.
+
 ### Indexing rules worth knowing
 
 Taken from the LTS 2025 `opensearch1-doc-mapping.json`; getting these wrong produces empty results
@@ -464,6 +481,27 @@ rather than errors.
 - **`audit_wf` rewrites the payload even for administrators** (it injects
   `term: { category: "Routing" }`), so JSON key order is not preserved. Harmless, but do not rely
   on it.
+- **`audit_wf` hides five of the thirteen audited workflow events.** That same injected category
+  filter excludes `workflowTaskAssigned`, `workflowTaskReassigned`, `workflowTaskCompleted`,
+  `workflowTaskDelegated` and `auditLogRoute`, which are fired with no explicit category. They sit
+  in the index and this view will never return them, so a widget built on one stays empty forever
+  with nothing on screen to explain why. `extended.directive` and `extended.dueDate` are declared
+  only on those events, so no task directive and no due date can be read through this view.
+- **A workflow has no state field.** State is derived from the event id: started is
+  `afterWorkflowStarted`, completed `afterWorkflowFinish`, cancelled `beforeWorkflowCanceled`.
+  Prefer that last one to `workflowCanceled`, which fires once per attached document and therefore
+  multiplies a single cancellation. A trustworthy "currently running" figure cannot come from the
+  audit at all: it needs `DocumentRoute` on the repository index, hence a second index.
+- **`extended.timeSinceWfStarted` and `extended.timeSinceTaskStarted` are `long`, in
+  milliseconds**, and absent rather than negative when the helper cannot find the start event.
+  Neither is declared in the mapping, so the first document written fixes the type: a quoted
+  number makes the field a `keyword` for good and every `avg` on it fails until the index is
+  rebuilt.
+- **`extended.actors` is a `keyword[]` on a reassignment but a single `"[bob, alice]"` string on a
+  task creation**, a `LinkedHashSet` having fallen through to `toString()`. Never aggregate it
+  across both events.
+- **Non-administrators see only the workflow models they hold `DataVisualization` on.** An empty
+  permission set compiles to an empty `terms`, so zero hits rather than an error.
 
 ## Project layout
 
@@ -497,7 +535,7 @@ rather than errors.
 | 1e | Period with explicit inclusive bounds, and the Users dashboard on the audit index | done |
 | 2 | Cross filtering on bucket click, active filter chips, path scope, CSV and PNG export | next |
 | 3 | Configuration editor, with a field picker fed by `/api/v1/config/schemas` | |
-| 4 | Process dashboard | |
+| 4 | Workflows dashboard | done |
 | 5 | Governance dashboard | |
 
 ## Licence

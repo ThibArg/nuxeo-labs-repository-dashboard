@@ -54,8 +54,8 @@ describe('UpcomingPageComponent', () => {
     await TestBed.inject(PreflightService).run();
 
     const fixture = TestBed.createComponent(UpcomingPageComponent);
-    fixture.componentRef.setInput('heading', 'Process Dashboard');
-    fixture.componentRef.setInput('phase', 'phase 4');
+    fixture.componentRef.setInput('heading', 'Some Later Dashboard');
+    fixture.componentRef.setInput('phase', 'phase 9');
     fixture.detectChanges();
 
     expect((fixture.nativeElement as HTMLElement).querySelector('a')).toBeNull();
