@@ -74,10 +74,11 @@ export type MetricConfig =
  * How bucket keys and column values are turned into human readable labels.
  *
  * `message` translates a value that is already an i18n key, `workflowModel` composes one out of a
- * workflow model name. Both are what the audit index holds for workflows.
+ * workflow model name. Both are what the audit index holds for workflows. `document` names the
+ * document a uuid points at, which is what a reference field such as `record:ruleIds` holds.
  */
 export type LabelStrategy =
-  'raw' | 'doctype' | 'lifecycle' | 'user' | 'boolean' | 'message' | 'workflowModel';
+  'raw' | 'doctype' | 'lifecycle' | 'user' | 'document' | 'boolean' | 'message' | 'workflowModel';
 
 export type ValueFormat =
   'integer' | 'decimal' | 'bytes' | 'percent' | 'duration' | 'date' | 'daysUntil' | 'text';

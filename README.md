@@ -66,7 +66,7 @@ A dashboard is one JSON file under
 | `agg.date_histogram.time_zone` | IANA zone the buckets are cut in; defaults to the reader's own |
 | `metric` | `count`, `cardinality`, `sum`, `avg`, `min`, `max`, `percentile` — nested under the aggregation |
 | `scope` | Named population this widget describes, see below |
-| `labels` | `raw`, `doctype`, `lifecycle`, `user`, `boolean`, `message`, `workflowModel` |
+| `labels` | `raw`, `doctype`, `lifecycle`, `user`, `document`, `boolean`, `message`, `workflowModel` |
 | `lookup` | `user` on a filter member: ranks values by volume and searches the directory as the reader types |
 | `format` | `integer`, `decimal`, `bytes`, `percent`, `duration`, `date`, `daysUntil`, `text` |
 | `filter` | Extra OpenSearch clauses for this widget only, compiled into a `filter` aggregation |
@@ -483,6 +483,14 @@ underscore is left exactly as it was written.
 `extended.action` deliberately gets **no** strategy. The audit records the button's `name`
 (`approve`, `reject`, `validate`), while the i18n key sits in the button's `label` and never leaves
 the model definition. Declaring a strategy there would promise a translation that can never happen.
+
+`document` names the document a uuid points at, through `/api/v1/id/{uuid}`, and shares the user
+lookup's cache discipline. It exists for a field holding document references: `record:ruleIds`
+carries the uuid of the `RetentionRule` that turned a document into a record, so a chart grouped by
+it would otherwise draw bare uuids. A rule deleted after the records it governs leaves its uuid
+behind and the server answers 404 — the bucket still holds documents, so it falls back to the
+uuid, which is a poor label but an honest one. Unlike `user`, this strategy carries no merging
+rule, so it combines freely with a `metric`.
 
 ### A principal reaches the index under two forms
 

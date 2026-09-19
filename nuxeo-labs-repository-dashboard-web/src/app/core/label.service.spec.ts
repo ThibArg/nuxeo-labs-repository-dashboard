@@ -233,4 +233,74 @@ describe('LabelService', () => {
     expect(labels.get('false')).toBe('No');
     expect(stub.calls).toHaveLength(0);
   });
+
+  it('names the document a uuid points at, and deduplicates lookups', async () => {
+    stub = installFetchStub([
+      {
+        match: '/api/v1/id/c667a0e3',
+        json: { uid: 'c667a0e3', title: 'Contracts — 2 years' },
+      },
+    ]);
+
+    const service = TestBed.inject(LabelService);
+    const labels = await service.resolve('document', ['c667a0e3', 'c667a0e3']);
+
+    expect(labels.get('c667a0e3')).toBe('Contracts — 2 years');
+    expect(stub.calls).toHaveLength(1);
+  });
+
+  /*
+   * A rule deleted after the records it governs leaves its uuid behind in `record:ruleIds`, and
+   * the server answers 404 on it. The bucket still holds documents, so it has to render as
+   * something; the uuid is a poor label but the only honest one.
+   */
+  it('shows the bare uuid when the document it names no longer exists', async () => {
+    stub = installFetchStub([{ match: '/api/v1/id/', status: 404, json: {} }]);
+
+    const labels = await TestBed.inject(LabelService).resolve('document', ['deleted-rule']);
+
+    expect(labels.get('deleted-rule')).toBe('deleted-rule');
+  });
+
+  it('shows the bare uuid when the document carries no title', async () => {
+    stub = installFetchStub([{ match: '/api/v1/id/untitled', json: { uid: 'untitled' } }]);
+
+    const labels = await TestBed.inject(LabelService).resolve('document', ['untitled']);
+
+    expect(labels.get('untitled')).toBe('untitled');
+  });
+
+  it('looks a document up once even when several widgets ask at the same time', async () => {
+    stub = installFetchStub([{ match: '/api/v1/id/rule', json: { title: 'Invoices' } }]);
+
+    const service = TestBed.inject(LabelService);
+    const [first, second] = await Promise.all([
+      service.resolve('document', ['rule']),
+      service.resolve('document', ['rule']),
+    ]);
+
+    expect(stub.calls).toHaveLength(1);
+    expect([first.get('rule'), second.get('rule')]).toEqual(['Invoices', 'Invoices']);
+  });
+
+  /*
+   * The two strategies share one caching helper, so a uuid that happens to read like a user name
+   * must not pick up the other's answer.
+   */
+  it('keeps document and principal lookups in separate caches', async () => {
+    stub = installFetchStub([
+      { match: '/api/v1/id/jdoe', json: { title: 'A document called jdoe' } },
+      {
+        match: '/api/v1/user/jdoe',
+        json: { id: 'jdoe', properties: { firstName: 'Jane', lastName: 'Doe' } },
+      },
+    ]);
+
+    const service = TestBed.inject(LabelService);
+
+    expect((await service.resolve('document', ['jdoe'])).get('jdoe')).toBe(
+      'A document called jdoe',
+    );
+    expect((await service.resolve('user', ['jdoe'])).get('jdoe')).toBe('Jane Doe');
+  });
 });

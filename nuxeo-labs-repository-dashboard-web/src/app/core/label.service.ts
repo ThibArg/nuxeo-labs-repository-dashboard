@@ -15,8 +15,14 @@ interface NxGroupEntity {
   grouplabel?: string | null;
 }
 
-/** How many user lookups run at once, to avoid flooding the server on a wide `dc:creator` facet. */
-const USER_LOOKUP_CONCURRENCY = 6;
+interface NxDocumentEntity {
+  uid?: string;
+  /** At the root of the entity, and falling back to the document name when `dc:title` is unset. */
+  title?: string | null;
+}
+
+/** How many lookups run at once, to avoid flooding the server on a wide `dc:creator` facet. */
+const LOOKUP_CONCURRENCY = 6;
 
 /**
  * Resolves raw aggregation keys into readable labels.
@@ -46,6 +52,7 @@ export class LabelService {
   private messagesPromise: Promise<void> | null = null;
 
   private readonly userCache = new Map<string, Promise<string>>();
+  private readonly documentCache = new Map<string, Promise<string>>();
 
   /** Loads Web UI's translation bundle once. Failures are swallowed on purpose. */
   async loadMessages(): Promise<void> {
@@ -135,6 +142,9 @@ export class LabelService {
       case 'user':
         return this.resolvePrincipals(unique);
 
+      case 'document':
+        return this.resolveDocuments(unique);
+
       case 'raw':
       case undefined:
       default:
@@ -145,26 +155,48 @@ export class LabelService {
   /**
    * Looks principals up through the REST API, caching both hits and misses.
    *
-   * The cache holds the in-flight promise rather than the answer, because several widgets resolve
-   * their buckets in parallel: caching the answer would let three charts naming the same author
-   * each issue their own request, since none of them has returned yet when the others start. It is
-   * keyed by the raw value, so `jdoe` and `user:jdoe` are two entries resolving to one label.
+   * It is keyed by the raw value, so `jdoe` and `user:jdoe` are two entries resolving to one label.
    */
   async resolvePrincipals(ids: string[]): Promise<Map<string, string>> {
-    const unique = [...new Set(ids)];
-    const missing = unique.filter((id) => !this.userCache.has(id));
+    return this.resolveCached(this.userCache, ids, (id) => this.fetchPrincipalLabel(id));
+  }
 
-    for (let i = 0; i < missing.length; i += USER_LOOKUP_CONCURRENCY) {
-      const slice = missing.slice(i, i + USER_LOOKUP_CONCURRENCY);
-      // Registered before the first await, so a concurrent caller joins instead of refetching.
-      slice.forEach((id) => this.userCache.set(id, this.fetchPrincipalLabel(id)));
-      await Promise.all(slice.map((id) => this.userCache.get(id)!));
+  /**
+   * Names the documents a set of uuids points at, for a field holding document references.
+   *
+   * `record:ruleIds` is the case in hand: it holds the uuid of the `RetentionRule` that made a
+   * document a record, and a chart grouped by it would otherwise render bare uuids.
+   */
+  async resolveDocuments(ids: string[]): Promise<Map<string, string>> {
+    return this.resolveCached(this.documentCache, ids, (id) => this.fetchDocumentLabel(id));
+  }
+
+  /**
+   * Resolves ids through a cache holding the in-flight promise rather than the answer.
+   *
+   * Several widgets resolve their buckets in parallel, so caching the answer would let three
+   * charts naming the same author each issue their own request: none of them has returned when
+   * the others start. Registering the promise before the first await is what makes a concurrent
+   * caller join instead of refetching.
+   */
+  private async resolveCached(
+    cache: Map<string, Promise<string>>,
+    ids: string[],
+    fetch: (id: string) => Promise<string>,
+  ): Promise<Map<string, string>> {
+    const unique = [...new Set(ids)];
+    const missing = unique.filter((id) => !cache.has(id));
+
+    for (let i = 0; i < missing.length; i += LOOKUP_CONCURRENCY) {
+      const slice = missing.slice(i, i + LOOKUP_CONCURRENCY);
+      slice.forEach((id) => cache.set(id, fetch(id)));
+      await Promise.all(slice.map((id) => cache.get(id)!));
     }
 
     const labels = new Map<string, string>();
     await Promise.all(
       unique.map(async (id) => {
-        labels.set(id, await this.userCache.get(id)!);
+        labels.set(id, await cache.get(id)!);
       }),
     );
     return labels;
@@ -186,6 +218,17 @@ export class LabelService {
     } catch {
       // Deleted principal, or a technical one such as "system": show the bare name, never a prefix.
       return name;
+    }
+  }
+
+  private async fetchDocumentLabel(uuid: string): Promise<string> {
+    try {
+      const document = await this.http.get<NxDocumentEntity>(`id/${encodeURIComponent(uuid)}`);
+      return document.title?.trim() || uuid;
+    } catch {
+      // A rule deleted after the records it governs keeps its uuid in `record:ruleIds`, and the
+      // server answers 404. The uuid is a poor label but an honest one.
+      return uuid;
     }
   }
 }
