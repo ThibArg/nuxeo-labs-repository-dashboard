@@ -167,7 +167,7 @@ Do not undo these without knowing what they were for.
 | No Nuxeo JS client | CommonJS, not tree-shakable; it would pull batch upload, directories and OAuth2 for three call shapes. A `fetch` wrapper is enough |
 | No implicit exclusion of technical documents | Explicit user decision: a customer creating five `Domain` objects has reasons to see them counted. The type filter is the tool, and it is persisted |
 | Configuration stored in `src/app/config/dashboards/`, copied to assets | The tests import the file that actually ships, so it cannot drift from what is tested |
-| Records and legal holds moved from Content to Governance | User decision. They answer a compliance question, not a volumetry one, and Governance is where retention lives |
+| Records and legal holds moved from Content to Governance | User decision. They answer a compliance question, not a volumetry one, and Governance is where retention lives. Already removed from `content.json`; phase 5 starts from a blank page |
 | Governance reachable even without `nuxeo-retention` | A greyed out entry cannot tell the reader which package to install. The page names it and links to its documentation. Workflows follows the same rule since phase 4 |
 | A period is two inclusive calendar days, not date math | Only concrete days can be shown in, and edited through, the two date fields. `gte` at the start of the first day, `lt` at the start of the day after the last: the final evening is covered without a `23:59:59.999` fudge |
 | `extended_bounds` derived from the filter, never configured | A histogram only spans the days holding a document, so a quiet start of period silently shortens the chart. Deriving it keeps `AggConfig` closed, and it is applied only to the field the date filter constrains — for any other field the selected days say nothing |
@@ -528,10 +528,10 @@ workflow specific:
   broken `LabelStrategy` passed in silence — the same blind spot the hint had. A chart test can now
   observe what it claims to verify.
 
-**Phase 5, the Governance dashboard, is what comes next.** It must start by taking the record and
-legal hold tiles out of Content. Then phase 2 (cross filtering on bucket click, active filter chips,
-path scope, CSV and PNG export) and phase 3 (configuration editor with a field picker fed by
-`/api/v1/config/schemas`).
+**Phase 5, the Governance dashboard, is what comes next.** The record and legal hold tiles are
+already out of Content, so it starts from a blank page rather than from a move. Then phase 2
+(cross filtering on bucket click, active filter chips, path scope, CSV and PNG export) and phase 3
+(configuration editor with a field picker fed by `/api/v1/config/schemas`).
 
 The `DataTableComponent` is no longer dead configuration: `tasks.json` uses it for the overdue
 table, which is what surfaced the multivalued label defect. Governance may well need it too.

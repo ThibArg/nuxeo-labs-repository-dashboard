@@ -673,11 +673,11 @@ rather than errors.
 | 1c | Scopes and the repository composition row | done |
 | 1d | Modification trend, range reminder, range driven layout | done |
 | 1e | Period with explicit inclusive bounds, and the Users dashboard on the audit index | done |
-| 2 | Cross filtering on bucket click, active filter chips, path scope, CSV and PNG export | next |
+| 2 | Cross filtering on bucket click, active filter chips, path scope, CSV and PNG export | |
 | 3 | Configuration editor, with a field picker fed by `/api/v1/config/schemas` | |
 | 4 | Workflows dashboard | done |
 | 4b | Tasks dashboard, on open tasks and due dates | done |
-| 5 | Governance dashboard | |
+| 5 | Governance dashboard, on records, legal holds and retention | next |
 
 ## Licence
 
