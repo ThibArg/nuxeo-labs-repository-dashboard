@@ -59,6 +59,14 @@ behaviour that changed, followed by a body arguing the reasoning and citing the 
 - **Dashboards are JSON** in `src/app/config/dashboards/`, copied to `assets/dashboards/` by
   `angular.json` and fetched at runtime. The specs `import` those very files, so a shipped
   configuration cannot drift from what is tested.
+- **An administrator's edit wins over the shipped file.** `DashboardConfigService.load` asks
+  `DashboardOverrideService` (`engine/dashboard-override.service.ts`, `localStorage` under
+  `nxd.config.<dashboard>`) before fetching the asset, and ignores an override that no longer
+  compiles. The editor itself is `layout/config-editor.component.ts`, a `<dialog>` holding one
+  text area, opened from the Configure button in `layout/page-header.component.ts` and wired in
+  `pages/dashboard-page.component.ts` by `openEditor`, `validateDraft`, `saveConfig` and
+  `revertConfig`. `validateConfig`, beside the override service, is the gate: it runs the real
+  planner rather than restating its rules.
 
 ## Testing conventions
 
@@ -296,11 +304,23 @@ The work is pushed to `github.com/ThibArg/nuxeo-labs-repository-dashboard`, a pu
 the plugin is ready to be forked into `nuxeo-sandbox`; the README carries a warning saying so, and
 `AGENTS.md` is deliberately **not** gitignored in this repository, so keep it free of credentials.
 
-**Phases 2 and 3 shipped.** What is left of the roadmap is the field picker that would feed the
-configuration editor from `/api/v1/config/schemas` — 91 schemas, whose fields are `string`,
-`string[]`, `boolean`, `date`, `long`, `double`, `blob` or complex, and which would have to carry
-the mapping rules the README lists: no `.keyword`, a dot for a complex property, `dc:title`
-readable but not aggregatable.
+**Phases 2 and 3 shipped, so the field picker of phase 3b is all that is left.** It would feed the
+configuration editor from `GET /api/v1/config/schemas`, which **nothing in the application calls
+today** — `NuxeoHttpService.get` is the way in, and it would be that endpoint's first caller.
+
+Measured on the sandbox, so that a session does not have to guess the shape: a **flat array of 91
+objects**, each `{ name, "@prefix", fields }`. A field maps to a type string — `string`,
+`string[]`, `boolean`, `date`, `long`, `double`, `blob`, `blob[]` — or, in **13 of the 91**, to an
+object `{ type: "complex" | "complex[]", fields: { … } }` that nests further.
+
+Two traps the picker has to survive. **`@prefix` is sometimes the empty string**, `l10nvocabulary`
+and `oauth2Client` among others, and a field of such a schema is addressed by the schema name
+instead. And a type alone does not say whether a field can be aggregated: the README's "Indexing
+rules worth knowing" is where that lives — never a `.keyword` suffix, a dot rather than a slash
+inside a complex property, `dc:title` readable from `_source` but not aggregatable,
+`ecm:retainUntil` written only when non null, `thumb:thumbnail.*` and `picture:views.*` mapped
+`index: false`. A picker offering a field the compiler will refuse is worse than no picker, and
+`agg-compiler.ts` already refuses the first two by construction.
 
 `governance.json` reads the repository index under a `baseFilter` of live, untrashed,
 non-versioned, non-proxy documents. That last pair is near-tautological and deliberately kept: a
