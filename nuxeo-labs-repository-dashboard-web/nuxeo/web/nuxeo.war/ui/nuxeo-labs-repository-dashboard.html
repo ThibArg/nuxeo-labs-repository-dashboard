@@ -1,0 +1,21 @@
+<!--
+  Adds an entry to the Web UI Administration menu pointing at the standalone dashboard SPA.
+
+  This file is a plain HTML resource: nuxeo-slot-content, nuxeo-filter and nuxeo-menu-item are
+  already registered by Web UI's main.bundle.js, so no rollup build and no custom element are
+  required. It is loaded through the WebResources contribution in
+  OSGI-INF/dashboard-webresources-contrib.xml.
+-->
+<nuxeo-slot-content name="repositoryDashboardMenuItem" slot="ADMINISTRATION_MENU" order="15">
+  <template>
+    <nuxeo-filter user="[[user]]" expression="user.isAdministrator">
+      <template>
+        <nuxeo-menu-item
+          name="repository-dashboard"
+          label="repositoryDashboard.menu"
+          link="/nuxeo/dashboard/"
+        ></nuxeo-menu-item>
+      </template>
+    </nuxeo-filter>
+  </template>
+</nuxeo-slot-content>

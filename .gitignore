@@ -1,9 +1,7 @@
-# Maven
+# Maven. Packaged artefacts all land in target/, which is enough: a *.war rule would also
+# match nuxeo/web/nuxeo.war/, a source directory holding the Web UI slot and its translations.
 target/
 *.class
-*.jar
-*.war
-*.ear
 
 # Node
 node_modules/
