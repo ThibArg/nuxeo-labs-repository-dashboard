@@ -4,7 +4,8 @@
  * `EsClause` is `Record<string, unknown>`, forwarded verbatim by a passthrough that runs as an
  * administrator, so a hand written clause is also a place where `script` or `runtime_mappings`
  * could appear. Aggregations have been closed against that since the beginning; filters never
- * were — the shipped files carry 41 clauses written by hand, using, in the end, two shapes only.
+ * were — the four dashboards not yet migrated carry 27 clauses written by hand, using, in the
+ * end, two shapes only.
  *
  * Definitions go through these four instead, so the escape hatch simply is not there. A
  * composition names widgets and parameters and has no way to express a clause at all.

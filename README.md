@@ -7,12 +7,12 @@ An administrator facing analytics dashboard for a Nuxeo repository, served by th
 `/nuxeo/dashboard/` and reachable from the Web UI Administration menu.
 
 The dashboard is a standalone Angular application packaged as a Nuxeo bundle. Charts and figures
-are described by configuration rather than hard coded, and every widget of a page is batched into
-a single OpenSearch aggregation request.
+are described by configuration rather than hard coded, and the widgets of one index are batched
+into a single OpenSearch aggregation request.
 
-> **Status: six screens live.** Content, Users, Workflows, Tasks and Governance are complete and
-> configuration driven, alongside Diagnostics. The configuration editor and cross filtering land
-> next, see [Roadmap](#roadmap).
+> **Status: six screens live.** Content, Users, Workflows, Tasks and Governance are complete,
+> alongside Diagnostics. Content is composed from a reusable widget library; the other four are
+> still written as configuration and are next in line, see [Roadmap](#roadmap).
 
 ## Screens
 
@@ -25,20 +25,90 @@ a single OpenSearch aggregation request.
 | **Governance** | `ecm:isRecord`, `ecm:hasLegalHold`, `ecm:retainUntil`, the `Record` facet through `ecm:mixinType`, and `record:ruleIds` resolved against the `RetentionRule` documents |
 | **Diagnostics** | The preflight report, always available |
 
-## Configuring a dashboard
+## Composing a dashboard
 
-A dashboard is one JSON file under
-`nuxeo-labs-repository-dashboard-web/src/app/config/dashboards/`, shipped as
-`assets/dashboards/<id>.json`. Adding a chart means editing that file, not writing a component.
+A dashboard names widgets from a library and says where they go. Adding a chart means naming one
+more, not writing a query.
 
 ```jsonc
 {
   "id": "content",
   "label": "Content Dashboard",
+  "filters": [{ "type": "dateRange", "field": "dc:created", "default": "all" }],
+  "layout": [
+    {
+      "cells": [
+        { "use": "documents-by-type", "as": "byType", "span": 6 },
+        { "use": "documents-created", "as": "created", "span": 6, "with": { "interval": "week" } }
+      ]
+    }
+  ]
+}
+```
+
+| Key | Meaning |
+| --- | --- |
+| `use` | Id of a widget in the library, `src/app/library/` |
+| `as` | Name it takes on the page, defaulting to `use`. Must be unique |
+| `title` | Card title, overriding the widget's own |
+| `hint` | Secondary line under the title; `{range}` is replaced by the active date range |
+| `span` | Width in the 12 column grid; omitted spans share the row evenly |
+| `spanByRange` | Overrides `span` for a given date range id |
+| `with` | Parameters the widget declares |
+
+`as` has to be unique because it is what names the aggregation inside the shared request. That
+naming — after the widget rather than after the field — is precisely what lets two widgets reading
+the same field travel together instead of overwriting each other.
+
+### The widget library
+
+Each widget is a dozen lines in `nuxeo-labs-repository-dashboard-web/src/app/library/`, carrying a
+semantic id, the index it reads, one sentence saying what it measures, and the parameters it
+accepts. **The definitions are the catalogue**: point an assistant at that folder and it has
+everything it needs, with nothing generated to fall out of step.
+
+```ts
+export const documentsCreated = defineWidget<TrendParams>({
+  id: 'documents-created',
+  index: 'nuxeo',
+  title: 'Documents Created',
+  summary: 'How many live documents were created, over time.',
+  params: TREND_PARAMS,
+  build: (params) => trendChart({ of: [...LIVE_NOT_TRASHED, ...restrict(params)], ... }),
+});
+```
+
+Fifty-four widgets ship and they are eleven ideas — counting a population and ranking the top
+values of a field account for forty-two on their own — so the reuse lives in a handful of
+builders while the *names* stay one per idea. A composition saying `topNChart('ecm:primaryType')`
+would be back to writing queries by hand.
+
+Every repository widget accepts `types` and `facets`, which narrow it to a few document types or
+to documents carrying a facet. An empty list means **no constraint**, never "no value": compiled
+the other way, a widget restricted to nothing in particular would match nothing at all.
+
+### Why a recipe rather than a component
+
+A widget that ran its own search would be simpler to compose and would cost thirteen requests
+where Content costs one. The round trips are affordable — this is a page a few administrators
+open. The arithmetic is not.
+
+Content shows `total = live + trashed + versions + proxies`, and figures read from four separate
+requests over a moving index add up by luck. The expiry tiles are worse: they are bounded by `now`,
+which OpenSearch evaluates when it *receives* a request, so one request means one instant and
+eight mean eight — and a document expiring at exactly J+7 can then be counted twice or not at all.
+
+### The compiled form
+
+A composition compiles to the configuration the engine plans, batches and renders, and a dashboard
+may also be written in that form directly. It is what the four dashboards not yet migrated use,
+and what an older stored edit holds.
+
+```jsonc
+{
+  "id": "content",
   "index": "nuxeo",
-  "dateField": "dc:created",
-  "baseFilter": [{ "term": { "ecm:isVersion": false } }],
-  "layout": [{ "cells": ["byType", "storageByType"] }],
+  "layout": [{ "cells": ["byType"] }],
   "widgets": {
     "byType": {
       "type": "donut",
@@ -46,14 +116,6 @@ A dashboard is one JSON file under
       "span": 6,
       "labels": "doctype",
       "agg": { "terms": { "field": "ecm:primaryType", "size": 10 } }
-    },
-    "storageByType": {
-      "type": "ranked-list",
-      "label": "Storage by Document Type",
-      "span": 6,
-      "format": "bytes",
-      "metric": { "sum": "file:content.length" },
-      "agg": { "terms": { "field": "ecm:primaryType", "order": "metric_desc" } }
     }
   }
 }
@@ -65,6 +127,7 @@ A dashboard is one JSON file under
 | `agg` | `terms`, `date_histogram`, `range`, `date_range`, `filters` |
 | `agg.date_histogram.time_zone` | IANA zone the buckets are cut in; defaults to the reader's own |
 | `metric` | `count`, `cardinality`, `sum`, `avg`, `min`, `max`, `percentile` — nested under the aggregation |
+| `index` | Index this widget reads, when it is not the dashboard's own |
 | `scope` | Named population this widget describes, see below |
 | `labels` | `raw`, `doctype`, `lifecycle`, `user`, `document`, `boolean`, `message`, `workflowModel` |
 | `lookup` | `user` on a filter member: ranks values by volume and searches the directory as the reader types |
@@ -81,14 +144,31 @@ accept `script` and `runtime_mappings`. `agg-compiler.ts` is the only code that 
 JSON, and it rejects anything else — including a `.keyword` suffix, which would silently match
 nothing on a Nuxeo index.
 
+**Filters were never closed the same way.** `baseFilter`, `scopes`, a widget's `filter` and a
+secondary figure's are `EsClause`, forwarded as written; the four dashboards still in that form
+carry 27 such clauses between them. A widget definition goes through four typed predicates
+instead — `equals`, `anyOf`, `dateWindow`, `exists` — and a composition cannot express a clause at
+all, which is what closes the hole for anything written the new way.
+
 ## Scopes
 
 A widget can only ever narrow the shared query, never widen it. Putting "exclude versions and
 proxies" in `baseFilter` would therefore make it impossible to also show how many versions exist.
-Scopes solve that: the distinction lives on the widget, not on the dashboard.
+Populations solve that: the distinction lives on the widget, not on the dashboard.
+
+A widget definition states its own, out of `library/populations.ts`:
+
+```ts
+export const LIVE_NOT_TRASHED: Predicate[] = [notVersion, notProxy, notTrashed];
+export const TRASHED: Predicate[] = [notVersion, notProxy, equals('ecm:isTrashed', true)];
+export const VERSIONS: Predicate[] = [equals('ecm:isVersion', true), notProxy];
+export const PROXIES: Predicate[] = [equals('ecm:isProxy', true)];
+```
+
+A dashboard still in the compiled form names them at the page level instead, and widgets point at
+one by name:
 
 ```jsonc
-"baseFilter": [],
 "defaultScope": "liveNotTrashed",
 "scopes": {
   "all":            [],
@@ -99,15 +179,19 @@ Scopes solve that: the distinction lives on the widget, not on the dashboard.
 }
 ```
 
-The four non-empty scopes partition the repository exactly, so the composition row adds up:
+The four non-empty populations partition the repository exactly, so the composition row adds up:
 
 ```
 liveNotTrashed + trashed + versions + proxies = all
 ```
 
-Every chart and table uses `liveNotTrashed`, which is what the "Live" tile counts — the dashboard
-states its own scope rather than leaving it to be guessed. Scope clauses are added to the `filter`
-aggregation the planner already emits per widget, so this costs **no extra request**.
+Measured on the test instance: 709 + 87 + 3091 + 46 = 3933, which is `hits.total`. Stating them in
+the library rather than in each configuration file is what turns that into a property one test
+holds for good, evaluated against synthetic documents rather than read off the clauses.
+
+Every Content chart describes the same population as the "Live" tile — each widget states it
+rather than leaving it to be guessed. The clauses are added to the `filter` aggregation the
+planner already emits per widget, so this costs **no extra request**.
 
 ### Two things the trash does that are not obvious
 
@@ -249,10 +333,13 @@ list can say **how many** values it leaves out rather than merely warning that i
 
 | Action | Requests |
 | --- | --- |
-| Initial load | 2 |
-| Date range change | 2 |
+| Initial load | 1 per index on the page, plus 1 per table widget |
+| Date range change | the same again |
 | First opening of a filter dialog | 1 extra, then cached |
-| Selection change | 2 |
+| Selection change | the same again |
+
+Every dashboard that ships reads one index, so that is one request each — two for Tasks, whose
+table needs `hits` of its own.
 
 ### Filtering on a field with as many values as there are people
 
@@ -389,15 +476,22 @@ today's list.
 
 ## Editing a dashboard
 
-**Configure**, in the title bar, opens the JSON the page is described by. Saving re-renders it
-immediately; **Use the shipped one** discards the edit for good.
+**Configure**, in the title bar, opens the JSON the page is described by — the composition where
+there is one, the configuration otherwise. Saving re-renders it immediately; **Use the shipped
+one** discards the edit for good.
+
+It opens on what was *written*, never on what that expands to. Handing back the thirteen widgets a
+Content composition stands for would be answering a question nobody asked, and would make every
+later edit a fork of the shipped file rather than a change to it.
 
 A text area rather than a form, deliberately. Every shape a configuration accepts is already a
 closed union in `dashboard-config.model.ts`, so a form would be a second description of the same
 grammar — one that drifts the first time a widget type is added. What the editor owes instead is a
 refusal to save anything that cannot render, and a reason for it. **Validation runs the very
 planner that renders the page**, so the editor and the dashboard cannot disagree: a `.keyword`
-suffix or a slash in a field name is refused here because the compiler refuses it there.
+suffix or a slash in a field name is refused here because the compiler refuses it there. A
+composition is compiled first and then held to exactly the same checks, so a widget the library
+does not offer, or a parameter it never declared, is named here rather than discovered on screen.
 
 It also checks what the planner cannot, having only the layout to walk: that the id still matches
 the page, and that cells and widgets name each other exactly.
@@ -494,7 +588,7 @@ no unit test can reach.
 
 1. **Bundle loaded** — `grep nuxeo-labs-repository-dashboard server.log`, no preprocessing error
 2. **Application responds** — `/nuxeo/dashboard/` renders the shell and its sidebar
-3. **Diagnostics** — the six checks, ideally all green
+3. **Diagnostics** — the seven checks, ideally all green
 4. **Real figures** — the eight Content tiles match what the repository holds
 5. **Web UI entry** — *Administration → Repository Dashboard* shows up. A hard reload is needed:
    Web UI registers a service worker that caches its bundles
@@ -527,7 +621,7 @@ npm run format       # prettier
 
 ### Deployment
 
-Four contributions, no Java:
+Five resources, no Java:
 
 | File | Role |
 | --- | --- |
@@ -535,6 +629,7 @@ Four contributions, no Java:
 | `nuxeo/OSGI-INF/dashboard-auth-contrib.xml` | Declares `dashboard/` as a valid start URL, so a login redirect returns to the requested page |
 | `nuxeo/OSGI-INF/dashboard-webresources-contrib.xml` | Registers the Web UI menu entry with the `web-ui` resource bundle |
 | `nuxeo/web/nuxeo.war/ui/nuxeo-labs-repository-dashboard.html` | The `nuxeo-slot-content` itself, a plain HTML file needing no build step |
+| `nuxeo/web/nuxeo.war/ui/i18n/messages*.json` | The label that entry shows, `repositoryDashboard.menu`, in English and French. Without them the menu reads its own key |
 
 Authentication relies entirely on the existing `JSESSIONID` cookie. Web UI remains the default UI
 after login: no `startupPage` is contributed.
@@ -546,10 +641,9 @@ a reverse proxy.
 ### Querying
 
 The Nuxeo passthrough exposes neither `_msearch` nor `_mapping`. Issuing one request per widget
-would mean a dozen round trips per screen, so `query-planner.ts` folds every widget backed by an
-aggregation into a single request: each widget owns a named aggregation, and one carrying its own
-predicate is wrapped in a `filter` aggregation. Table widgets need `hits` and keep a request of
-their own.
+would mean a dozen round trips per screen, so `query-planner.ts` folds the widgets of one index
+into a single request: each widget owns a named aggregation, and one carrying its own predicate is
+wrapped in a `filter` aggregation. Table widgets need `hits` and keep a request of their own.
 
 The Content dashboard, thirteen widgets, therefore costs **one request**:
 
@@ -558,21 +652,35 @@ POST /nuxeo/site/es/nuxeo/_search        // Content-Type: application/json is ma
 {
   "size": 0,
   "track_total_hits": true,
-  "query": { "bool": { "filter": [
-    { "term": { "ecm:isVersion": false } },
-    { "term": { "ecm:isProxy": false } },
-    { "term": { "ecm:isTrashed": false } }
-  ] } },
+  "query": { "bool": { "filter": [] } },
   "aggs": {
-    "expiringWeek":    { "filter": { "range": { "dc:expired": { "gte": "now", "lte": "now+7d" } } } },
-    "expired":         { "filter": { "range": { "dc:expired": { "lt": "now" } } } },
-    "byType":          { "terms": { "field": "ecm:primaryType", "size": 10 } },
-    "topContributors": { "terms": { "field": "dc:creator", "size": 10 } }
+    "expiringWeek":    { "filter": { "bool": { "filter": [ /* live */, { "range": { "dc:expired": { "gte": "now", "lte": "now+7d" } } } ] } } },
+    "expired":         { "filter": { "bool": { "filter": [ /* live */, { "range": { "dc:expired": { "lt": "now" } } } ] } } },
+    "byType":          { "filter": { /* live */ }, "aggs": { "inner": { "terms": { "field": "ecm:primaryType", "size": 10 } } } },
+    "topContributors": { "filter": { /* live */ }, "aggs": { "inner": { "terms": { "field": "dc:creator", "size": 10 } } } }
   }
 }
 ```
 
 A widget with neither predicate nor metric emits no aggregation at all: it reads `hits.total`.
+That is why the Total tile is absent from the twelve aggregations Content sends.
+
+### One request per index, not per dashboard
+
+A widget may declare the index it reads, and the planner groups by it. A page mixing the
+repository and the audit therefore costs two requests rather than being impossible — which it was
+until recently, one `index` per dashboard being a limit rather than a choice.
+
+Two things stay deliberately unsplit. Widgets of one index still travel together, which is what
+keeps a partition adding up and `now` a single instant among the tiles bounded by it. And a
+single-index dashboard still costs exactly one request, so nothing that ships pays for the change.
+
+One picker, several fields: a period means `dc:created` in the repository and `eventDate` in the
+audit, so the date filter names the second one per index.
+
+```jsonc
+{ "type": "dateRange", "field": "dc:created", "byIndex": { "audit": "eventDate" } }
+```
 
 ### Labels
 
@@ -809,8 +917,9 @@ document and look at what comes back.
   is short by one, and a level of a container picker built on it lists the container rather than
   its children — plausible enough on screen to go unnoticed.
 - **A version carries the path of the document it was cut from.** A path scope therefore includes
-  versions unless something else excludes them, which every shipped dashboard using one does in
-  its `baseFilter`.
+  versions unless something else excludes them. Governance does that in its `baseFilter`; Content
+  has none, each of its widgets stating the population it describes instead — which is why its
+  Versions tile keeps counting versions under a path scope, and is meant to.
 - **`extended.params` in the audit index is `"enabled": false`** and cannot be aggregated.
 - **`comment` in the audit index is `text` with no keyword sub-field**: readable from `_source`,
   never aggregatable. Every other audit field is a `keyword` set by a dynamic template.
@@ -893,10 +1002,17 @@ still appear in an audit index, through `Framework.doPrivileged` with no argumen
 │   ├── nuxeo_build_tools/htmlToJsp.mjs         index.html -> index.jsp
 │   └── src/
 │       ├── app/
-│       │   ├── config/                         widget model, loader, dashboards/*.json
+│       │   ├── config/                         widget model, composition compiler, dashboards/*.json
 │       │   ├── core/                           HTTP, preflight, labels, formatting
 │       │   ├── engine/                         agg compiler, query planner, result mapper, runner
 │       │   ├── layout/                         shell, sidebar, grid, date range picker
+│       │   ├── library/                        the widget catalogue
+│       │   │   ├── definition.ts                what a widget is; parameter shapes
+│       │   │   ├── builders.ts                  countTile, topNChart, trendChart
+│       │   │   ├── predicates.ts                the only clauses a definition may express
+│       │   │   ├── populations.ts               named populations of the repository
+│       │   │   ├── registry.ts                  every widget a composition may name
+│       │   │   └── content/                     the thirteen Content definitions
 │       │   ├── pages/                          generic dashboard page, diagnostics
 │       │   └── widgets/                        kpi, chart, ranked list, table, ECharts setup
 │       └── testing/                            fetch stub, chart stub, async helpers
@@ -923,6 +1039,11 @@ still appear in an audit index, through `Framework.doPrivileged` with no argumen
 | 4c | A median beside the mean, and a per model breakdown, where an aggregate mixes populations | done |
 | 4d | Directory backed filtering for a field with as many values as there are people | done |
 | 5 | Governance dashboard, on records, legal holds and retention | done |
+| 6 | Reusable widget library; a dashboard composes rather than configures. Content migrated | done |
+| 6b | One request per index, so a page can mix the repository and the audit | done |
+| 6c | Sections and tabs in a composition | |
+| 6d | The four remaining dashboards migrated, Governance split by theme | |
+| 6e | A prompt and a security checklist for composing with an assistant | |
 
 ## Licence
 

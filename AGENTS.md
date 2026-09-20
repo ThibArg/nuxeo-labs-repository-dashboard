@@ -21,7 +21,7 @@ Angular 22:
 ```bash
 cd nuxeo-labs-repository-dashboard-web
 export PATH="$PWD/node:$PATH"
-npm test                                      # 36 files, vitest + jsdom
+npm test                                      # 40 files, vitest + jsdom
 npm test -- --watch=false --include src/app/engine/agg-compiler.spec.ts   # one file
 npm test -- --watch=false --filter 'never emits a .keyword'               # one behaviour
 npm run build                                 # this is the typecheck
@@ -53,9 +53,17 @@ behaviour that changed, followed by a body arguing the reasoning and citing the 
 - **No Java at all.** Four resources under `nuxeo-labs-repository-dashboard-web/nuxeo/` deploy the
   SPA; the jar carries the Angular output under `nuxeo.war/dashboard/`. The README's "Deployment"
   table says which resource does what.
-- **One `index` per dashboard config**, so a page cannot read the repository and the audit in the
-  same breath (`query-planner.ts`). That is a real limit, not an oversight: it is why a
-  trustworthy "workflows running now" figure is impossible on the Workflows page.
+- **A widget declares the index it reads, and `planDashboard` groups by it** — one request per
+  index present on the page, not one per dashboard and not one per widget. The old limit is gone,
+  so a page *can* now read the repository and the audit in the same breath. What has not changed
+  is that a trustworthy "workflows running now" figure needs `DocumentRoute` on the repository
+  index, which is now a matter of adding that widget rather than of splitting the page.
+- **Two forms of dashboard file coexist, and will for a while.** Content is a *composition*, which
+  names widgets from `src/app/library/` and compiles to the configuration everything downstream
+  already understood; the other four are still written as that configuration. `isComposition`
+  discriminates on a `use` key inside a layout cell, which a compiled layout cannot hold — its
+  cells are plain strings. Use `src/testing/shipped.ts` in a spec rather than casting the import,
+  or the spec goes green for the wrong reason the day that dashboard is migrated.
 - **Dashboards are JSON** in `src/app/config/dashboards/`, copied to `assets/dashboards/` by
   `angular.json` and fetched at runtime. The specs `import` those very files, so a shipped
   configuration cannot drift from what is tested.
@@ -92,15 +100,26 @@ made to render hints, and a broken `LabelStrategy` passed until it rendered buck
 
 ## Invariants the tests protect
 
-- **One request per dashboard.** Adding a widget must not add a round trip. Table widgets are the
-  only exception, because they need `hits`.
+- **One request per index.** Adding a widget must not add a round trip, and every dashboard that
+  ships reads one index, so in practice that is still one request each. Table widgets are the
+  only exception, because they need `hits`. Do not be tempted to give a widget its own request:
+  the cost is not the round trips, it is that a partition read from four of them adds up by luck,
+  and that `now` — which OpenSearch evaluates per request — stops being one instant across the
+  tiles bounded by it.
 - **`AggConfig` stays a closed union, and `agg-compiler.ts` stays its only compiler.** No raw DSL
   reaches the passthrough, which would forward `script` verbatim for an administrator.
   `facet-values.service.ts` once built its own JSON and so escaped every guarantee; it no longer
   does.
-- **Content's composition scopes are a partition**: `liveNotTrashed + trashed + versions + proxies`
-  equals `all`. The test evaluates the clauses against synthetic documents rather than trusting a
-  reading of the JSON.
+- **The repository populations are a partition**: `liveNotTrashed + trashed + versions + proxies`
+  equals `all`. They live in `library/populations.ts` now, so `populations.spec.ts` holds it once
+  for every dashboard rather than per configuration file, and it evaluates the clauses against
+  synthetic documents rather than trusting a reading of them. Confirmed live: 709 + 87 + 3091 + 46
+  = 3933 = `hits.total`.
+- **A widget body never sets `label`, `span` or `spanByRange`.** Where a card sits and what it is
+  called belong to the page; `WidgetBody` omits them so a builder cannot quietly decide. `hint` is
+  the exception — a definition carries a sensible one and a composition may replace it.
+- **The compiler compiles everything or nothing.** A page built out of the cells that happened to
+  resolve is a page whose figures nobody can account for.
 - **The expiry tiles are a partition too** — `expired`, `expiringWeek`, `expiring60`, never two.
   The sixty day window starts at `gt: now+7d`, so J+7 belongs to the week alone. A reader adds the
   three figures up, so an overlap is a wrong answer, not a detail.
@@ -204,8 +223,8 @@ it now carries six against two, which merge to eight. Every count in this file i
   `"99.9"` for a fractional percent), so `result-mapper` reads the single entry rather than
   recomposing the key — and it sits under `metric`, not under the bucket name. Being multi-valued,
   a `terms` ordered by it needs `metric.50` in the order path, not `metric`. **That ordering path
-  is the one thing no shipped configuration exercises**: all seven `terms` of `workflows.json` sort
-  by `avg`, so it has never been confronted with a live index.
+  is the one thing no shipped configuration exercises**: the only two ordered `terms` in
+  `workflows.json` sort by `avg`, so it has never been confronted with a live index.
 - **`Blob.text()` strips a byte order mark**, the UTF-8 decode algorithm removing one by
   definition, so no assertion on the text of an exported CSV can ever see it. The mark is what
   keeps Excel from reading UTF-8 as the local encoding, so it is worth proving: read the bytes.
@@ -254,6 +273,12 @@ about the choices behind them.
 | The configuration editor is a text area, not a form | The grammar is already a closed union in the model; a form would be a second description of it, drifting the first time a widget type is added. Validation runs the real planner, so editor and dashboard cannot disagree |
 | An override that stops compiling is ignored, not rendered | A configuration can break without being touched, a field having gone away. Falling back to what ships is still correct; a column of errors with no way out is not |
 | A path scope is not persisted either | It is the filter a reader is most likely to forget having set, and the one whose figures look perfectly ordinary while describing a corner of the repository |
+| A widget declares its query instead of running it | Thirteen requests where there was one would be affordable; figures that stop adding up would not. A partition read from four requests over a moving index is right by luck, and `now` bounds eight tiles at eight different instants |
+| The library names one widget per idea, not per shape | Fifty-four widgets are eleven ideas, but a composition saying `topNChart('ecm:primaryType')` is writing a query again. The builders factor, the names do not |
+| A composition compiles to `DashboardConfig` rather than replacing it | Everything downstream — planner, compiler, mapper, the four widget components, both exports, the editor — keeps working untouched, and every invariant their tests hold keeps holding |
+| A definition goes through typed predicates, never `EsClause` | The four dashboards still in the old form carry 27 hand written clauses, using two shapes in the end, and the passthrough forwards `script` verbatim for an administrator. A composition cannot express a clause at all |
+| The editor opens on the source, not on the compilation | Handing back the thirteen widgets a composition stands for answers a question nobody asked, and turns the next edit into a fork of the shipped file rather than a change to it |
+| An empty `types` or `facets` means no constraint | The same rule the filter dialog follows. Read the other way, a widget restricted to nothing in particular would match nothing at all |
 
 ## Blob volumetry, set aside
 
@@ -296,9 +321,22 @@ Answer the user in French, using *vous*.
 
 ## Where things stand
 
-Six live screens — Content, Users, Workflows, Tasks, Governance, Diagnostics. Build green, 461
-tests over 36 files. `UpcomingPageComponent` is gone with the last placeholder; the requirement
+Six live screens — Content, Users, Workflows, Tasks, Governance, Diagnostics. Build green, 550
+tests over 40 files. `UpcomingPageComponent` is gone with the last placeholder; the requirement
 notice it used to carry is now tested where it lives, in `requirement-notice.component.spec.ts`.
+
+**Content is composed, the other four are still configured.** Thirteen definitions live in
+`src/app/library/content/`, over three builders — `countTile`, `topNChart`, `trendChart` — and
+five named populations. Migrating the rest is phase 6d, and the shape to copy is there. The
+equivalence of the two forms was proved and then deleted: `content-composition.spec.ts` planned
+both and compared the requests byte for byte, and it lived in commit `0d1117c` alone, because the
+hand written file it compared against went away in the next one.
+
+Two things the library still lacks, and both matter before phase 6d. **No audit widget exists**,
+so the two-index grouping is exercised by `index-grouping.spec.ts` and by a live probe, never by
+anything that ships. And **`topNChart` carries neither `order` nor `metric`**, which Workflows
+needs for the two `terms` it orders by `avg` — add them there rather than writing a fourth
+builder.
 
 The work is pushed to `github.com/ThibArg/nuxeo-labs-repository-dashboard`, a public backup until
 the plugin is ready to be forked into `nuxeo-sandbox`; the README carries a warning saying so, and
