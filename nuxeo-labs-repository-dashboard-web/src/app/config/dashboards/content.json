@@ -1,7 +1,6 @@
 {
   "id": "content",
   "label": "Content Dashboard",
-  "index": "nuxeo",
   "filters": [
     {
       "type": "dateRange",
@@ -35,255 +34,52 @@
       ]
     }
   ],
-  "baseFilter": [],
-  "defaultScope": "liveNotTrashed",
-  "scopes": {
-    "all": [],
-    "liveNotTrashed": [
-      {
-        "term": {
-          "ecm:isVersion": false
-        }
-      },
-      {
-        "term": {
-          "ecm:isProxy": false
-        }
-      },
-      {
-        "term": {
-          "ecm:isTrashed": false
-        }
-      }
-    ],
-    "trashed": [
-      {
-        "term": {
-          "ecm:isVersion": false
-        }
-      },
-      {
-        "term": {
-          "ecm:isProxy": false
-        }
-      },
-      {
-        "term": {
-          "ecm:isTrashed": true
-        }
-      }
-    ],
-    "versions": [
-      {
-        "term": {
-          "ecm:isVersion": true
-        }
-      },
-      {
-        "term": {
-          "ecm:isProxy": false
-        }
-      }
-    ],
-    "proxies": [
-      {
-        "term": {
-          "ecm:isProxy": true
-        }
-      }
-    ]
-  },
   "layout": [
     {
-      "cells": ["totalAll", "liveNotTrashed", "versions", "proxies", "trashed"]
+      "cells": [
+        { "use": "total-documents", "as": "totalAll", "span": 4 },
+        {
+          "use": "live-documents",
+          "as": "liveNotTrashed",
+          "span": 2,
+          "hint": "Scope of every chart below"
+        },
+        { "use": "versions", "as": "versions", "span": 2 },
+        { "use": "proxies", "as": "proxies", "span": 2 },
+        { "use": "trashed-documents", "as": "trashed", "span": 2 }
+      ]
     },
     {
-      "cells": ["expiringWeek", "expiring60", "expired"]
+      "cells": [
+        { "use": "documents-expiring-this-week", "as": "expiringWeek", "span": 4 },
+        { "use": "documents-expiring-in-60-days", "as": "expiring60", "span": 4 },
+        { "use": "documents-expired", "as": "expired", "span": 4 }
+      ]
     },
     {
-      "cells": ["byType", "byState"]
+      "cells": [
+        { "use": "documents-by-type", "as": "byType", "span": 6 },
+        { "use": "documents-by-lifecycle-state", "as": "byState", "span": 6 }
+      ]
     },
     {
-      "cells": ["createdTrend", "modifiedTrend"]
+      "cells": [
+        {
+          "use": "documents-created",
+          "as": "createdTrend",
+          "span": 12,
+          "spanByRange": { "7d": 6, "30d": 6 }
+        },
+        {
+          "use": "documents-modified",
+          "as": "modifiedTrend",
+          "span": 12,
+          "spanByRange": { "7d": 6, "30d": 6 }
+        }
+      ]
     },
     {
-      "cells": ["topContributors"]
+      "cells": [{ "use": "top-contributors", "as": "topContributors", "span": 12 }]
     }
-  ],
-  "widgets": {
-    "totalAll": {
-      "type": "kpi",
-      "label": "Total Documents",
-      "hint": "Live, versions and proxies, trashed or not",
-      "scope": "all",
-      "span": 4
-    },
-    "liveNotTrashed": {
-      "type": "kpi",
-      "label": "Live",
-      "hint": "Scope of every chart below",
-      "scope": "liveNotTrashed",
-      "span": 2
-    },
-    "versions": {
-      "type": "kpi",
-      "label": "Versions",
-      "scope": "versions",
-      "span": 2,
-      "secondary": {
-        "filter": [
-          {
-            "term": {
-              "ecm:isTrashed": true
-            }
-          }
-        ],
-        "label": "{value} trashed",
-        "hideWhenZero": true
-      }
-    },
-    "proxies": {
-      "type": "kpi",
-      "label": "Proxies",
-      "scope": "proxies",
-      "span": 2,
-      "secondary": {
-        "filter": [
-          {
-            "term": {
-              "ecm:isTrashed": true
-            }
-          }
-        ],
-        "label": "{value} targeting trashed",
-        "hideWhenZero": true
-      }
-    },
-    "trashed": {
-      "type": "kpi",
-      "label": "Trashed",
-      "scope": "trashed",
-      "span": 2
-    },
-    "expiringWeek": {
-      "type": "kpi",
-      "label": "Expiring This Week",
-      "hint": "Within the next 7 days",
-      "severity": "warning",
-      "span": 4,
-      "filter": [
-        {
-          "range": {
-            "dc:expired": {
-              "gte": "now",
-              "lte": "now+7d"
-            }
-          }
-        }
-      ]
-    },
-    "expiring60": {
-      "type": "kpi",
-      "label": "Expiring < 60 Days",
-      "hint": "Beyond the next 7 days",
-      "severity": "warning",
-      "span": 4,
-      "filter": [
-        {
-          "range": {
-            "dc:expired": {
-              "gt": "now+7d",
-              "lte": "now+60d"
-            }
-          }
-        }
-      ]
-    },
-    "expired": {
-      "type": "kpi",
-      "label": "Already Expired",
-      "severity": "danger",
-      "span": 4,
-      "filter": [
-        {
-          "range": {
-            "dc:expired": {
-              "lt": "now"
-            }
-          }
-        }
-      ]
-    },
-    "byType": {
-      "type": "donut",
-      "label": "By Document Type",
-      "span": 6,
-      "labels": "doctype",
-      "agg": {
-        "terms": {
-          "field": "ecm:primaryType",
-          "size": 10
-        }
-      }
-    },
-    "byState": {
-      "type": "donut",
-      "label": "By Lifecycle State",
-      "span": 6,
-      "labels": "lifecycle",
-      "agg": {
-        "terms": {
-          "field": "ecm:currentLifeCycleState",
-          "size": 10
-        }
-      }
-    },
-    "createdTrend": {
-      "type": "area",
-      "label": "Documents Created",
-      "hint": "Number of documents created per day ({range})",
-      "span": 12,
-      "spanByRange": {
-        "7d": 6,
-        "30d": 6
-      },
-      "agg": {
-        "date_histogram": {
-          "field": "dc:created",
-          "calendar_interval": "day",
-          "format": "yyyy-MM-dd"
-        }
-      }
-    },
-    "modifiedTrend": {
-      "type": "area",
-      "label": "Documents Modified",
-      "hint": "Number of documents modified per day (Based on {range} creation)",
-      "span": 12,
-      "spanByRange": {
-        "7d": 6,
-        "30d": 6
-      },
-      "agg": {
-        "date_histogram": {
-          "field": "dc:modified",
-          "calendar_interval": "day",
-          "format": "yyyy-MM-dd"
-        }
-      }
-    },
-    "topContributors": {
-      "type": "ranked-list",
-      "label": "Top Contributors",
-      "hint": "Documents created, by author",
-      "span": 12,
-      "labels": "user",
-      "agg": {
-        "terms": {
-          "field": "dc:creator",
-          "size": 10
-        }
-      }
-    }
-  }
+  ]
 }

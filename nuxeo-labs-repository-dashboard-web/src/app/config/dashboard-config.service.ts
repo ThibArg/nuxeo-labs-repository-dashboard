@@ -1,6 +1,8 @@
 import { Injectable, inject } from '@angular/core';
 import { DOCUMENT } from '@angular/common';
 import { DashboardOverrideService, validateConfig } from '../engine/dashboard-override.service';
+import { compileComposition } from './composition-compiler';
+import { isComposition } from './composition.model';
 import { DashboardConfig } from './dashboard-config.model';
 
 /**
@@ -13,12 +15,24 @@ import { DashboardConfig } from './dashboard-config.model';
  * can stop working without being touched — a widget may name a field a later Studio change
  * removed — and a dashboard that silently falls back to what ships is far better than a column of
  * errors nobody can escape from. The editor is where the reason is shown.
+ *
+ * A shipped file may be written either way: as a composition naming library widgets, which is the
+ * form to prefer, or as the compiled configuration. Compiling happens here, so nothing downstream
+ * has to know which it was.
  */
 @Injectable({ providedIn: 'root' })
 export class DashboardConfigService {
   private readonly document = inject(DOCUMENT);
   private readonly overrides = inject(DashboardOverrideService);
   private readonly cache = new Map<string, Promise<DashboardConfig>>();
+
+  /**
+   * The text each dashboard was described by, kept as it was written.
+   *
+   * The editor opens on this rather than on the compiled result: showing the expansion of a
+   * composition to whoever wrote the composition would be answering a question nobody asked.
+   */
+  private readonly sources = new Map<string, string>();
 
   load(id: string): Promise<DashboardConfig> {
     let pending = this.cache.get(id);
@@ -27,6 +41,11 @@ export class DashboardConfigService {
       this.cache.set(id, pending);
     }
     return pending;
+  }
+
+  /** What the dashboard was written as, once it has been loaded. */
+  sourceOf(id: string): string | null {
+    return this.sources.get(id) ?? null;
   }
 
   /** True when the page is showing an administrator's edit rather than what ships. */
@@ -45,8 +64,10 @@ export class DashboardConfigService {
   invalidate(id?: string): void {
     if (id) {
       this.cache.delete(id);
+      this.sources.delete(id);
     } else {
       this.cache.clear();
+      this.sources.clear();
     }
   }
 
@@ -59,6 +80,19 @@ export class DashboardConfigService {
     if (!response.ok) {
       throw new Error(`No dashboard configuration named "${id}" (${response.status} on ${url})`);
     }
-    return (await response.json()) as DashboardConfig;
+
+    const text = await response.text();
+    this.sources.set(id, text);
+
+    const parsed: unknown = JSON.parse(text);
+    if (!isComposition(parsed)) {
+      return parsed as DashboardConfig;
+    }
+
+    const { config, problems } = compileComposition(parsed);
+    if (!config) {
+      throw new Error(`"${id}" names widgets that cannot be built: ${problems.join(' ')}`);
+    }
+    return config;
   }
 }

@@ -333,14 +333,16 @@ export class DashboardPageComponent {
     void this.loadConfig(this.dashboardId());
   }
 
-  /** Opens on what is in force, pretty printed, whether that is an edit or what ships. */
+  /** Opens on what is in force, as it was written, whether that is an edit or what ships. */
   openEditor(): void {
     const config = this.config();
     if (!config) {
       return;
     }
     this.editorSource.set(
-      this.overrides.read(this.dashboardId()) ?? JSON.stringify(config, null, 2),
+      this.overrides.read(this.dashboardId()) ??
+        this.configs.sourceOf(this.dashboardId()) ??
+        JSON.stringify(config, null, 2),
     );
     this.editorProblems.set([]);
     this.editorOpen.set(true);

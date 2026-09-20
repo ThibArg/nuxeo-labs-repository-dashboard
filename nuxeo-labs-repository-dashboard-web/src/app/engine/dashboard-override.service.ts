@@ -1,5 +1,7 @@
 import { Injectable } from '@angular/core';
 import { DashboardConfig, defaultFilterState } from '../config/dashboard-config.model';
+import { compileComposition } from '../config/composition-compiler';
+import { isComposition } from '../config/composition.model';
 import { planDashboard } from './query-planner';
 
 const STORAGE_VERSION = 1;
@@ -81,6 +83,10 @@ export interface ValidationResult {
  * Reimplementing the rules here would let the two drift, and the drift would show as a dashboard
  * that saves cleanly and then displays nothing. `planDashboard` already reports a message per
  * widget it cannot compile, which is exactly what an editor has to show.
+ *
+ * Both forms are accepted. A composition — the form that names library widgets — is compiled
+ * first and then held to exactly the same checks, so the editor cannot approve something the page
+ * would refuse, whichever way it was written.
  */
 export function validateConfig(json: string, expectedId: string): ValidationResult {
   let parsed: unknown;
@@ -94,7 +100,18 @@ export function validateConfig(json: string, expectedId: string): ValidationResu
     return { config: null, problems: ['A dashboard configuration must be a JSON object.'] };
   }
 
-  const config = parsed as DashboardConfig;
+  if (isComposition(parsed)) {
+    const compiled = compileComposition(parsed);
+    if (!compiled.config) {
+      return compiled;
+    }
+    return validateCompiled(compiled.config, expectedId);
+  }
+
+  return validateCompiled(parsed as DashboardConfig, expectedId);
+}
+
+function validateCompiled(config: DashboardConfig, expectedId: string): ValidationResult {
   const problems: string[] = [];
 
   if (config.id !== expectedId) {

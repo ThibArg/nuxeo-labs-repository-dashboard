@@ -10,6 +10,7 @@ import {
   dateRangeFilter,
 } from '../dashboard-config.model';
 import { planDashboard } from '../../engine/query-planner';
+import { shippedConfig } from '../../../testing/shipped';
 
 /**
  * Checks that apply to every dashboard that actually ships.
@@ -18,11 +19,11 @@ import { planDashboard } from '../../engine/query-planner';
  * require remembering these rules, so they are asserted over the whole set.
  */
 const DASHBOARDS: [string, DashboardConfig][] = [
-  ['content.json', contentConfig as DashboardConfig],
-  ['governance.json', governanceConfig as DashboardConfig],
-  ['tasks.json', tasksConfig as DashboardConfig],
-  ['users.json', usersConfig as DashboardConfig],
-  ['workflows.json', workflowsConfig as DashboardConfig],
+  ['content.json', shippedConfig('content.json', contentConfig)],
+  ['governance.json', shippedConfig('governance.json', governanceConfig)],
+  ['tasks.json', shippedConfig('tasks.json', tasksConfig)],
+  ['users.json', shippedConfig('users.json', usersConfig)],
+  ['workflows.json', shippedConfig('workflows.json', workflowsConfig)],
 ];
 
 /** A bounded period, which is what makes the planner emit histogram bounds at all. */

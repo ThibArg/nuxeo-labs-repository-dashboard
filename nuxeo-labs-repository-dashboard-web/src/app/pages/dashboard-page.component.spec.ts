@@ -1,13 +1,14 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import contentConfig from '../config/dashboards/content.json';
-import { DashboardConfig, defaultFilterState, resolveSpan } from '../config/dashboard-config.model';
+import { defaultFilterState, resolveSpan } from '../config/dashboard-config.model';
 import { planDashboard } from '../engine/query-planner';
 import { DashboardPageComponent } from './dashboard-page.component';
 import { provideDashboardCharts } from '../widgets/echarts.setup';
 import { ChartWidgetComponent } from '../widgets/chart-widget.component';
 import { WidgetOutletComponent } from '../widgets/widget-outlet.component';
 import { ChartWidgetStubComponent } from '../../testing/chart-widget.stub';
+import { shippedConfig } from '../../testing/shipped';
 import {
   FetchStub,
   StubRoute,
@@ -18,7 +19,7 @@ import {
 import { settle } from '../../testing/settle';
 import { DownloadCapture, captureDownloads, textOf } from '../../testing/downloads';
 
-const CONTENT = contentConfig as DashboardConfig;
+const CONTENT = shippedConfig('content.json', contentConfig);
 
 /** Midnight, `offset` calendar days from today, as the instant a request carries. */
 function startOfDay(offset: number): string {
@@ -159,18 +160,22 @@ describe('content.json', () => {
       });
     }
 
-    it('declares scopes that are mutually exclusive and exhaustive', () => {
-      const scopes = CONTENT.scopes!;
+    /**
+     * That the four populations partition the repository is now a property of the library, held
+     * against synthetic documents in `populations.spec.ts`. What is left to check here is that the
+     * page still draws its five tiles from them.
+     */
+    it('gives each tile the population its label claims', () => {
+      for (const { scope, ...doc } of CASES) {
+        const tile = scope === 'liveNotTrashed' ? 'liveNotTrashed' : scope;
+        const clauses = (CONTENT.widgets[tile].filter ?? []) as unknown[];
 
-      for (const doc of CASES) {
-        const matching = CASES.filter((candidate) => matches(scopes[candidate.scope], doc));
-        expect(matching.map((entry) => entry.scope)).toEqual([doc.scope]);
+        expect(matches(clauses, doc), tile).toBe(true);
       }
     });
 
     it('counts everything in the total tile', () => {
-      expect(CONTENT.scopes!['all']).toEqual([]);
-      expect(CONTENT.widgets['totalAll'].scope).toBe('all');
+      expect(CONTENT.widgets['totalAll'].filter ?? []).toEqual([]);
     });
 
     it('annotates versions and proxies with a secondary figure', () => {
@@ -203,12 +208,25 @@ describe('content.json', () => {
       return sign ? NOW + (sign === '-' ? -1 : 1) * Number(days) * DAY : NOW;
     }
 
-    function counts(widgetId: string, expiry: number): boolean {
-      const clause = CONTENT.widgets[widgetId].filter![0] as {
-        range: Record<string, Record<string, string>>;
-      };
+    /**
+     * The window a tile applies, picked out of the clauses that also carry its population.
+     *
+     * Reading the first clause would do until the day a widget states the population it describes
+     * beside its own predicate, which is exactly what naming it in a library made it do.
+     */
+    function expiryBounds(widgetId: string): Record<string, string> {
+      const clauses = (CONTENT.widgets[widgetId].filter ?? []) as {
+        range?: Record<string, Record<string, string>>;
+      }[];
+      const window = clauses.find((clause) => clause.range?.['dc:expired']);
+      if (!window) {
+        throw new Error(`"${widgetId}" constrains no expiry date`);
+      }
+      return window.range!['dc:expired'];
+    }
 
-      return Object.entries(clause.range['dc:expired']).every(([operator, math]) => {
+    function counts(widgetId: string, expiry: number): boolean {
+      return Object.entries(expiryBounds(widgetId)).every(([operator, math]) => {
         const bound = resolve(math);
         switch (operator) {
           case 'gte':
@@ -874,11 +892,25 @@ describe('DashboardPageComponent', () => {
       fixture.detectChanges();
     }
 
-    /** A configuration renaming a tile, which is the cheapest change that shows on screen. */
+    /**
+     * A composition renaming a tile, which is the cheapest change that shows on screen.
+     *
+     * Edited as a composition rather than as the compiled form, because that is what the editor
+     * now opens on: showing the expansion of a composition to whoever wrote the composition would
+     * be answering a question nobody asked.
+     */
     function renamed(): string {
-      const config = JSON.parse(JSON.stringify(contentConfig));
-      config.widgets['totalAll'].label = 'Everything At All';
-      return JSON.stringify(config, null, 2);
+      const composition = JSON.parse(JSON.stringify(contentConfig));
+      composition.layout[0].cells[0].title = 'Everything At All';
+      return JSON.stringify(composition, null, 2);
+    }
+
+    function editorText(fixture: ComponentFixture<DashboardPageComponent>): string {
+      return (
+        (fixture.nativeElement as HTMLElement).querySelector(
+          'nxd-config-editor textarea',
+        ) as HTMLTextAreaElement
+      ).value;
     }
 
     it('opens on the configuration in force', async () => {
@@ -887,10 +919,23 @@ describe('DashboardPageComponent', () => {
       buttonNamed(fixture, 'Configure').click();
       fixture.detectChanges();
 
-      const area = (fixture.nativeElement as HTMLElement).querySelector(
-        'nxd-config-editor textarea',
-      ) as HTMLTextAreaElement;
-      expect(JSON.parse(area.value).id).toBe('content');
+      expect(JSON.parse(editorText(fixture)).id).toBe('content');
+    });
+
+    /**
+     * Content is written as a composition, and that is what the editor has to show. Expanding it
+     * into the thirteen widgets it stands for would hand back something nobody wrote, and make
+     * every later edit a fork of the shipped file rather than a change to it.
+     */
+    it('opens on the composition, not on what it expands to', async () => {
+      const fixture = await render();
+
+      buttonNamed(fixture, 'Configure').click();
+      fixture.detectChanges();
+
+      const source = JSON.parse(editorText(fixture));
+      expect(source.layout[0].cells[0].use).toBe('total-documents');
+      expect(source.widgets).toBeUndefined();
     });
 
     it('renders the edited configuration instead of the shipped one', async () => {

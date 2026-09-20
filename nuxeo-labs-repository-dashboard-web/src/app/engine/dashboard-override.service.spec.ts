@@ -1,9 +1,16 @@
 import { TestBed } from '@angular/core/testing';
-import contentConfig from '../config/dashboards/content.json';
+import contentSource from '../config/dashboards/content.json';
 import { DashboardConfig } from '../config/dashboard-config.model';
 import { DashboardOverrideService, validateConfig } from './dashboard-override.service';
+import { shippedConfig } from '../../testing/shipped';
 
-const CONTENT = contentConfig as DashboardConfig;
+/**
+ * Content ships as a composition, so this is its compiled form.
+ *
+ * Both forms have to be accepted: an administrator saving an edit writes whichever one the editor
+ * opened on, and the compiled one is also what an older stored override holds.
+ */
+const CONTENT = shippedConfig('content.json', contentSource);
 
 /** The shipped configuration, which is what the editor opens on and must accept back unchanged. */
 function shipped(): string {
@@ -94,6 +101,54 @@ describe('validateConfig', () => {
   it('hands back the parsed configuration only when it is usable', () => {
     expect(validateConfig(shipped(), 'content').config?.id).toBe('content');
     expect(validateConfig('{"id":"content"}', 'content').config).toBeNull();
+  });
+});
+
+/**
+ * The editor now opens on whichever form the dashboard was written in, so it has to judge both.
+ * A composition it approved but the page refused, or the other way round, would put the two out
+ * of step in exactly the place the single planner was meant to keep them together.
+ */
+describe('validateConfig on a composition', () => {
+  const composition = JSON.stringify(contentSource, null, 2);
+
+  it('accepts the composition that ships', () => {
+    expect(validateConfig(composition, 'content').problems).toEqual([]);
+  });
+
+  it('hands back the compiled configuration, which is what the page renders', () => {
+    const { config } = validateConfig(composition, 'content');
+
+    expect(config?.index).toBe('nuxeo');
+    expect(Object.keys(config!.widgets)).toContain('totalAll');
+  });
+
+  it('reports a widget the library does not offer, naming what it does offer', () => {
+    const broken = JSON.parse(composition);
+    broken.layout[0].cells[0].use = 'documents-by-colour';
+
+    const { config, problems } = validateConfig(JSON.stringify(broken), 'content');
+
+    expect(config).toBeNull();
+    expect(problems[0]).toContain('No widget is called "documents-by-colour"');
+  });
+
+  it('reports a parameter the widget never declared', () => {
+    const broken = JSON.parse(composition);
+    broken.layout[0].cells[0].with = { colour: 'red' };
+
+    expect(validateConfig(JSON.stringify(broken), 'content').problems[0]).toContain(
+      'declares no parameter "colour"',
+    );
+  });
+
+  it('still holds a composition to the id the page loads it by', () => {
+    const renamed = JSON.parse(composition);
+    renamed.id = 'elsewhere';
+
+    expect(validateConfig(JSON.stringify(renamed), 'content').problems[0]).toContain(
+      '"id" must stay "content"',
+    );
   });
 });
 
