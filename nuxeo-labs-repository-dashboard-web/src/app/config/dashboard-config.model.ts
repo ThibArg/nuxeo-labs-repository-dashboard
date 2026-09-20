@@ -99,6 +99,14 @@ export interface ColumnConfig {
 
 interface BaseWidgetConfig {
   label: string;
+  /**
+   * Index this widget reads, when it is not the dashboard's own.
+   *
+   * The planner groups widgets by index and issues one request per group, so a page can hold a
+   * repository figure beside an audit one. Widgets of one group still travel together, which is
+   * what keeps a partition adding up and `now` a single instant within it.
+   */
+  index?: EsIndex;
   /** Clauses applied to this widget only, on top of the dashboard filters and the scope. */
   filter?: EsClause[];
   /**
@@ -170,6 +178,13 @@ export type WidgetConfig = KpiWidgetConfig | ChartWidgetConfig | TableWidgetConf
 export interface DateRangeFilterConfig {
   type: 'dateRange';
   field: string;
+  /**
+   * Field to constrain instead of `field`, on the indices named here.
+   *
+   * A period means `dc:created` in the repository and `eventDate` in the audit, so a page mixing
+   * the two needs both. The planner reads the one belonging to the group it is building.
+   */
+  byIndex?: Partial<Record<EsIndex, string>>;
   label?: string;
   /** Identifier of a `DATE_RANGE_SHORTCUTS` entry. Defaults to `all`. */
   default?: string;

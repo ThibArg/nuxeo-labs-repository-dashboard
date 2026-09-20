@@ -88,21 +88,39 @@ export interface DashboardPlan {
 }
 
 /**
+ * Date field the period constrains on one index.
+ *
+ * A page mixing the repository and the audit means two fields for one picker: `dc:created` there,
+ * `eventDate` here. Returning null means the period constrains nothing on that index, which is
+ * honest — a widget whose index the filter says nothing about is better left unfiltered than
+ * filtered on a field it does not carry.
+ */
+export function dateFieldFor(config: DashboardConfig, index: EsIndex): string | null {
+  const range = dateRangeFilter(config);
+  if (!range) {
+    return null;
+  }
+  return range.byIndex?.[index] ?? range.field;
+}
+
+/**
  * Clauses shared by every widget of the dashboard.
  *
  * @param skipGroupId group left out of the result, used when computing the values of that very
  *                    group so that its own lists stay stable while the user edits them.
+ * @param index       index the clauses are built for, which decides the date field.
  */
 export function globalFilters(
   config: DashboardConfig,
   filters: FilterState,
   skipGroupId?: string,
+  index: EsIndex = config.index,
 ): EsClause[] {
   const clauses: EsClause[] = [...(config.baseFilter ?? [])];
 
-  const range = dateRangeFilter(config);
-  if (range) {
-    const clause = dayRangeFilter(range.field, filters.range.from, filters.range.to);
+  const field = dateFieldFor(config, index);
+  if (field) {
+    const clause = dayRangeFilter(field, filters.range.from, filters.range.to);
     if (clause) {
       clauses.push(clause);
     }
@@ -148,14 +166,15 @@ export function globalFilters(
 export function histogramBounds(
   config: DashboardConfig,
   filters: FilterState,
+  index: EsIndex = config.index,
 ): HistogramBounds | null {
-  const range = dateRangeFilter(config);
+  const field = dateFieldFor(config, index);
   const { from, to } = filters.range;
-  if (!range || (!from && !to)) {
+  if (!field || (!from && !to)) {
     return null;
   }
   return {
-    field: range.field,
+    field,
     ...(from ? { min: startOfLocalDayMillis(from) } : {}),
     ...(to ? { max: startOfLocalDayMillis(to) } : {}),
   };
@@ -166,76 +185,108 @@ export function layoutWidgetIds(config: DashboardConfig): string[] {
   return config.layout.flatMap((row) => row.cells).filter((id) => id in config.widgets);
 }
 
+/** Widget ids the layout shows, in display order, grouped by the index each one reads. */
+function groupByIndex(config: DashboardConfig): Map<EsIndex, string[]> {
+  const groups = new Map<EsIndex, string[]>();
+  for (const widgetId of layoutWidgetIds(config)) {
+    const index = config.widgets[widgetId].index ?? config.index;
+    const group = groups.get(index);
+    if (group) {
+      group.push(widgetId);
+    } else {
+      groups.set(index, [widgetId]);
+    }
+  }
+  return groups;
+}
+
+function aggregationRequestId(config: DashboardConfig, index: EsIndex): string {
+  return index === config.index
+    ? `${config.id}:aggregations`
+    : `${config.id}:aggregations:${index}`;
+}
+
+/**
+ * Folds a dashboard into one request per index.
+ *
+ * Widgets reading the same index travel together, which is what makes a composition row add up
+ * and what makes `now` a single instant across the tiles bounded by it. Grouping rather than
+ * batching everything is what lets a page mix the repository and the audit at all, the two having
+ * neither the same fields nor the same date field.
+ */
 export function planDashboard(config: DashboardConfig, filters: FilterState): DashboardPlan {
-  const shared = globalFilters(config, filters);
-  const bounds = histogramBounds(config, filters);
-  const requests: PlannedRequest[] = [];
   const widgets = new Map<string, WidgetPlan>();
   const errors = new Map<string, string>();
+  const aggregationRequests: PlannedRequest[] = [];
+  const tableRequests: PlannedRequest[] = [];
 
-  const aggs: Record<string, EsClause> = {};
-  const aggregationWidgetIds: string[] = [];
-  const aggregationRequestId = `${config.id}:aggregations`;
+  for (const [index, widgetIds] of groupByIndex(config)) {
+    const shared = globalFilters(config, filters, undefined, index);
+    const bounds = histogramBounds(config, filters, index);
+    const aggs: Record<string, EsClause> = {};
+    const aggregationWidgetIds: string[] = [];
+    const requestId = aggregationRequestId(config, index);
 
-  for (const widgetId of layoutWidgetIds(config)) {
-    const widget = config.widgets[widgetId];
+    for (const widgetId of widgetIds) {
+      const widget = config.widgets[widgetId];
 
-    if (isTableWidget(widget)) {
+      if (isTableWidget(widget)) {
+        try {
+          tableRequests.push(planTable(config, widgetId, widget, shared, index));
+          widgets.set(widgetId, {
+            widgetId,
+            requestId: tableRequestId(config, widgetId),
+            read: 'hits',
+            wrapped: false,
+            hasMetric: false,
+            metricUndefinedWhenEmpty: false,
+            hasSecondary: false,
+            mergePrincipals: false,
+          });
+        } catch (error) {
+          errors.set(widgetId, error instanceof Error ? error.message : String(error));
+        }
+        continue;
+      }
+
       try {
-        requests.push(planTable(config, widgetId, widget, shared));
+        const planned = planAggregationWidget(config, widgetId, widget, bounds);
+        if (planned.agg) {
+          aggs[widgetId] = planned.agg;
+        }
+        aggregationWidgetIds.push(widgetId);
         widgets.set(widgetId, {
           widgetId,
-          requestId: tableRequestId(config, widgetId),
-          read: 'hits',
-          wrapped: false,
-          hasMetric: false,
-          metricUndefinedWhenEmpty: false,
-          hasSecondary: false,
-          mergePrincipals: false,
+          requestId,
+          read: planned.read,
+          wrapped: planned.wrapped,
+          hasMetric: planned.hasMetric,
+          metricUndefinedWhenEmpty: planned.metricUndefinedWhenEmpty,
+          hasSecondary: planned.hasSecondary,
+          mergePrincipals: planned.mergePrincipals,
         });
       } catch (error) {
         errors.set(widgetId, error instanceof Error ? error.message : String(error));
       }
-      continue;
     }
 
-    try {
-      const planned = planAggregationWidget(config, widgetId, widget, bounds);
-      if (planned.agg) {
-        aggs[widgetId] = planned.agg;
-      }
-      aggregationWidgetIds.push(widgetId);
-      widgets.set(widgetId, {
-        widgetId,
-        requestId: aggregationRequestId,
-        read: planned.read,
-        wrapped: planned.wrapped,
-        hasMetric: planned.hasMetric,
-        metricUndefinedWhenEmpty: planned.metricUndefinedWhenEmpty,
-        hasSecondary: planned.hasSecondary,
-        mergePrincipals: planned.mergePrincipals,
+    if (aggregationWidgetIds.length) {
+      aggregationRequests.push({
+        id: requestId,
+        kind: 'aggregations',
+        index,
+        body: {
+          size: 0,
+          track_total_hits: true,
+          query: boolFilter(shared),
+          ...(Object.keys(aggs).length ? { aggs } : {}),
+        },
+        widgetIds: aggregationWidgetIds,
       });
-    } catch (error) {
-      errors.set(widgetId, error instanceof Error ? error.message : String(error));
     }
   }
 
-  if (aggregationWidgetIds.length) {
-    requests.unshift({
-      id: aggregationRequestId,
-      kind: 'aggregations',
-      index: config.index,
-      body: {
-        size: 0,
-        track_total_hits: true,
-        query: boolFilter(shared),
-        ...(Object.keys(aggs).length ? { aggs } : {}),
-      },
-      widgetIds: aggregationWidgetIds,
-    });
-  }
-
-  return { requests, widgets, errors };
+  return { requests: [...aggregationRequests, ...tableRequests], widgets, errors };
 }
 
 interface AggregationWidgetPlan {
@@ -385,6 +436,7 @@ function planTable(
   widgetId: string,
   widget: Extract<WidgetConfig, { type: 'table' }>,
   shared: EsClause[],
+  index: EsIndex,
 ): PlannedRequest {
   const sourceFields = [...new Set(widget.columns.map((column) => column.field))];
   const body: EsSearchBody = {
@@ -402,7 +454,7 @@ function planTable(
   return {
     id: tableRequestId(config, widgetId),
     kind: 'hits',
-    index: config.index,
+    index,
     body,
     widgetIds: [widgetId],
   };
