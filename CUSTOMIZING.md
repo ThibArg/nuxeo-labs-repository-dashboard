@@ -1,4 +1,4 @@
-# Customising this dashboard
+# Customising this dashboard with an AI assistant
 
 ## TL;DR
 
@@ -56,6 +56,26 @@ ideal for working out what you want, and not a way to deliver it.
   symptom of forgetting is the *previous* screen, not an error.
 - **A green test run is not a verification.** Two of the four recipes proven below change nothing
   the test suite can see. Read [Verifying](#verifying) before you trust a colour.
+
+---
+
+## Built to be changed this way
+
+Three decisions were taken so that pointing an assistant at this repository produces something that
+works, and they live in the code rather than in a README.
+
+- **The widget library is its own catalogue.** A definition is a dozen lines carrying a semantic id
+  and one sentence saying what it measures — `registry.ts` opens by saying exactly that. There is
+  no generated inventory for an assistant to fall out of step with: it reads the definitions
+  themselves, and `registry.spec.ts` holds every one of them to that contract.
+- **A dashboard names widgets instead of writing queries.** The grammar an assistant has to get
+  right is small and closed, and a composition cannot express an OpenSearch clause at all.
+- **A parameter a widget never declared is refused, not ignored.** The reason is written down in
+  `definition.ts`: a misspelt parameter that is silently accepted produces a widget that renders
+  perfectly while describing something else.
+
+`AGENTS.md` writes the dialect and the invariants down so that an assistant does not have to guess
+them, and this guide turns them into prompts.
 
 ---
 

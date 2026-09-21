@@ -14,7 +14,8 @@ into a single OpenSearch aggregation request.
 > complete, alongside Diagnostics. All six are composed from a reusable widget library of 69
 > definitions, see [Roadmap](#roadmap).
 
-> **Want a dashboard of your own?** This plugin is meant to be forked and changed. See
+> **Want a dashboard of your own?** This plugin is meant to be forked and changed, and it was built
+> to be changed with an AI assistant. See
 > [CUSTOMIZING.md](CUSTOMIZING.md) — the four layers a change can belong to, a prompt to paste for
 > each kind of change, what to verify, how to ship your own renamed package, and the security
 > checklist to run on the diff.
