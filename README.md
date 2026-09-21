@@ -14,6 +14,11 @@ into a single OpenSearch aggregation request.
 > complete, alongside Diagnostics. All six are composed from a reusable widget library of 69
 > definitions, see [Roadmap](#roadmap).
 
+> **Want a dashboard of your own?** This plugin is meant to be forked and changed. See
+> [CUSTOMIZING.md](CUSTOMIZING.md) — the four layers a change can belong to, a prompt to paste for
+> each kind of change, what to verify, how to ship your own renamed package, and the security
+> checklist to run on the diff.
+
 ## Screens
 
 | Screen | Data source |
@@ -1342,7 +1347,7 @@ still appear in an audit index, through `Framework.doPrivileged` with no argumen
 | 6c | A widget placeable anywhere, so a page can be laid out by hand | done |
 | 6d | The four remaining dashboards migrated onto the library | done |
 | 6d2 | Governance enriched: retention horizon over time, and the rules themselves | done |
-| 6e | A prompt, a composition schema and a security checklist for composing with an assistant | |
+| 6e | Customisation guide: forking the plugin and changing it with an AI assistant, prompt by prompt, with a security checklist | done |
 
 ## Licence
 

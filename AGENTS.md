@@ -6,6 +6,12 @@ is credited to" — every field-level trap the queries depend on. This file carr
 README does not: how to drive the build, how the tests are wired, what must not be undone, and
 which roads were already walked and abandoned.
 
+**If you are here to change the plugin rather than to maintain it**, read `CUSTOMIZING.md`
+instead, then come back. It is written for whoever forks this and works on their copy with an AI
+assistant: the four layers a change can belong to, a prompt per kind of change, what each recipe
+actually costs — measured by performing it — and the security checklist to run on the diff. The
+recipes it carries are proven; the invariants below are the reasons behind them.
+
 ## Commands
 
 ```bash
@@ -520,8 +526,7 @@ The work is pushed to `github.com/ThibArg/nuxeo-labs-repository-dashboard`, a pu
 the plugin is ready to be forked into `nuxeo-sandbox`; the README carries a warning saying so, and
 `AGENTS.md` is deliberately **not** gitignored in this repository, so keep it free of credentials.
 
-**Two roadmap lines are still open: the field picker of phase 3b, and phase 6e — a prompt, a
-composition schema and a security checklist for composing with an assistant.** It would feed the
+**One roadmap line is still open: the field picker of phase 3b.** It would feed the
 configuration editor from `GET /api/v1/config/schemas`, which **nothing in the application calls
 today** — `NuxeoHttpService.get` is the way in, and it would be that endpoint's first caller.
 
