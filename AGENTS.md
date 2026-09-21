@@ -353,6 +353,19 @@ it now carries six against two, which merge to eight. Every count in this file i
   that measures the interface rather than the readers. `HEAD` requests and the `webengine` reason
   are not logged at all, and a `nxbigblob` download carries no `docUUID`, no `docType` and no
   `category`, so a breakdown by type silently loses those rows.
+- **A stale `<bundle>.jar.tmp` *directory* blocks every later install, and the message names the
+  wrong thing.** `mp-install` writes the bundle to `nxserver/bundles/<name>.jar.tmp` and renames it;
+  an interrupted install can leave an empty *directory* under that name, after which every attempt
+  dies on `Cannot execute command. Parameter 'destFile' is not a file: …jar.tmp`. Nothing points at
+  the leftover, the package sits at `installing` in `packages/.packages` for ever, and — this is
+  what misleads — **the screens keep working**, because `nuxeo.war/dashboard/` was unzipped by the
+  deployment fragment at an earlier start and Tomcat serves those files whether or not any bundle
+  is loaded. So the symptom is a plugin that looks deployed, answers on every URL, and is running
+  code from two builds ago. The fix is `rmdir` on the leftover, then install and restart; `rmdir`
+  rather than `rm -rf`, so that a directory holding anything refuses to go and says so.
+  Confirm afterwards on three things rather than on the screen: `.packages` reads `started`, a real
+  jar is in `nxserver/bundles/`, and the `main-*.js` named by `/dashboard/index.jsp` matches the
+  one in `target/`.
 - **There is no upload event in Nuxeo, at all.** Neither `BatchManager`, nor `BatchManagerComponent`,
   nor the REST `BatchUploadObject` fires anything, and `blobUpdated` does not exist; `FileManager`
   emits only `duplicatedFile`, which is not in the audit route. That is coherent — a batch upload
