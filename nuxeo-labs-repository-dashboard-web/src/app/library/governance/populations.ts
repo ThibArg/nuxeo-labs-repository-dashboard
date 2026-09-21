@@ -50,3 +50,15 @@ export const UNDER_LEGAL_HOLD: Predicate[] = [
 ];
 
 export const RETAIN_UNTIL = 'ecm:retainUntil';
+
+/**
+ * The retention rules themselves, which describe the configuration rather than the content.
+ *
+ * Worth knowing before putting one of these on a filtered page: the rules live under
+ * `/RetentionRules`, outside `/default-domain`, so choosing a container empties them — and their
+ * creation date has nothing to do with the period a reader is looking at.
+ */
+export const RETENTION_RULES: Predicate[] = [
+  ...LIVE_NOT_TRASHED,
+  equals('ecm:primaryType', 'RetentionRule'),
+];

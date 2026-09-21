@@ -38,15 +38,35 @@
           "hint": "The population the figures beside it are a share of",
           "span": 3
         },
-        { "use": "records", "as": "records", "span": 3 },
-        { "use": "documents-under-retention", "as": "underRetention", "span": 3 },
-        { "use": "documents-on-legal-hold", "as": "legalHold", "span": 3 }
+        {
+          "use": "records",
+          "as": "records",
+          "span": 3
+        },
+        {
+          "use": "documents-under-retention",
+          "as": "underRetention",
+          "span": 3
+        },
+        {
+          "use": "documents-on-legal-hold",
+          "as": "legalHold",
+          "span": 3
+        }
       ]
     },
     {
       "cells": [
-        { "use": "retention-expiring-this-week", "as": "expiringWeek", "span": 4 },
-        { "use": "retention-expiring-in-60-days", "as": "expiring60", "span": 4 },
+        {
+          "use": "retention-expiring-this-week",
+          "as": "expiringWeek",
+          "span": 4
+        },
+        {
+          "use": "retention-expiring-in-60-days",
+          "as": "expiring60",
+          "span": 4
+        },
         {
           "use": "retention-expiring-later",
           "as": "expiringLater",
@@ -57,8 +77,48 @@
     },
     {
       "cells": [
-        { "use": "records-by-rule", "as": "byRule", "span": 6 },
-        { "use": "records-by-type", "as": "byType", "span": 6 }
+        {
+          "use": "retention-horizon",
+          "as": "retentionHorizon",
+          "span": 12
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "use": "records-by-rule",
+          "as": "byRule",
+          "span": 6
+        },
+        {
+          "use": "records-by-type",
+          "as": "byType",
+          "span": 6
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "use": "records-by-creation-date",
+          "as": "recordsByDate",
+          "span": 12
+        }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "use": "records-by-author",
+          "as": "recordsByAuthor",
+          "span": 6
+        },
+        {
+          "use": "legal-holds-by-type",
+          "as": "holdsByType",
+          "span": 6
+        }
       ]
     }
   ]

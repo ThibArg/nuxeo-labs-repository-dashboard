@@ -11,7 +11,7 @@ are described by configuration rather than hard coded, and the widgets of one in
 into a single OpenSearch aggregation request.
 
 > **Status: six screens live.** Content, Users, Workflows, Tasks and Governance are complete,
-> alongside Diagnostics. All five are composed from a reusable widget library of 53 definitions,
+> alongside Diagnostics. All five are composed from a reusable widget library of 62 definitions,
 > see [Roadmap](#roadmap).
 
 ## Screens
@@ -67,7 +67,7 @@ semantic id, the index it reads, one sentence saying what it measures, and the p
 accepts. **The definitions are the catalogue**: point an assistant at that folder and it has
 everything it needs, with nothing generated to fall out of step.
 
-**53 definitions cover the 54 widgets that ship**, grouped by subject:
+**62 definitions, of which 58 are placed on the five shipped screens**, grouped by subject:
 
 | Folder | Reads | Widgets |
 | --- | --- | --- |
@@ -75,11 +75,18 @@ everything it needs, with nothing generated to fall out of step.
 | `users/` | `audit` | 5 — logins, failed logins, who creates and modifies |
 | `workflows/` | `audit_wf` | 18 — volumes, durations, models, steps, initiators |
 | `tasks/` | repository | 9 — what is waiting on whom, and how late |
-| `governance/` | repository | 8 — records, retention horizon, legal holds, rules |
+| `governance/` | repository | 17 — records, retention horizon, legal holds, and the rules themselves |
 
-Eight rather than nine for Governance: the population its figures are a share of is exactly what
-Content's `live-documents` counts, so that one is shared. The first widget two screens have in
-common, which is the point of a library.
+Governance is split four ways — `records.ts`, `horizon.ts`, `holds.ts`, `rules.ts` — because they
+answer different questions: what is protected, until when, what cannot be touched at all, and how
+the protection is configured. Its page draws on the first three; `live-documents` comes from
+Content, whose population is exactly the one Governance figures are a share of. The first widget
+two screens have in common, which is the point of a library.
+
+**The five rule widgets sit on no shipped page, deliberately.** They describe configuration rather
+than content, and the two do not survive the same filters: retention rules live under
+`/RetentionRules`, outside `/default-domain`, so narrowing a page to a container would empty them
+without saying why. Compose them onto a screen where the content filters have no business.
 
 ```ts
 export const documentsCreated = defineWidget<TrendParams>({
@@ -1003,7 +1010,9 @@ document and look at what comes back.
 - **`record:retainUntil` is written only once a retention has run out**, by the listener reacting
   to `retentionExpired`, in the very move that sets `ecm:retainUntil` back to null. The two fields
   never describe the same thing, and neither is in the static mapping.
-- **`ecm:path.children` is the path hierarchy sub-field**, and one `term` on it matches a container
+- **`ecm:path.children` is `text` with a path analyser, so it cannot be aggregated at all** — the
+  index answers "Text fields are not optimised for operations that require per-document field
+  data". It exists for one purpose: a `term` on it matches a container
   **and everything below it, the container included**. That last part differs from NXQL, where
   `ecm:path STARTSWITH '/a'` leaves `/a` out. Scoping a dashboard to a workspace therefore counts
   the workspace itself, which is defensible — it is a document in that place — but one more
@@ -1012,6 +1021,14 @@ document and look at what comes back.
   empty first segment, so `/default-domain` is **2** rather than 1. Counting the segments instead
   is short by one, and a level of a container picker built on it lists the container rather than
   its children — plausible enough on screen to go unnoticed.
+- **`ecm:ancestorId` counts a document once per ancestor.** Twenty-two records answered four
+  buckets totalling eighty-eight, the domain and the workspaces root among them, so a "by
+  location" chart reads four times the truth. There is no aggregatable field naming *the* place a
+  document is in.
+- **A retention duration is spread over three fields** — `retention_def:durationDays`,
+  `durationMonths` and `durationYears` — so a two year rule reads `durationDays: 0`. A band chart
+  on any one of them is wrong rather than partial: three rules of 5 days, 45 days and 2 years put
+  two of them in "under a week". Adding the three needs arithmetic no aggregation here can do.
 - **A version carries the path of the document it was cut from.** A path scope therefore includes
   versions unless something else excludes them. Governance does that in its `baseFilter`; Content
   has none, each of its widgets stating the population it describes instead — which is why its
@@ -1112,7 +1129,7 @@ still appear in an audit index, through `Framework.doPrivileged` with no argumen
 │       │   │   ├── users/                       5, audit index
 │       │   │   ├── workflows/                   18, audit_wf view
 │       │   │   ├── tasks/                       9, repository
-│       │   │   └── governance/                  8, repository
+│       │   │   └── governance/                  17, repository — records, horizon, holds, rules
 │       │   ├── pages/                          generic dashboard page, diagnostics
 │       │   └── widgets/                        kpi, chart, ranked list, table, ECharts setup
 │       └── testing/                            fetch stub, chart stub, async helpers
@@ -1143,7 +1160,7 @@ still appear in an audit index, through `Framework.doPrivileged` with no argumen
 | 6b | One request per index, so a page can mix the repository and the audit | done |
 | 6c | A widget placeable anywhere, so a page can be laid out by hand | done |
 | 6d | The four remaining dashboards migrated onto the library | done |
-| 6d2 | Governance enriched: retention horizon over time, and the rules themselves | |
+| 6d2 | Governance enriched: retention horizon over time, and the rules themselves | done |
 | 6e | A prompt and a security checklist for composing with an assistant | |
 
 ## Licence

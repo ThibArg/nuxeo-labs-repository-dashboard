@@ -63,9 +63,10 @@ import {
   tasksDueThisWeek,
 } from './tasks/workload';
 import {
-  documentsOnLegalHold,
   documentsUnderRetention,
   records,
+  recordsByAuthor,
+  recordsByCreationDate,
   recordsByRule,
   recordsByType,
 } from './governance/records';
@@ -73,7 +74,16 @@ import {
   retentionExpiringInSixtyDays,
   retentionExpiringLater,
   retentionExpiringThisWeek,
+  retentionHorizon,
 } from './governance/horizon';
+import { documentsOnLegalHold, legalHoldsByType } from './governance/holds';
+import {
+  retentionRules,
+  rulesByApplicationPolicy,
+  rulesByEndAction,
+  rulesByFlexibility,
+  rulesByStartingPoint,
+} from './governance/rules';
 
 export const CONTENT_WIDGETS: WidgetDefinition[] = [
   totalDocuments,
@@ -143,14 +153,27 @@ export const TASKS_WIDGETS: WidgetDefinition[] = [
  * share, and the point of a library.
  */
 export const GOVERNANCE_WIDGETS: WidgetDefinition[] = [
+  // What is a record.
   records,
+  recordsByType,
+  recordsByRule,
+  recordsByAuthor,
+  recordsByCreationDate,
+  // When the retentions in force run out.
   documentsUnderRetention,
-  documentsOnLegalHold,
   retentionExpiringThisWeek,
   retentionExpiringInSixtyDays,
   retentionExpiringLater,
-  recordsByRule,
-  recordsByType,
+  retentionHorizon,
+  // What cannot be touched at all.
+  documentsOnLegalHold,
+  legalHoldsByType,
+  // How governance is configured, which no shipped page mixes with the figures above.
+  retentionRules,
+  rulesByEndAction,
+  rulesByApplicationPolicy,
+  rulesByStartingPoint,
+  rulesByFlexibility,
 ];
 
 export const WIDGET_LIBRARY: WidgetDefinition[] = [

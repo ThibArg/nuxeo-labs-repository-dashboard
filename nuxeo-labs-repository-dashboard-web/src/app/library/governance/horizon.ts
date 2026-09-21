@@ -9,8 +9,12 @@
  * All three are bounded by `now`, which OpenSearch evaluates when it receives a request — they
  * only add up because they travel in one.
  */
-import { KpiSeverity } from '../../config/dashboard-config.model';
-import { countTile } from '../builders';
+import {
+  CalendarInterval,
+  ChartWidgetType,
+  KpiSeverity,
+} from '../../config/dashboard-config.model';
+import { countTile, trendChart } from '../builders';
 import { ParamSpecs, defineWidget } from '../definition';
 import { dateWindow } from '../predicates';
 import { RETAIN_UNTIL, UNDER_RETENTION } from './populations';
@@ -70,5 +74,50 @@ export const retentionExpiringLater = defineWidget<HorizonParams>({
     countTile({
       of: [...UNDER_RETENTION, dateWindow({ field: RETAIN_UNTIL, gt: 'now+60d' })],
       severity: params.severity,
+    }),
+});
+
+const TREND_CHARTS = ['area', 'line', 'bar'] as const;
+const INTERVALS = ['day', 'week', 'month', 'quarter', 'year'] as const;
+
+interface HistogramParams {
+  chart: ChartWidgetType;
+  interval: CalendarInterval;
+}
+
+/**
+ * When the retentions currently in force run out.
+ *
+ * The three tiles say how many; this says when, which is the only view that shows the long tail —
+ * on the sandbox, nine retentions lapse this month, seven in November and three in two years.
+ *
+ * Two things set it apart from a trend. It buckets `ecm:retainUntil`, which the period filter does
+ * not constrain, so it receives no `extended_bounds` and spans the dates rather than the reader's
+ * window. And it drops the empty buckets: retentions scattered over two years otherwise draw
+ * twenty-five bars of which twenty-two are nothing. On a trend that would hide a quiet week and
+ * would be wrong; here a month with no expiry is not information, it is the gap between two.
+ */
+export const retentionHorizon = defineWidget<HistogramParams>({
+  id: 'retention-horizon',
+  index: 'nuxeo',
+  title: 'When Retentions Lapse',
+  summary: 'When the retentions currently in force run out, empty periods left out.',
+  params: {
+    chart: { type: 'enum', values: TREND_CHARTS, default: 'bar', describe: 'How it is drawn.' },
+    interval: {
+      type: 'enum',
+      values: INTERVALS,
+      default: 'month',
+      describe: 'Width of one bucket. Buckets are cut in the reader\u2019s own time zone.',
+    },
+  },
+  build: (params) =>
+    trendChart({
+      of: UNDER_RETENTION,
+      field: RETAIN_UNTIL,
+      interval: params.interval,
+      chart: params.chart,
+      minDocCount: 1,
+      hint: 'Periods with nothing expiring are left out',
     }),
 });

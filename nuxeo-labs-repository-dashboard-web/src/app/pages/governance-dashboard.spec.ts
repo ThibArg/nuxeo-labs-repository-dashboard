@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import governanceConfig from '../config/dashboards/governance.json';
-import { defaultFilterState, resolveSpan } from '../config/dashboard-config.model';
+import { customRange, defaultFilterState, resolveSpan } from '../config/dashboard-config.model';
 import { planDashboard } from '../engine/query-planner';
 import { PreflightService } from '../core/preflight.service';
 import { DashboardPageComponent } from './dashboard-page.component';
@@ -55,6 +55,25 @@ function aggregationsResponse(): unknown {
       byType: wrapped(22, [
         { key: 'File', doc_count: 16 },
         { key: 'Note', doc_count: 6 },
+      ]),
+      retentionHorizon: {
+        doc_count: 19,
+        inner: {
+          buckets: [
+            { key: 1, key_as_string: '2026-09', doc_count: 9 },
+            { key: 2, key_as_string: '2026-11', doc_count: 7 },
+            { key: 3, key_as_string: '2028-09', doc_count: 3 },
+          ],
+        },
+      },
+      recordsByDate: {
+        doc_count: 22,
+        inner: { buckets: [{ key: 1, key_as_string: '2026-09-19', doc_count: 22 }] },
+      },
+      recordsByAuthor: wrapped(22, [{ key: 'jdoe', doc_count: 22 }]),
+      holdsByType: wrapped(2, [
+        { key: 'File', doc_count: 1 },
+        { key: 'Note', doc_count: 1 },
       ]),
     },
   };
@@ -225,6 +244,61 @@ describe('Governance dashboard', () => {
     expect(text).toContain('By Retention Rule');
     expect(text).toContain('866');
     expect(text).toContain('19 governed by a rule');
+  });
+
+  /*
+   * The four widgets the page gained, checked on screen rather than in the plan: a stub answering
+   * only the original nine would have let them render empty without anything saying so.
+   */
+  it('renders the four widgets that answer when, who and what kind', async () => {
+    const text = ((await render()).nativeElement as HTMLElement).textContent ?? '';
+
+    expect(text).toContain('When Retentions Lapse');
+    expect(text).toContain('2028-09');
+    expect(text).toContain('Records by Creation Date');
+    expect(text).toContain('Records by Author');
+    expect(text).toContain('Legal Holds by Type');
+  });
+
+  /*
+   * The name is the whole point. `dc:created` is when the document was written, and nothing in the
+   * index says when it became a record — so a widget called "records over time" would invite
+   * exactly the reading it cannot support.
+   */
+  it('says that the record timeline is about creation, not declaration', async () => {
+    const widget = GOVERNANCE.widgets['recordsByDate'];
+
+    expect(widget.label).toBe('Records by Creation Date');
+    expect(widget.hint).toContain('that are records today');
+  });
+
+  /*
+   * A retention scattered over two years draws twenty-five bars of which twenty-two are nothing.
+   * A month with no expiry is not a quiet month, it is the gap between two dates.
+   */
+  it('leaves the empty periods out of the horizon', () => {
+    const aggs = planDashboard(GOVERNANCE, defaultFilterState(GOVERNANCE)).requests[0].body
+      .aggs as Record<string, any>;
+
+    expect(aggs['retentionHorizon'].aggs.inner.date_histogram.min_doc_count).toBe(1);
+    // Zero rather than absent: the compiler always sends it, so a quiet day stays a bar.
+    expect(aggs['recordsByDate'].aggs.inner.date_histogram.min_doc_count).toBe(0);
+  });
+
+  /*
+   * `extended_bounds` pads the field the period constrains and only that one. The horizon buckets
+   * `ecm:retainUntil`, which the picker never touches, so padding it to the reader's window would
+   * hide every retention falling outside it.
+   */
+  it('pads the creation timeline and never the horizon', () => {
+    const bounded = {
+      ...defaultFilterState(GOVERNANCE),
+      range: customRange('2026-08-20', '2026-09-18'),
+    };
+    const aggs = planDashboard(GOVERNANCE, bounded).requests[0].body.aggs as Record<string, any>;
+
+    expect(aggs['recordsByDate'].aggs.inner.date_histogram.extended_bounds).toBeDefined();
+    expect(aggs['retentionHorizon'].aggs.inner.date_histogram.extended_bounds).toBeUndefined();
   });
 
   /*

@@ -5,14 +5,35 @@
  * false, and what blocks a deletion is a future `ecm:retainUntil` or a legal hold — so these
  * figures describe a commitment rather than a state somebody can undo.
  */
-import { ChartWidgetType, KpiSeverity } from '../../config/dashboard-config.model';
-import { countTile, topNChart } from '../builders';
+import {
+  CalendarInterval,
+  ChartWidgetType,
+  KpiSeverity,
+} from '../../config/dashboard-config.model';
+import { countTile, topNChart, trendChart } from '../builders';
 import { ParamSpecs, defineWidget } from '../definition';
 import { equals } from '../predicates';
-import { GOVERNED_BY_A_RULE, RECORDS, UNDER_LEGAL_HOLD, UNDER_RETENTION } from './populations';
+import { GOVERNED_BY_A_RULE, RECORDS, UNDER_RETENTION } from './populations';
 
 const BUCKET_CHARTS = ['donut', 'pie', 'bar', 'hbar', 'ranked-list'] as const;
+const TREND_CHARTS = ['area', 'line', 'bar'] as const;
+const INTERVALS = ['hour', 'day', 'week', 'month', 'quarter', 'year'] as const;
 const SEVERITIES = ['neutral', 'accent', 'warning', 'danger', 'success'] as const;
+
+interface TrendParams {
+  chart: ChartWidgetType;
+  interval: CalendarInterval;
+}
+
+const TREND_PARAMS: ParamSpecs = {
+  chart: { type: 'enum', values: TREND_CHARTS, default: 'area', describe: 'How it is drawn.' },
+  interval: {
+    type: 'enum',
+    values: INTERVALS,
+    default: 'day',
+    describe: 'Width of one bucket. Buckets are cut in the reader\u2019s own time zone.',
+  },
+};
 
 interface RankedParams {
   chart: ChartWidgetType;
@@ -88,27 +109,6 @@ export const documentsUnderRetention = defineWidget<TileParams>({
 });
 
 /**
- * Documents held until somebody lifts it.
- *
- * A legal hold has no date and turns its target into an *enforced* record permanently: a flexible
- * record loses that quality the moment a hold touches it, and `Document.Unhold` gives it back the
- * hold but not the flexibility.
- */
-export const documentsOnLegalHold = defineWidget<TileParams>({
-  id: 'documents-on-legal-hold',
-  index: 'nuxeo',
-  title: 'Under Legal Hold',
-  summary: 'How many live documents are held indefinitely until somebody lifts the hold.',
-  params: severity('danger'),
-  build: (params) =>
-    countTile({
-      of: UNDER_LEGAL_HOLD,
-      severity: params.severity,
-      hint: 'Held until someone lifts it',
-    }),
-});
-
-/**
  * Records grouped by the rule that made them.
  *
  * `record:ruleIds` holds document uuids, so `labels: "document"` resolves each to the title of the
@@ -146,5 +146,46 @@ export const recordsByType = defineWidget<RankedParams>({
       size: params.size,
       chart: params.chart,
       labels: 'doctype',
+    }),
+});
+
+export const recordsByAuthor = defineWidget<RankedParams>({
+  id: 'records-by-author',
+  index: 'nuxeo',
+  title: 'Records by Author',
+  summary: 'Who created the documents that are now records.',
+  params: rankedParams('ranked-list'),
+  build: (params) =>
+    topNChart({
+      of: RECORDS,
+      field: 'dc:creator',
+      size: params.size,
+      chart: params.chart,
+      labels: 'user',
+      hint: 'Who created the document, not who declared it a record',
+    }),
+});
+
+/**
+ * Records by the date their **document** was created.
+ *
+ * Not by the date they became records, which is the reading the shorter name would invite and
+ * which the index cannot support: the only three retention fields that reach it are
+ * `ecm:isRecord`, `ecm:retainUntil` and `ecm:hasLegalHold`, and none of them is a date of
+ * declaration. A document written in 2020 and made a record yesterday shows up in 2020.
+ */
+export const recordsByCreationDate = defineWidget<TrendParams>({
+  id: 'records-by-creation-date',
+  index: 'nuxeo',
+  title: 'Records by Creation Date',
+  summary: 'When the documents that are now records were written, not when they became records.',
+  params: TREND_PARAMS,
+  build: (params) =>
+    trendChart({
+      of: RECORDS,
+      field: 'dc:created',
+      interval: params.interval,
+      chart: params.chart,
+      hint: `Documents created per ${params.interval} ({range}) that are records today`,
     }),
 });

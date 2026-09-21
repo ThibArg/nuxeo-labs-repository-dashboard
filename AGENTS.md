@@ -21,7 +21,7 @@ Angular 22:
 ```bash
 cd nuxeo-labs-repository-dashboard-web
 export PATH="$PWD/node:$PATH"
-npm test                                      # 44 files, vitest + jsdom
+npm test                                      # 45 files, vitest + jsdom
 npm test -- --watch=false --include src/app/engine/agg-compiler.spec.ts   # one file
 npm test -- --watch=false --filter 'never emits a .keyword'               # one behaviour
 npm run build                                 # this is the typecheck
@@ -241,10 +241,12 @@ it now carries six against two, which merge to eight. Every count in this file i
 - **`ChartWidgetComponent` cannot be rendered under jsdom**, ECharts needing a canvas, so its CSV
   rows are built by `bucketRows` and tested there while `getDataURL` is exercised nowhere. That
   call, and the white background given to the PNG, have never run outside a real browser.
-- **`link: "document"` and `labels: "boolean"` ship with no example either.** Both had one, in the
-  Governance record table, and lost it when that widget was dropped. They stay covered by
-  `data-table.component.spec.ts` and `label.service.spec.ts`, so this is not a gap in the suite —
-  it is the same caveat as the order path above: nothing has put them on a real screen.
+- **`labels: "boolean"` has an example now**, `rules-by-flexibility`, and it confirmed the shape
+  that mattered: a `terms` on a boolean answers the key `1`, not `"true"`, which the strategy
+  already handled. **`link: "document"` still ships with no example**: it had one in the Governance
+  record table and lost it when that widget was dropped. It stays covered by
+  `data-table.component.spec.ts`, so this is not a gap in the suite — nothing has put it on a real
+  screen.
 - **`@children` trails a write by about a second.** Listing a container straight after creating
   twenty-three documents in it answered six. `CURRENT_DOC_CHILDREN` is declared a
   `coreQueryPageProvider` and no Elasticsearch override of it exists anywhere in the LTS 2025 tree,
@@ -293,6 +295,7 @@ about the choices behind them.
 | The export root is a directive, not a view query | A query answers whatever came first; only the page knows where its dashboard stops and its chrome begins, and on a bespoke layout that line is wherever its author drew it |
 | The grid keeps only its span arithmetic | Drawing a widget is `<nxd-widget>`'s job there as anywhere else. Two descriptions of it would drift the first time a widget type is added |
 | No tabs, no sections, no layout grammar | Every UI idea would need a new grammar node and a new component, and the grammar would never be complete. Angular already is that language |
+| A widget describing configuration stays out of a page describing content | The same filters cannot serve both: retention rules live outside `/default-domain`, so a path scope empties them, and their creation date answers a question nobody asked |
 | Bands and table columns live in the definition, not in a parameter | "Under an hour, up to a day, up to a week, beyond" is what that widget means. A parameter for it would need a shape the closed `ParamSpec` union does not have, and a different split is a different idea |
 
 ## Blob volumetry, set aside
@@ -336,13 +339,16 @@ Answer the user in French, using *vous*.
 
 ## Where things stand
 
-Six live screens — Content, Users, Workflows, Tasks, Governance, Diagnostics. Build green, 726
-tests over 44 files. `UpcomingPageComponent` is gone with the last placeholder; the requirement
+Six live screens — Content, Users, Workflows, Tasks, Governance, Diagnostics. Build green, 771
+tests over 45 files. `UpcomingPageComponent` is gone with the last placeholder; the requirement
 notice it used to carry is now tested where it lives, in `requirement-notice.component.spec.ts`.
 
-**All five are composed.** 53 definitions over five builders — `countTile`, `topNChart`,
-`trendChart`, `bandChart`, `recordTable` — cover the 54 widgets that ship; `live-documents` serves
-both Content and Governance, which is the only sharing so far.
+**All five are composed.** 62 definitions over five builders — `countTile`, `topNChart`,
+`trendChart`, `bandChart`, `recordTable` — of which 58 are placed on the shipped screens;
+`live-documents` serves both Content and Governance, which is the only sharing so far. Governance
+carries 17 of them, split four ways, and its five rule widgets sit on no page: they describe
+configuration, and `/RetentionRules` lives outside `/default-domain`, so a path scope would empty
+them silently.
 
 Each migration was proved and then deleted. `migration.harness.ts` planned both forms over three
 filter states and compared them, and it lived through commits `d0213fd` to `e7f5235` only, because
