@@ -9,8 +9,34 @@
 /** Fields that force quoting, per RFC 4180 plus the carriage return Excel writes. */
 const NEEDS_QUOTES = /[",\r\n]/;
 
+/**
+ * Leading characters a spreadsheet reads as the start of a formula.
+ *
+ * Excel, LibreOffice Calc and Google Sheets all evaluate a cell beginning with one of these, and
+ * quoting does not prevent it: the quotes belong to the CSV grammar and are consumed before the
+ * cell text is looked at. Older Excel builds also honour `=cmd|'/c …'!A1`, which runs a program
+ * behind a confirmation that reads like a routine link warning.
+ */
+const FORMULA_LEAD = /^[=+\-@\t\r]/;
+
+/**
+ * Neutralises a field a spreadsheet would otherwise evaluate.
+ *
+ * The values written here are index contents — a document title, a bucket key, a display name —
+ * so anybody able to name a document can aim this at whoever opens the file. Which is an
+ * administrator, on their own desktop, outside everything Nuxeo controls.
+ *
+ * **Numbers are left alone**, and that is not an oversight: a figure is written as a number
+ * precisely so a spreadsheet can compute on it, and prefixing a negative one would turn -5 into
+ * text. The guard applies to what arrives as text, which is where a title can hide.
+ */
 function escapeField(value: unknown): string {
-  const text = value === null || value === undefined ? '' : String(value);
+  if (typeof value === 'number') {
+    return String(value);
+  }
+  const raw = value === null || value === undefined ? '' : String(value);
+  // A leading apostrophe is what every spreadsheet reads as "this cell is text".
+  const text = FORMULA_LEAD.test(raw) ? `'${raw}` : raw;
   return NEEDS_QUOTES.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
