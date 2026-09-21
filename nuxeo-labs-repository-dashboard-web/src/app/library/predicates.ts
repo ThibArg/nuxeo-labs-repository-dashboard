@@ -2,13 +2,12 @@
  * The only predicates a widget definition may express.
  *
  * `EsClause` is `Record<string, unknown>`, forwarded verbatim by a passthrough that runs as an
- * administrator, so a hand written clause is also a place where `script` or `runtime_mappings`
- * could appear. Aggregations have been closed against that since the beginning; filters never
- * were — the four dashboards not yet migrated carry 27 clauses written by hand, using, in the
- * end, two shapes only.
+ * administrator, so a hand written clause is a place where `script` or a `terms` lookup could
+ * appear. `engine/clause-compiler.ts` closes that for every path, whatever wrote the clause.
  *
- * Definitions go through these four instead, so the escape hatch simply is not there. A
- * composition names widgets and parameters and has no way to express a clause at all.
+ * These four are the layer above it: a definition expresses intent rather than DSL, and a
+ * composition names widgets and parameters and cannot express a clause at all. Two guarantees
+ * rather than one, which is why both are worth having.
  */
 import { EsClause } from '../config/dashboard-config.model';
 

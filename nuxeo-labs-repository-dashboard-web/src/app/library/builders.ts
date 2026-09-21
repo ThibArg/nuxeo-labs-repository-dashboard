@@ -1,10 +1,10 @@
 /**
  * The shapes the library is made of.
  *
- * Fifty-four widgets ship today and they are eleven ideas; two of them — counting a population and
- * ranking the top values of a field — account for seventy-eight per cent. So the reuse worth
- * having is here, in a handful of builders, while the *names* stay one per idea: a composition
- * that said `topNChart('ecm:primaryType')` would be back to writing queries by hand.
+ * Fifty-eight widgets are placed across the five screens and they are eleven ideas; two of them —
+ * counting a population and ranking the top values of a field — account for forty-eight. So the
+ * reuse worth having is here, in a handful of builders, while the *names* stay one per idea: a
+ * composition that said `topNChart('ecm:primaryType')` would be back to writing queries by hand.
  */
 import {
   CalendarInterval,

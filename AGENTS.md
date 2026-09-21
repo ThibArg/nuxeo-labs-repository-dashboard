@@ -21,7 +21,7 @@ Angular 22:
 ```bash
 cd nuxeo-labs-repository-dashboard-web
 export PATH="$PWD/node:$PATH"
-npm test                                      # 45 files, vitest + jsdom
+npm test                                      # 46 files, vitest + jsdom
 npm test -- --watch=false --include src/app/engine/agg-compiler.spec.ts   # one file
 npm test -- --watch=false --filter 'never emits a .keyword'               # one behaviour
 npm run build                                 # this is the typecheck
@@ -50,7 +50,7 @@ behaviour that changed, followed by a body arguing the reasoning and citing the 
 
 ## How it is wired
 
-- **No Java at all.** Four resources under `nuxeo-labs-repository-dashboard-web/nuxeo/` deploy the
+- **No Java at all.** Five resources under `nuxeo-labs-repository-dashboard-web/nuxeo/` deploy the
   SPA; the jar carries the Angular output under `nuxeo.war/dashboard/`. The README's "Deployment"
   table says which resource does what.
 - **A widget declares the index it reads, and `planDashboard` groups by it** — one request per
@@ -77,10 +77,10 @@ behaviour that changed, followed by a body arguing the reasoning and citing the 
   `DashboardOverrideService` (`engine/dashboard-override.service.ts`, `localStorage` under
   `nxd.config.<dashboard>`) before fetching the asset, and ignores an override that no longer
   compiles. The editor itself is `layout/config-editor.component.ts`, a `<dialog>` holding one
-  text area, opened from the Configure button in `layout/page-header.component.ts` and wired in
-  `pages/dashboard-page.component.ts` by `openEditor`, `validateDraft`, `saveConfig` and
-  `revertConfig`. `validateConfig`, beside the override service, is the gate: it runs the real
-  planner rather than restating its rules.
+  text area, opened from the Configure button in `layout/page-header.component.ts`, carried by
+  `layout/dashboard-header.component.ts` and wired to `openEditor`, `validateDraft`, `saveConfig`
+  and `revertConfig` on `engine/dashboard-session.service.ts`. `validateConfig`, beside the
+  override service, is the gate: it runs the real planner rather than restating its rules.
 
 ## Testing conventions
 
@@ -99,6 +99,9 @@ Helpers live in `src/testing/`. Use them rather than inventing equivalents.
   labels, so all three stay observable. Option building is tested directly, `buildChartOption`
   being pure.
 - **`setup.ts`** polyfills `ResizeObserver` and the modal behaviour of `<dialog>`.
+- **`session.stub.ts`** hands a component a `DashboardSession` standing still, which is what lets
+  the grid and any bespoke layout be tested for what they do — placing widgets — without eight
+  injected services. **`shipped.ts`** reads a dashboard file whichever form it takes.
 
 Name a test as a statement of behaviour, not of implementation. A test that cannot observe what it
 claims to verify is worse than no test: the range reminder passed silently until the chart stub was
@@ -116,6 +119,18 @@ made to render hints, and a broken `LabelStrategy` passed until it rendered buck
   reaches the passthrough, which would forward `script` verbatim for an administrator.
   `facet-values.service.ts` once built its own JSON and so escaped every guarantee; it no longer
   does.
+- **Every `EsClause` is rebuilt by `clause-compiler.ts`, never relayed.** Rebuilding is what makes
+  the guarantee: a clause that passes leaves nothing behind it, so a key nobody thought to refuse
+  cannot ride along beside one that was accepted — which two of its tests say out loud. Five
+  entries: `baseFilter`, the result of `scopeClauses`, `widget.filter`, `secondary.filter`, and
+  the sub-filters of a `filters` aggregation. The shipped screens were never the risk, a
+  composition being unable to write a clause at all; **a stored override is in the compiled form**,
+  and that was.
+  Two things to know before touching it. `RANGE_BOUNDS` deliberately omits `format`, `relation`
+  and `time_zone`, so a widget needing one will be refused and the closed set has to be widened
+  knowingly. And `clause-compiler.spec.ts` runs `build({})` over all 62 definitions and demands
+  **idempotence** — adding a predicate shape without widening the set breaks every shipped
+  dashboard, and that test is what says so first.
 - **The repository populations are a partition**: `liveNotTrashed + trashed + versions + proxies`
   equals `all`. They live in `library/populations.ts` now, so `populations.spec.ts` holds it once
   for every dashboard rather than per configuration file, and it evaluates the clauses against
@@ -133,7 +148,7 @@ made to render hints, and a broken `LabelStrategy` passed until it rendered buck
 - **The expiry tiles are a partition too** — `expired`, `expiringWeek`, `expiring60`, never two.
   The sixty day window starts at `gt: now+7d`, so J+7 belongs to the week alone. A reader adds the
   three figures up, so an overlap is a wrong answer, not a detail.
-- **Workflows scopes are mutually exclusive but *not* exhaustive**: three reachable events fall
+- **Workflows populations are mutually exclusive but *not* exhaustive**: three reachable events fall
   outside them, so that spec asserts exclusivity only.
 - **Grid rows fill whole lines**: the spans of a row sum to a multiple of twelve, for every range.
 - **`shipped-dashboards.spec.ts`** re-checks every shipped file: no `.keyword`, numeric
@@ -173,9 +188,9 @@ letting it default, and publish results in a variable instead of through `$(...)
 inside a subshell ends the subshell and nothing else. The same subshell trap silently swallowed a
 `die` after every document creation before it was noticed.
 
-The whole of the shipped configuration was confronted this way once: 17 planned requests over the
-four dashboards and every date range, all accepted, `shard_size` on every `terms`, `time_zone` on
-every histogram, `extended_bounds` only on the field the date filter constrains, `ecm:uuid` in the
+The shipped configuration was confronted this way once, before Governance was migrated: 17 planned
+requests over the four dashboards of the day and every date range, all accepted, `shard_size` on
+every `terms`, `time_zone` on every histogram, `extended_bounds` only on the field the date filter constrains, `ecm:uuid` in the
 table's `_source`, and `percentiles` keyed `"50.0"`. Two assertions failed and **both were the
 harness's fault** — it demanded bounds on every histogram, and read the percentile under `inner`
 rather than under `metric`. Worth remembering before concluding that a red live check means the
@@ -225,6 +240,10 @@ it now carries six against two, which merge to eight. Every count in this file i
   needs a join the planner cannot express.
 - **A node with no `taskDueDateExpr` produces `nt:dueDate = now`**, so its tasks are overdue a
   second after creation. Both shipped models set the expression; a Studio model need not.
+- **A `terms` clause accepts an object, and then reads another index.** `{"terms": {"f": {"index":
+  …, "id": …, "path": …}}}` is a terms lookup: it fetches the values out of that document, wearing
+  the clothes of an ordinary filter. `clause-compiler.ts` refuses it by requiring a list, which is
+  the least obvious of the shapes it turns away.
 - **In `audit_wf`, `docType` and `docUUID` name the route or the task, never the business
   document.** A "documents entering a workflow" widget was designed on the opposite assumption and
   dropped. A table linking back to Web UI fails for the same reason: the planner always adds
@@ -281,7 +300,7 @@ about the choices behind them.
 | Chips render picks only | A group's selection is already named by its own button, which is also where it is edited. A second rendering would be two places to reconcile and two to keep in sync; a pick has no button, so without a chip it could be neither seen nor undone |
 | The container picker reads the index, not `@children` | `@children` returns every child whatever its type, so finding four folders under ten thousand files means paginating through the files. `ecm:mixinType: Folderish` asks the question directly, and the dashboard already is a search client |
 | The page export clones the live DOM | Re-rendering each widget would be a second description of how a KPI, a list and a table look, drifting the moment a type is added. Only the canvas cannot be cloned, so only the charts are swapped for an image |
-| No whole page PNG | The browser cannot rasterise DOM, and 27 of the 54 shipped widgets are KPI tiles rather than charts, so `getDataURL` reaches half of nothing. It needs a screenshotting dependency, and an approximate one |
+| No whole page PNG | The browser cannot rasterise DOM, and 27 of the 58 placed widgets are KPI tiles rather than charts, so `getDataURL` reaches half of nothing. It needs a screenshotting dependency, and an approximate one |
 | The print sheet names `[echarts]` and puts its canvas back in the flow | zrender positions its canvas absolutely, so the shell's `height: auto` reset leaves the card with nothing in its flow: it collapses to its title while the drawing paints its on-screen width over the neighbouring column. Measured on a real tirage: canvases of 679 and 1414 px in columns of 461, and rows advancing 140 px for a chart 399 px tall. Do not fold the exception back into the reset |
 | The span is written twice on a grid cell | A custom property cannot be matched by a selector, and the print sheet has to give a full width widget both of its two paper columns. Halving a trend over three hundred days makes a band of unreadable dates |
 | The printed page states its filters instead of showing the bar | Seven period buttons and two empty `dd/mm/yyyy` fields describe an application and never say which period is in force. `DashboardSession.filterContext` feeds the sheet and the standalone file from one place, so the two cannot drift, and `<nxd-dashboard-filters>` carries both the bar and the block replacing it |
@@ -289,9 +308,9 @@ about the choices behind them.
 | An override that stops compiling is ignored, not rendered | A configuration can break without being touched, a field having gone away. Falling back to what ships is still correct; a column of errors with no way out is not |
 | A path scope is not persisted either | It is the filter a reader is most likely to forget having set, and the one whose figures look perfectly ordinary while describing a corner of the repository |
 | A widget declares its query instead of running it | Thirteen requests where there was one would be affordable; figures that stop adding up would not. A partition read from four requests over a moving index is right by luck, and `now` bounds eight tiles at eight different instants |
-| The library names one widget per idea, not per shape | Fifty-four widgets are eleven ideas, but a composition saying `topNChart('ecm:primaryType')` is writing a query again. The builders factor, the names do not |
+| The library names one widget per idea, not per shape | Fifty-eight placements are eleven ideas, but a composition saying `topNChart('ecm:primaryType')` is writing a query again. The builders factor, the names do not |
 | A composition compiles to `DashboardConfig` rather than replacing it | Everything downstream — planner, compiler, mapper, the four widget components, both exports, the editor — keeps working untouched, and every invariant their tests hold keeps holding |
-| A definition goes through typed predicates, never `EsClause` | The four dashboards still in the old form carry 27 hand written clauses, using two shapes in the end, and the passthrough forwards `script` verbatim for an administrator. A composition cannot express a clause at all |
+| A definition goes through typed predicates, never `EsClause` | The passthrough forwards an administrator's payload unmodified, so a `script` clause runs Painless per document. `clause-compiler.ts` closes that for every form by rebuilding each clause out of a closed set; a composition cannot express one at all |
 | The editor opens on the source, not on the compilation | Handing back the thirteen widgets a composition stands for answers a question nobody asked, and turns the next edit into a fork of the shipped file rather than a change to it |
 | An empty `types` or `facets` means no constraint | The same rule the filter dialog follows. Read the other way, a widget restricted to nothing in particular would match nothing at all |
 | A widget reads the session instead of eight inputs | Input drilling works while a grid is the only parent. A widget in a tab, a panel or a bespoke layout has none, so placement would have stayed the engine's business |
@@ -342,12 +361,13 @@ Answer the user in French, using *vous*.
 
 ## Where things stand
 
-Six live screens — Content, Users, Workflows, Tasks, Governance, Diagnostics. Build green, 773
-tests over 45 files. `UpcomingPageComponent` is gone with the last placeholder; the requirement
+Six live screens — Content, Users, Workflows, Tasks, Governance, Diagnostics. Build green, 819
+tests over 46 files. `UpcomingPageComponent` is gone with the last placeholder; the requirement
 notice it used to carry is now tested where it lives, in `requirement-notice.component.spec.ts`.
 
 **All five are composed.** 62 definitions over five builders — `countTile`, `topNChart`,
-`trendChart`, `bandChart`, `recordTable` — of which 58 are placed on the shipped screens;
+`trendChart`, `bandChart`, `recordTable` — filling 58 places on the shipped screens, 57 of them
+distinct;
 `live-documents` serves both Content and Governance, which is the only sharing so far. Governance
 carries 17 of them, split four ways, and its five rule widgets sit on no page: they describe
 configuration, and `/RetentionRules` lives outside `/default-domain`, so a path scope would empty
@@ -372,7 +392,8 @@ The work is pushed to `github.com/ThibArg/nuxeo-labs-repository-dashboard`, a pu
 the plugin is ready to be forked into `nuxeo-sandbox`; the README carries a warning saying so, and
 `AGENTS.md` is deliberately **not** gitignored in this repository, so keep it free of credentials.
 
-**Phases 2 and 3 shipped, so the field picker of phase 3b is all that is left.** It would feed the
+**Two roadmap lines are still open: the field picker of phase 3b, and phase 6e — a prompt, a
+composition schema and a security checklist for composing with an assistant.** It would feed the
 configuration editor from `GET /api/v1/config/schemas`, which **nothing in the application calls
 today** — `NuxeoHttpService.get` is the way in, and it would be that endpoint's first caller.
 
@@ -390,13 +411,14 @@ inside a complex property, `dc:title` readable from `_source` but not aggregatab
 `index: false`. A picker offering a field the compiler will refuse is worse than no picker, and
 `agg-compiler.ts` already refuses the first two by construction.
 
-`governance.json` reads the repository index under a `baseFilter` of live, untrashed,
-non-versioned, non-proxy documents. That last pair is near-tautological and deliberately kept: a
-record can be neither checked in nor published, so no version and no proxy ever carries one, which
-means the scopes never double count the way Content's proxies do. Its scopes are `all`, `records`,
-`governed` (the `Record` facet), `retained` and `held`, and the three horizon tiles partition
-`retained` exactly — a spec evaluates scope and widget filter together, since the lower bound of
-every tile comes from the scope alone.
+Governance reads the repository index, every widget narrowing to live, untrashed, non-versioned,
+non-proxy documents through `GOVERNED_REPOSITORY` in `library/governance/populations.ts`. That
+last pair is near-tautological and deliberately kept: a record can be neither checked in nor
+published, so no version and no proxy ever carries one, which means the populations never double
+count the way Content's proxies do. They are `RECORDS`, `GOVERNED_BY_A_RULE` (the `Record` facet),
+`UNDER_RETENTION`, `UNDER_LEGAL_HOLD` and `RETENTION_RULES`, and the three horizon tiles partition
+`UNDER_RETENTION` exactly — a spec evaluates every clause a widget carries together, since the
+lower bound of all three comes from the population rather than from the tile.
 
 **The obstacle both files used to name is lifted.** The sandbox held no record, no legal hold, no
 `ecm:retainUntil` and no `RetentionRule` at all, so a Governance page would have rendered a column

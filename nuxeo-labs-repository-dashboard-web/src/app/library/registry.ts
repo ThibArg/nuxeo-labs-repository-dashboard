@@ -148,9 +148,10 @@ export const TASKS_WIDGETS: WidgetDefinition[] = [
 /**
  * What is a record and what protects it.
  *
- * Eight rather than nine: the population a Governance page is a share of is the live documents,
- * which is exactly what Content's `live-documents` already counts. The first widget two domains
- * share, and the point of a library.
+ * Seventeen, split four ways — what is protected, until when, what cannot be touched at all, and
+ * how the protection is configured. The population a Governance page is a share of is not among
+ * them: it is Content's `live-documents`, the first widget two domains share, and the point of
+ * having a library.
  */
 export const GOVERNANCE_WIDGETS: WidgetDefinition[] = [
   // What is a record.

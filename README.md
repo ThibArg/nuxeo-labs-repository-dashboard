@@ -22,7 +22,7 @@ into a single OpenSearch aggregation request.
 | **Users** | Audit index: `loginSuccess`, `loginFailed`, `documentCreated` and `documentModified`, grouped by `principalName` over `eventDate` |
 | **Workflows** | `audit_wf` passthrough view: workflow state derived from `eventId`, `extended.modelName`, `extended.workflowInitiator`, `extended.taskName`, `extended.action`, and durations from `extended.timeSinceWfStarted` and `extended.timeSinceTaskStarted` |
 | **Tasks** | Repository index: open tasks only, through the `Task` facet — `nt:dueDate`, `nt:actors`, `nt:name`, `nt:directive` |
-| **Governance** | `ecm:isRecord`, `ecm:hasLegalHold`, `ecm:retainUntil`, the `Record` facet through `ecm:mixinType`, and `record:ruleIds` resolved against the `RetentionRule` documents |
+| **Governance** | Repository index: `ecm:isRecord`, `ecm:hasLegalHold`, `ecm:retainUntil`, the `Record` facet through `ecm:mixinType`, and `record:ruleIds` resolved against the `RetentionRule` documents |
 | **Diagnostics** | The preflight report, always available |
 
 ## Composing a dashboard
@@ -54,7 +54,10 @@ more, not writing a query.
 | `hint` | Secondary line under the title; `{range}` is replaced by the active date range |
 | `span` | Width in the 12 column grid; omitted spans share the row evenly |
 | `spanByRange` | Overrides `span` for a given date range id |
-| `with` | Parameters the widget declares |
+| `with` | Parameters the widget declares, see below |
+
+Beside the layout, a composition carries `id`, `label`, an optional `subtitle` shown under the
+title, and `filters`. A screen laid out by hand replaces `layout` with a flat `widgets` list.
 
 `as` has to be unique because it is what names the aggregation inside the shared request. That
 naming — after the widget rather than after the field — is precisely what lets two widgets reading
@@ -67,7 +70,8 @@ semantic id, the index it reads, one sentence saying what it measures, and the p
 accepts. **The definitions are the catalogue**: point an assistant at that folder and it has
 everything it needs, with nothing generated to fall out of step.
 
-**62 definitions, of which 58 are placed on the five shipped screens**, grouped by subject:
+**62 definitions filling 58 places on the five shipped screens**, grouped by subject. Fifty-seven
+of them are placed — `live-documents` twice — and the five describing retention rules are not:
 
 | Folder | Reads | Widgets |
 | --- | --- | --- |
@@ -99,8 +103,9 @@ export const documentsCreated = defineWidget<TrendParams>({
 });
 ```
 
-Fifty-four widgets ship and they are eleven ideas — counting a population and ranking the top
-values of a field account for forty-two on their own — so the reuse lives in **five builders**,
+Fifty-eight widgets are placed across the five screens and they are eleven ideas — counting a
+population and ranking the top values of a field account for forty-eight on their own — so the
+reuse lives in **five builders**,
 `countTile`, `topNChart`, `trendChart`, `bandChart` and `recordTable`, while the *names* stay one
 per idea. A composition saying `topNChart('ecm:primaryType')` would be back to writing queries by
 hand.
@@ -112,6 +117,25 @@ of a table. "Under an hour, up to a day, up to a week, beyond" *is* what
 Every repository widget accepts `types` and `facets`, which narrow it to a few document types or
 to documents carrying a facet. An empty list means **no constraint**, never "no value": compiled
 the other way, a widget restricted to nothing in particular would match nothing at all.
+
+#### What a parameter may be
+
+A closed union, and the contract a composition is written against. The build function's argument is
+**derived** from it, so the two cannot disagree: reading a parameter the widget never declared does
+not compile.
+
+| `type` | Extra keys | What `with` accepts |
+| --- | --- | --- |
+| `number` | `min`, `max` | a number, refused outside the bounds |
+| `string` | | a string |
+| `string[]` | | a list of strings; empty means no constraint |
+| `boolean` | | `true` or `false` |
+| `enum` | `values` | one of `values`, and nothing else |
+
+Every one of them takes `default` and `describe`. A parameter with a default is always present when
+the widget builds; one without may be absent. **A parameter the definition never declared is
+refused rather than ignored** — a misspelt one would otherwise produce a widget that renders
+perfectly while describing something else.
 
 ### Why a recipe rather than a component
 
@@ -189,7 +213,7 @@ Four reusable pieces, all reading the same session and none needing a single inp
 what the last run answered. It is provided **per page** — a component placing widgets must declare
 `providers: [DashboardRunner, DashboardSession]`, or injection fails at construction.
 
-Three consequences worth knowing before building tabs:
+Four consequences worth knowing before building tabs:
 
 - **Every declared widget is fetched, on screen or not.** A tab nobody has opened costs nothing to
   open, and its figures describe the same instant as the ones being read. The price is paying for
@@ -208,8 +232,9 @@ Three consequences worth knowing before building tabs:
 ### The compiled form
 
 A composition compiles to the configuration the engine plans, batches and renders, and a dashboard
-may also be written in that form directly. It is what the four dashboards not yet migrated use,
-and what an older stored edit holds.
+may also be written in that form directly. **No shipped dashboard is**, all five being
+compositions; what still arrives in this form is an edit stored by an administrator before the
+migration, which is why it is still accepted and still documented.
 
 ```jsonc
 {
@@ -241,9 +266,17 @@ and what an older stored edit holds.
 | `format` | `integer`, `decimal`, `bytes`, `percent`, `duration`, `date`, `daysUntil`, `text` |
 | `filter` | Extra OpenSearch clauses for this widget only, compiled into a `filter` aggregation |
 | `secondary` | A second figure under a KPI, counted within the tile's own population |
+| `severity` | Colour a KPI carries: `neutral`, `accent`, `warning`, `danger`, `success` |
+| `limit` | Caps how many buckets are drawn, independently of the aggregation size |
+| `columns`, `sort`, `size` | A table's columns, its ordering and how many rows it fetches |
+| `agg.terms.order` | `count_desc` by default; `metric_desc` ranks by the metric instead |
+| `agg.terms.missing` | Value counted for documents where the field is absent |
+| `agg.date_histogram.format` | Java pattern for the bucket key, e.g. `yyyy-MM` |
+| `agg.date_histogram.min_doc_count` | `0` by default, so a quiet day stays a bar. `1` drops the empty buckets, which only suits a field whose values are scattered rather than a trend |
 | `span` | Width in the 12 column grid; omitted spans share the row evenly |
 | `spanByRange` | Overrides `span` for a given date range id |
 | `hint` | Secondary line under the title; `{range}` is replaced by the active date range |
+| `subtitle` | On the dashboard, not the widget: a sentence under the page title |
 
 Aggregations are a **closed whitelist**, not raw OpenSearch DSL. The passthrough forwards an
 administrator's payload verbatim, so accepting arbitrary DSL from a configuration file would also
@@ -251,11 +284,20 @@ accept `script` and `runtime_mappings`. `agg-compiler.ts` is the only code that 
 JSON, and it rejects anything else — including a `.keyword` suffix, which would silently match
 nothing on a Nuxeo index.
 
-**Filters were never closed the same way.** `baseFilter`, `scopes`, a widget's `filter` and a
-secondary figure's are `EsClause`, forwarded as written; the four dashboards still in that form
-carry 27 such clauses between them. A widget definition goes through four typed predicates
-instead — `equals`, `anyOf`, `dateWindow`, `exists` — and a composition cannot express a clause at
-all, which is what closes the hole for anything written the new way.
+**Filters are closed too, since `clause-compiler.ts`.** `baseFilter`, `scopes`, a widget's
+`filter` and a secondary figure's are typed `EsClause`, and every one of them is now rebuilt out
+of a closed set — `term`, `terms`, `range`, `exists`, `bool` — rather than forwarded. Rebuilding
+rather than checking is the point: a clause that passes leaves nothing behind it, so a key nobody
+thought to refuse cannot ride along beside one that was accepted.
+
+Two shapes are worth naming among the refusals. A `script` clause runs Painless per document under
+the administrator's identity, the passthrough forwarding their payload unmodified. And a `terms`
+clause may be given an *object* naming an index, an id and a path, which reads the values out of
+that document — a read of an index this application never declared, wearing the clothes of an
+ordinary filter.
+
+A widget definition goes through four typed predicates on top of that — `equals`, `anyOf`,
+`dateWindow`, `exists` — and a composition cannot express a clause at all.
 
 ## Scopes
 
@@ -272,8 +314,8 @@ export const VERSIONS: Predicate[] = [equals('ecm:isVersion', true), notProxy];
 export const PROXIES: Predicate[] = [equals('ecm:isProxy', true)];
 ```
 
-A dashboard still in the compiled form names them at the page level instead, and widgets point at
-one by name:
+The compiled form names them at the page level instead, and widgets point at one by name. No
+shipped file does this any more; the grammar remains for an edit stored before the migration:
 
 ```jsonc
 "defaultScope": "liveNotTrashed",
@@ -586,7 +628,7 @@ Three things that sheet has to say out loud, because a browser would otherwise g
   column.
 
 Nothing about a whole page PNG: the browser has no way to rasterise DOM, and half of these widgets
-are not charts — 27 of the 54 shipped are KPI tiles. It would need a screenshotting dependency,
+are not charts — 27 of the 58 placed are KPI tiles. It would need a screenshotting dependency,
 and an approximate one.
 
 ### Persistence
@@ -652,8 +694,21 @@ start there rather than with this table.
 
 Why administrators only: for a non administrator the passthrough rewrites the query to inject an
 `ecm:acl` filter, which silently changes every figure, and the `audit` index is refused outright.
-Rather than displaying numbers that mean something different per user, the dashboard requires an
+Rather than displaying numbers that mean something different per user, the dashboard asks for an
 administrator session.
+
+**Asks, and it is worth being exact about what enforces it.** The deployment maps
+`NuxeoAuthenticationFilter` onto `/dashboard/*`, which establishes a session and checks no group;
+the Web UI menu entry is hidden from non administrators, which hides a link and protects nothing.
+The gate is `preflight.service.ts`, a blocking check the shell honours — client-side code, and the
+reader owns their client.
+
+What keeps that from mattering is the platform rather than this plugin. The passthrough refuses
+`audit` and `audit_wf` to a non administrator outright, and injects `terms(ecm:acl, principals)`
+into every query on the repository index. So somebody who types the URL sees the Diagnostics screen
+and aggregations over the documents they could already read — nothing they could not obtain
+otherwise. It stops being true the day a widget reads something other than the passthrough, which
+is the reason to say it here rather than to discover it then.
 
 ### Do not declare the templates by hand
 
@@ -1050,9 +1105,9 @@ document and look at what comes back.
   on any one of them is wrong rather than partial: three rules of 5 days, 45 days and 2 years put
   two of them in "under a week". Adding the three needs arithmetic no aggregation here can do.
 - **A version carries the path of the document it was cut from.** A path scope therefore includes
-  versions unless something else excludes them. Governance does that in its `baseFilter`; Content
-  has none, each of its widgets stating the population it describes instead — which is why its
-  Versions tile keeps counting versions under a path scope, and is meant to.
+  versions unless something else excludes them. No shipped dashboard has a `baseFilter` any more:
+  each widget states the population it describes, which is how Governance keeps excluding them and
+  how Content's Versions tile keeps counting them, as it is meant to.
 - **`extended.params` in the audit index is `"enabled": false`** and cannot be aggregated.
 - **`comment` in the audit index is `text` with no keyword sub-field**: readable from `_source`,
   never aggregatable. Every other audit field is a `keyword` set by a dynamic template.
@@ -1137,11 +1192,11 @@ still appear in an audit index, through `Framework.doPrivileged` with no argumen
 │       ├── app/
 │       │   ├── config/                         widget model, composition compiler, dashboards/*.json
 │       │   ├── core/                           HTTP, preflight, labels, formatting
-│       │   ├── engine/                         agg compiler, query planner, result mapper, runner, session
+│       │   ├── engine/                         agg and clause compilers, planner, mapper, runner, session
 │       │   ├── layout/                         shell, sidebar, grid, date range picker
 │       │   ├── library/                        the widget catalogue
 │       │   │   ├── definition.ts                what a widget is; parameter shapes
-│       │   │   ├── builders.ts                  countTile, topNChart, trendChart
+│       │   │   ├── builders.ts                  countTile, topNChart, trendChart, bandChart, recordTable
 │       │   │   ├── predicates.ts                the only clauses a definition may express
 │       │   │   ├── populations.ts               named populations of the repository
 │       │   │   ├── registry.ts                  every widget a composition may name
@@ -1181,7 +1236,7 @@ still appear in an audit index, through `Framework.doPrivileged` with no argumen
 | 6c | A widget placeable anywhere, so a page can be laid out by hand | done |
 | 6d | The four remaining dashboards migrated onto the library | done |
 | 6d2 | Governance enriched: retention horizon over time, and the rules themselves | done |
-| 6e | A prompt and a security checklist for composing with an assistant | |
+| 6e | A prompt, a composition schema and a security checklist for composing with an assistant | |
 
 ## Licence
 
