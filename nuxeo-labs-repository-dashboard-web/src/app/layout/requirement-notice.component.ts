@@ -49,6 +49,14 @@ export class RequirementNoticeComponent {
     const feature = this.requires();
     const features = this.preflight.result()?.features;
     // Silent while the preflight has not run: an unchecked server is not a missing prerequisite.
-    return !!feature && !!features && !features[feature];
+    if (!feature || !features) {
+      return false;
+    }
+    /*
+     * A feature the preflight does not report is a mistake in whoever asked for it, not a server
+     * without it. Reading the absence as "missing" is how removing a check from `PreflightResult`
+     * puts a warning on every healthy server, which is exactly backwards.
+     */
+    return feature in features && !features[feature];
   });
 }
