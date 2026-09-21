@@ -27,6 +27,30 @@ import {
   failedLogins,
   topUsersByLogins,
 } from './users/activity';
+import {
+  tasksCreated,
+  tasksEnded,
+  workflowsCancelled,
+  workflowsCompleted,
+  workflowsStarted,
+} from './workflows/volumes';
+import {
+  averageTaskDuration,
+  averageWorkflowDuration,
+  medianWorkflowDuration,
+  slowestTaskSteps,
+  slowestWorkflowModels,
+  workflowDurationDistribution,
+} from './workflows/durations';
+import {
+  taskOutcomes,
+  tasksByStep,
+  topTaskPerformers,
+  topWorkflowInitiators,
+  workflowsByModel,
+  workflowsCompletedPerDay,
+  workflowsStartedPerDay,
+} from './workflows/activity';
 
 export const CONTENT_WIDGETS: WidgetDefinition[] = [
   totalDocuments,
@@ -53,7 +77,33 @@ export const USERS_WIDGETS: WidgetDefinition[] = [
   documentsModifiedByUser,
 ];
 
-export const WIDGET_LIBRARY: WidgetDefinition[] = [...CONTENT_WIDGETS, ...USERS_WIDGETS];
+/** What the workflow engine did, read from the `audit_wf` view. */
+export const WORKFLOWS_WIDGETS: WidgetDefinition[] = [
+  workflowsStarted,
+  workflowsCompleted,
+  workflowsCancelled,
+  tasksCreated,
+  tasksEnded,
+  averageWorkflowDuration,
+  medianWorkflowDuration,
+  averageTaskDuration,
+  slowestWorkflowModels,
+  slowestTaskSteps,
+  workflowDurationDistribution,
+  workflowsStartedPerDay,
+  workflowsCompletedPerDay,
+  workflowsByModel,
+  taskOutcomes,
+  topWorkflowInitiators,
+  topTaskPerformers,
+  tasksByStep,
+];
+
+export const WIDGET_LIBRARY: WidgetDefinition[] = [
+  ...CONTENT_WIDGETS,
+  ...USERS_WIDGETS,
+  ...WORKFLOWS_WIDGETS,
+];
 
 const BY_ID = new Map(WIDGET_LIBRARY.map((definition) => [definition.id, definition]));
 

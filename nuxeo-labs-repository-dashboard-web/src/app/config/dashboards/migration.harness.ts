@@ -49,10 +49,15 @@ export function provesMigrationOf(
     expect(compileComposition(source).problems).toEqual([]);
   });
 
-  it('names the same widgets, in the same order, in the same rows', () => {
+  /*
+   * The set of widgets and the rows, not the order of the keys: a composition declares in layout
+   * order while a hand written file declared in whatever order it was typed, and nothing reads
+   * that order — the planner and the grid both walk the layout.
+   */
+  it('names the same widgets, in the same rows, on the same index', () => {
     const { config } = compileComposition(source);
 
-    expect(Object.keys(config!.widgets)).toEqual(Object.keys(legacy.widgets));
+    expect(Object.keys(config!.widgets).sort()).toEqual(Object.keys(legacy.widgets).sort());
     expect(config!.layout).toEqual(legacy.layout);
     expect(config!.index).toEqual(legacy.index);
   });
