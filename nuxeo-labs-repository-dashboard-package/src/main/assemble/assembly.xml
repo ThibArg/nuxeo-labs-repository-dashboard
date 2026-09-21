@@ -96,13 +96,20 @@
       </then>
     </if>
 
+    <!--
+      This plugin ships no template, so the branch below only copies what it finds.
+
+      It used to end with <config addtemplate="nuxeo-labs-folder-drop"/>, copied over from another
+      plugin: dead while there is no template, and wrong the day there is one, since it would have
+      registered a template belonging to a different package. A plugin that adds a template has to
+      name its own here, knowingly.
+    -->
     <var name="install.templates" value="" />
     <if>
       <available file="${outdir}/marketplace/install/templates" />
       <then>
         <var name="install.templates" value="${line.separator}
-  &lt;copy dir=&quot;${package.root}/install/templates&quot; todir=&quot;${env.templates}&quot; overwrite=&quot;true&quot; /&gt;${line.separator}
-  &lt;config addtemplate=&quot;nuxeo-labs-folder-drop&quot; /&gt;${line.separator}" />
+  &lt;copy dir=&quot;${package.root}/install/templates&quot; todir=&quot;${env.templates}&quot; overwrite=&quot;true&quot; /&gt;${line.separator}" />
       </then>
     </if>
 
