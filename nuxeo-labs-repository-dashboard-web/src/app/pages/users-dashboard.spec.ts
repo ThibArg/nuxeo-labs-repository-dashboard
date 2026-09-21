@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import usersConfig from '../config/dashboards/users.json';
-import { DashboardConfig, defaultFilterState, resolveSpan } from '../config/dashboard-config.model';
+import { defaultFilterState, resolveSpan } from '../config/dashboard-config.model';
 import { planDashboard } from '../engine/query-planner';
 import { PreflightService } from '../core/preflight.service';
 import { DashboardPageComponent } from './dashboard-page.component';
@@ -9,6 +9,7 @@ import { provideDashboardCharts } from '../widgets/echarts.setup';
 import { ChartWidgetComponent } from '../widgets/chart-widget.component';
 import { WidgetOutletComponent } from '../widgets/widget-outlet.component';
 import { ChartWidgetStubComponent } from '../../testing/chart-widget.stub';
+import { shippedConfig } from '../../testing/shipped';
 import {
   FetchStub,
   StubRoute,
@@ -18,7 +19,7 @@ import {
 } from '../../testing/fetch-stub';
 import { settle } from '../../testing/settle';
 
-const USERS = usersConfig as DashboardConfig;
+const USERS = shippedConfig('users.json', usersConfig);
 
 /** Every widget carries its own event filter, so each aggregation sits under a wrapper. */
 function wrapped(docCount: number, buckets: unknown[]) {

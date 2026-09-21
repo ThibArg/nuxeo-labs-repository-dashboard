@@ -1,7 +1,6 @@
 {
   "id": "users",
   "label": "Users Dashboard",
-  "index": "audit",
   "filters": [
     {
       "type": "dateRange",
@@ -11,117 +10,36 @@
   ],
   "layout": [
     {
-      "cells": ["uniqueLoginsPerDay"]
+      "cells": [
+        {
+          "use": "distinct-users-per-day",
+          "as": "uniqueLoginsPerDay",
+          "title": "Unique Users per Day",
+          "span": 12
+        }
+      ]
     },
     {
-      "cells": ["topUsers", "loginFailures"]
+      "cells": [
+        { "use": "top-users-by-logins", "as": "topUsers", "span": 6 },
+        { "use": "failed-logins", "as": "loginFailures", "span": 6 }
+      ]
     },
     {
-      "cells": ["creationsByUser", "modificationsByUser"]
+      "cells": [
+        {
+          "use": "documents-created-by-user",
+          "as": "creationsByUser",
+          "title": "Documents Created by User",
+          "span": 6
+        },
+        {
+          "use": "documents-modified-by-user",
+          "as": "modificationsByUser",
+          "title": "Documents Modified by User",
+          "span": 6
+        }
+      ]
     }
-  ],
-  "widgets": {
-    "uniqueLoginsPerDay": {
-      "type": "line",
-      "label": "Unique Users per Day",
-      "hint": "Distinct users with a successful login ({range})",
-      "span": 12,
-      "filter": [
-        {
-          "term": {
-            "eventId": "loginSuccess"
-          }
-        }
-      ],
-      "metric": {
-        "cardinality": "principalName"
-      },
-      "agg": {
-        "date_histogram": {
-          "field": "eventDate",
-          "calendar_interval": "day",
-          "format": "yyyy-MM-dd"
-        }
-      }
-    },
-    "topUsers": {
-      "type": "ranked-list",
-      "label": "Most Active Users",
-      "hint": "By number of successful logins",
-      "span": 6,
-      "labels": "user",
-      "filter": [
-        {
-          "term": {
-            "eventId": "loginSuccess"
-          }
-        }
-      ],
-      "agg": {
-        "terms": {
-          "field": "principalName",
-          "size": 10
-        }
-      }
-    },
-    "loginFailures": {
-      "type": "ranked-list",
-      "label": "Failed Logins",
-      "hint": "The login exactly as it was typed, which may match no account",
-      "span": 6,
-      "filter": [
-        {
-          "term": {
-            "eventId": "loginFailed"
-          }
-        }
-      ],
-      "agg": {
-        "terms": {
-          "field": "principalName",
-          "size": 10
-        }
-      }
-    },
-    "creationsByUser": {
-      "type": "hbar",
-      "label": "Documents Created by User",
-      "hint": "Versions and published proxies are counted too",
-      "span": 6,
-      "labels": "user",
-      "filter": [
-        {
-          "term": {
-            "eventId": "documentCreated"
-          }
-        }
-      ],
-      "agg": {
-        "terms": {
-          "field": "principalName",
-          "size": 10
-        }
-      }
-    },
-    "modificationsByUser": {
-      "type": "hbar",
-      "label": "Documents Modified by User",
-      "hint": "Server-side work counts for the user who triggered it",
-      "span": 6,
-      "labels": "user",
-      "filter": [
-        {
-          "term": {
-            "eventId": "documentModified"
-          }
-        }
-      ],
-      "agg": {
-        "terms": {
-          "field": "principalName",
-          "size": 10
-        }
-      }
-    }
-  }
+  ]
 }
