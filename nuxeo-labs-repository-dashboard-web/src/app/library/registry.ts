@@ -62,6 +62,18 @@ import {
   tasksByName,
   tasksDueThisWeek,
 } from './tasks/workload';
+import {
+  documentsOnLegalHold,
+  documentsUnderRetention,
+  records,
+  recordsByRule,
+  recordsByType,
+} from './governance/records';
+import {
+  retentionExpiringInSixtyDays,
+  retentionExpiringLater,
+  retentionExpiringThisWeek,
+} from './governance/horizon';
 
 export const CONTENT_WIDGETS: WidgetDefinition[] = [
   totalDocuments,
@@ -123,11 +135,30 @@ export const TASKS_WIDGETS: WidgetDefinition[] = [
   overdueTasksTable,
 ];
 
+/**
+ * What is a record and what protects it.
+ *
+ * Eight rather than nine: the population a Governance page is a share of is the live documents,
+ * which is exactly what Content's `live-documents` already counts. The first widget two domains
+ * share, and the point of a library.
+ */
+export const GOVERNANCE_WIDGETS: WidgetDefinition[] = [
+  records,
+  documentsUnderRetention,
+  documentsOnLegalHold,
+  retentionExpiringThisWeek,
+  retentionExpiringInSixtyDays,
+  retentionExpiringLater,
+  recordsByRule,
+  recordsByType,
+];
+
 export const WIDGET_LIBRARY: WidgetDefinition[] = [
   ...CONTENT_WIDGETS,
   ...USERS_WIDGETS,
   ...WORKFLOWS_WIDGETS,
   ...TASKS_WIDGETS,
+  ...GOVERNANCE_WIDGETS,
 ];
 
 const BY_ID = new Map(WIDGET_LIBRARY.map((definition) => [definition.id, definition]));

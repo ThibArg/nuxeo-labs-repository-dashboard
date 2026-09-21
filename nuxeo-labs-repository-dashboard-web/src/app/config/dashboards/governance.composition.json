@@ -1,0 +1,65 @@
+{
+  "id": "governance",
+  "label": "Governance Dashboard",
+  "subtitle": "Live documents only. A record can be neither versioned nor published, so versions and proxies never carry one; trashed documents are left out so that the totals describe the working repository. \"Governed by a rule\" means the Record facet, which only Retention.AttachRule sets — Document.Retain and Document.Hold make a record without it.",
+  "filters": [
+    {
+      "type": "dateRange",
+      "field": "dc:created",
+      "default": "all"
+    },
+    {
+      "type": "pathScope",
+      "label": "Location"
+    },
+    {
+      "type": "termsGroup",
+      "id": "kind",
+      "label": "Document kinds",
+      "combine": "or",
+      "members": [
+        {
+          "id": "types",
+          "field": "ecm:primaryType",
+          "label": "Document types",
+          "labels": "doctype",
+          "size": 200
+        }
+      ]
+    }
+  ],
+  "layout": [
+    {
+      "cells": [
+        {
+          "use": "live-documents",
+          "as": "liveDocuments",
+          "title": "Live Documents",
+          "hint": "The population the figures beside it are a share of",
+          "span": 3
+        },
+        { "use": "records", "as": "records", "span": 3 },
+        { "use": "documents-under-retention", "as": "underRetention", "span": 3 },
+        { "use": "documents-on-legal-hold", "as": "legalHold", "span": 3 }
+      ]
+    },
+    {
+      "cells": [
+        { "use": "retention-expiring-this-week", "as": "expiringWeek", "span": 4 },
+        { "use": "retention-expiring-in-60-days", "as": "expiring60", "span": 4 },
+        {
+          "use": "retention-expiring-later",
+          "as": "expiringLater",
+          "hint": "The three add up to Under Retention",
+          "span": 4
+        }
+      ]
+    },
+    {
+      "cells": [
+        { "use": "records-by-rule", "as": "byRule", "span": 6 },
+        { "use": "records-by-type", "as": "byType", "span": 6 }
+      ]
+    }
+  ]
+}
