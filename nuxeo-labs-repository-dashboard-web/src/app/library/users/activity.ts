@@ -6,7 +6,6 @@
  * for the person who triggered it instead of piling onto `system`. It is not a protection against
  * impersonation, and the widgets that need to say so do.
  */
-import { CalendarInterval, ChartWidgetType } from '../../config/dashboard-config.model';
 import { topNChart, trendChart } from '../builders';
 import { ParamSpecs, defineWidget } from '../definition';
 import { DOCUMENT_CREATED, DOCUMENT_MODIFIED, LOGIN_FAILED, LOGIN_SUCCEEDED } from './populations';
@@ -15,38 +14,38 @@ const BUCKET_CHARTS = ['donut', 'pie', 'bar', 'hbar', 'ranked-list'] as const;
 const TREND_CHARTS = ['area', 'line', 'bar'] as const;
 const INTERVALS = ['hour', 'day', 'week', 'month', 'quarter', 'year'] as const;
 
-interface PeopleParams {
-  chart: ChartWidgetType;
-  size: number;
-}
-
-interface ActivityParams {
-  chart: ChartWidgetType;
-  interval: CalendarInterval;
-}
-
-function peopleParams(chart: (typeof BUCKET_CHARTS)[number]): ParamSpecs {
+function peopleParams(chart: (typeof BUCKET_CHARTS)[number]) {
   return {
-    chart: { type: 'enum', values: BUCKET_CHARTS, default: chart, describe: 'How it is drawn.' },
+    chart: {
+      type: 'enum' as const,
+      values: BUCKET_CHARTS,
+      default: chart,
+      describe: 'How it is drawn.',
+    },
     size: {
-      type: 'number',
+      type: 'number' as const,
       default: 10,
       min: 1,
       max: 100,
       describe: 'How many people are listed. The chart says so when it leaves some out.',
     },
-  };
+  } satisfies ParamSpecs;
 }
 
-const ACTIVITY_PARAMS: ParamSpecs = {
-  chart: { type: 'enum', values: TREND_CHARTS, default: 'line', describe: 'How it is drawn.' },
+const ACTIVITY_PARAMS = {
+  chart: {
+    type: 'enum' as const,
+    values: TREND_CHARTS,
+    default: 'line',
+    describe: 'How it is drawn.',
+  },
   interval: {
-    type: 'enum',
+    type: 'enum' as const,
     values: INTERVALS,
     default: 'day',
     describe: 'Width of one bucket. Buckets are cut in the reader\u2019s own time zone.',
   },
-};
+} satisfies ParamSpecs;
 
 /**
  * How many different people signed in, rather than how many times.
@@ -54,7 +53,7 @@ const ACTIVITY_PARAMS: ParamSpecs = {
  * A count of logins says as much about one person reconnecting all morning as about a team
  * arriving; a cardinality per bucket separates the two.
  */
-export const distinctUsersPerDay = defineWidget<ActivityParams>({
+export const distinctUsersPerDay = defineWidget({
   id: 'distinct-users-per-day',
   index: 'audit',
   title: 'Active Users',
@@ -71,7 +70,7 @@ export const distinctUsersPerDay = defineWidget<ActivityParams>({
     }),
 });
 
-export const topUsersByLogins = defineWidget<PeopleParams>({
+export const topUsersByLogins = defineWidget({
   id: 'top-users-by-logins',
   index: 'audit',
   title: 'Most Active Users',
@@ -95,7 +94,7 @@ export const topUsersByLogins = defineWidget<PeopleParams>({
  * point, and a prettified label would hide it. It also spares a lookup per value, most of which
  * would match no account at all.
  */
-export const failedLogins = defineWidget<PeopleParams>({
+export const failedLogins = defineWidget({
   id: 'failed-logins',
   index: 'audit',
   title: 'Failed Logins',
@@ -111,7 +110,7 @@ export const failedLogins = defineWidget<PeopleParams>({
     }),
 });
 
-export const documentsCreatedByUser = defineWidget<PeopleParams>({
+export const documentsCreatedByUser = defineWidget({
   id: 'documents-created-by-user',
   index: 'audit',
   title: 'Documents Created',
@@ -128,7 +127,7 @@ export const documentsCreatedByUser = defineWidget<PeopleParams>({
     }),
 });
 
-export const documentsModifiedByUser = defineWidget<PeopleParams>({
+export const documentsModifiedByUser = defineWidget({
   id: 'documents-modified-by-user',
   index: 'audit',
   title: 'Documents Modified',

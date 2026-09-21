@@ -1,5 +1,4 @@
 /** Who runs the workflows, which models they use, and when. */
-import { CalendarInterval, ChartWidgetType } from '../../config/dashboard-config.model';
 import { topNChart, trendChart } from '../builders';
 import { ParamSpecs, defineWidget } from '../definition';
 import { COMPLETED, STARTED, TASK_CREATED, TASK_ENDED } from './populations';
@@ -8,40 +7,40 @@ const BUCKET_CHARTS = ['donut', 'pie', 'bar', 'hbar', 'ranked-list'] as const;
 const TREND_CHARTS = ['area', 'line', 'bar'] as const;
 const INTERVALS = ['hour', 'day', 'week', 'month', 'quarter', 'year'] as const;
 
-interface RankedParams {
-  chart: ChartWidgetType;
-  size: number;
-}
-
-interface TrendParams {
-  chart: ChartWidgetType;
-  interval: CalendarInterval;
-}
-
-function rankedParams(chart: (typeof BUCKET_CHARTS)[number]): ParamSpecs {
+function rankedParams(chart: (typeof BUCKET_CHARTS)[number]) {
   return {
-    chart: { type: 'enum', values: BUCKET_CHARTS, default: chart, describe: 'How it is drawn.' },
+    chart: {
+      type: 'enum' as const,
+      values: BUCKET_CHARTS,
+      default: chart,
+      describe: 'How it is drawn.',
+    },
     size: {
-      type: 'number',
+      type: 'number' as const,
       default: 10,
       min: 1,
       max: 100,
       describe: 'How many are listed. The chart says so when it leaves some out.',
     },
-  };
+  } satisfies ParamSpecs;
 }
 
-const TREND_PARAMS: ParamSpecs = {
-  chart: { type: 'enum', values: TREND_CHARTS, default: 'area', describe: 'How it is drawn.' },
+const TREND_PARAMS = {
+  chart: {
+    type: 'enum' as const,
+    values: TREND_CHARTS,
+    default: 'area',
+    describe: 'How it is drawn.',
+  },
   interval: {
-    type: 'enum',
+    type: 'enum' as const,
     values: INTERVALS,
     default: 'day',
     describe: 'Width of one bucket. Buckets are cut in the reader\u2019s own time zone.',
   },
-};
+} satisfies ParamSpecs;
 
-export const workflowsStartedPerDay = defineWidget<TrendParams>({
+export const workflowsStartedPerDay = defineWidget({
   id: 'workflows-started-per-day',
   index: 'audit_wf',
   title: 'Workflows Started per Day',
@@ -57,7 +56,7 @@ export const workflowsStartedPerDay = defineWidget<TrendParams>({
     }),
 });
 
-export const workflowsCompletedPerDay = defineWidget<TrendParams>({
+export const workflowsCompletedPerDay = defineWidget({
   id: 'workflows-completed-per-day',
   index: 'audit_wf',
   title: 'Workflows Completed per Day',
@@ -80,7 +79,7 @@ export const workflowsCompletedPerDay = defineWidget<TrendParams>({
  * the words of the identifier when that project is not deployed — so a model reads "Claim Review"
  * rather than sitting next to a properly translated one as a bare id.
  */
-export const workflowsByModel = defineWidget<RankedParams>({
+export const workflowsByModel = defineWidget({
   id: 'workflows-by-model',
   index: 'audit_wf',
   title: 'By Workflow Model',
@@ -104,7 +103,7 @@ export const workflowsByModel = defineWidget<RankedParams>({
  * while the i18n key sits in its `label` and never leaves the model definition. A label strategy
  * here would promise a translation that cannot happen.
  */
-export const taskOutcomes = defineWidget<RankedParams>({
+export const taskOutcomes = defineWidget({
   id: 'task-outcomes',
   index: 'audit_wf',
   title: 'Task Outcomes',
@@ -120,7 +119,7 @@ export const taskOutcomes = defineWidget<RankedParams>({
     }),
 });
 
-export const topWorkflowInitiators = defineWidget<RankedParams>({
+export const topWorkflowInitiators = defineWidget({
   id: 'top-workflow-initiators',
   index: 'audit_wf',
   title: 'Top Initiators',
@@ -137,7 +136,7 @@ export const topWorkflowInitiators = defineWidget<RankedParams>({
     }),
 });
 
-export const topTaskPerformers = defineWidget<RankedParams>({
+export const topTaskPerformers = defineWidget({
   id: 'top-task-performers',
   index: 'audit_wf',
   title: 'Tasks Completed by User',
@@ -154,7 +153,7 @@ export const topTaskPerformers = defineWidget<RankedParams>({
     }),
 });
 
-export const tasksByStep = defineWidget<RankedParams>({
+export const tasksByStep = defineWidget({
   id: 'workflow-tasks-by-step',
   index: 'audit_wf',
   title: 'Most Frequent Tasks',

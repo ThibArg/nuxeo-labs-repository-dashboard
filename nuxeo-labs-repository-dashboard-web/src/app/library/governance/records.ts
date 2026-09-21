@@ -5,11 +5,7 @@
  * false, and what blocks a deletion is a future `ecm:retainUntil` or a legal hold — so these
  * figures describe a commitment rather than a state somebody can undo.
  */
-import {
-  CalendarInterval,
-  ChartWidgetType,
-  KpiSeverity,
-} from '../../config/dashboard-config.model';
+import { KpiSeverity } from '../../config/dashboard-config.model';
 import { countTile, topNChart, trendChart } from '../builders';
 import { ParamSpecs, defineWidget } from '../definition';
 import { equals } from '../predicates';
@@ -20,47 +16,43 @@ const TREND_CHARTS = ['area', 'line', 'bar'] as const;
 const INTERVALS = ['hour', 'day', 'week', 'month', 'quarter', 'year'] as const;
 const SEVERITIES = ['neutral', 'accent', 'warning', 'danger', 'success'] as const;
 
-interface TrendParams {
-  chart: ChartWidgetType;
-  interval: CalendarInterval;
-}
-
-const TREND_PARAMS: ParamSpecs = {
-  chart: { type: 'enum', values: TREND_CHARTS, default: 'area', describe: 'How it is drawn.' },
+const TREND_PARAMS = {
+  chart: {
+    type: 'enum' as const,
+    values: TREND_CHARTS,
+    default: 'area',
+    describe: 'How it is drawn.',
+  },
   interval: {
-    type: 'enum',
+    type: 'enum' as const,
     values: INTERVALS,
     default: 'day',
     describe: 'Width of one bucket. Buckets are cut in the reader\u2019s own time zone.',
   },
-};
+} satisfies ParamSpecs;
 
-interface RankedParams {
-  chart: ChartWidgetType;
-  size: number;
-}
-
-interface TileParams {
-  severity: KpiSeverity;
-}
-
-function rankedParams(chart: (typeof BUCKET_CHARTS)[number]): ParamSpecs {
+function rankedParams(chart: (typeof BUCKET_CHARTS)[number]) {
   return {
-    chart: { type: 'enum', values: BUCKET_CHARTS, default: chart, describe: 'How it is drawn.' },
+    chart: {
+      type: 'enum' as const,
+      values: BUCKET_CHARTS,
+      default: chart,
+      describe: 'How it is drawn.',
+    },
     size: {
-      type: 'number',
+      type: 'number' as const,
       default: 10,
       min: 1,
       max: 100,
       describe: 'How many are listed. The chart says so when it leaves some out.',
     },
-  };
+  } satisfies ParamSpecs;
 }
 
-function severity(fallback: KpiSeverity): ParamSpecs {
+function severity(fallback: KpiSeverity) {
   return {
     severity: {
-      type: 'enum',
+      type: 'enum' as const,
       values: SEVERITIES,
       default: fallback,
       describe: 'Colour the tile carries.',
@@ -75,7 +67,7 @@ function severity(fallback: KpiSeverity): ParamSpecs {
  * the `Record` facet, while `Document.Retain` and `Document.Hold` make a record without it. The
  * gap is worth seeing, which is why the second figure sits under the first rather than beside it.
  */
-export const records = defineWidget<TileParams>({
+export const records = defineWidget({
   id: 'records',
   index: 'nuxeo',
   title: 'Records',
@@ -94,7 +86,7 @@ export const records = defineWidget<TileParams>({
     }),
 });
 
-export const documentsUnderRetention = defineWidget<TileParams>({
+export const documentsUnderRetention = defineWidget({
   id: 'documents-under-retention',
   index: 'nuxeo',
   title: 'Under Retention',
@@ -116,7 +108,7 @@ export const documentsUnderRetention = defineWidget<TileParams>({
  * 404 — the bucket still holds documents, so it falls back to the uuid, which is a poor label but
  * an honest one.
  */
-export const recordsByRule = defineWidget<RankedParams>({
+export const recordsByRule = defineWidget({
   id: 'records-by-rule',
   index: 'nuxeo',
   title: 'By Retention Rule',
@@ -133,7 +125,7 @@ export const recordsByRule = defineWidget<RankedParams>({
     }),
 });
 
-export const recordsByType = defineWidget<RankedParams>({
+export const recordsByType = defineWidget({
   id: 'records-by-type',
   index: 'nuxeo',
   title: 'Records by Document Type',
@@ -149,7 +141,7 @@ export const recordsByType = defineWidget<RankedParams>({
     }),
 });
 
-export const recordsByAuthor = defineWidget<RankedParams>({
+export const recordsByAuthor = defineWidget({
   id: 'records-by-author',
   index: 'nuxeo',
   title: 'Records by Author',
@@ -174,7 +166,7 @@ export const recordsByAuthor = defineWidget<RankedParams>({
  * `ecm:isRecord`, `ecm:retainUntil` and `ecm:hasLegalHold`, and none of them is a date of
  * declaration. A document written in 2020 and made a record yesterday shows up in 2020.
  */
-export const recordsByCreationDate = defineWidget<TrendParams>({
+export const recordsByCreationDate = defineWidget({
   id: 'records-by-creation-date',
   index: 'nuxeo',
   title: 'Records by Creation Date',

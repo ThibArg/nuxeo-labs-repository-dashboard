@@ -5,12 +5,12 @@
  * reason they are worth putting side by side, and which only holds because they are counted in
  * one request.
  */
-import { RESTRICTION_PARAMS, Restrictions, countTile, restrict } from '../builders';
+import { RESTRICTION_PARAMS, countTile, restrict } from '../builders';
 import { defineWidget } from '../definition';
 import { EVERYTHING, LIVE_NOT_TRASHED, PROXIES, TRASHED, VERSIONS } from '../populations';
 import { equals } from '../predicates';
 
-export const totalDocuments = defineWidget<Restrictions>({
+export const totalDocuments = defineWidget({
   id: 'total-documents',
   index: 'nuxeo',
   title: 'Total Documents',
@@ -23,7 +23,7 @@ export const totalDocuments = defineWidget<Restrictions>({
     }),
 });
 
-export const liveDocuments = defineWidget<Restrictions>({
+export const liveDocuments = defineWidget({
   id: 'live-documents',
   index: 'nuxeo',
   title: 'Live',
@@ -40,7 +40,7 @@ export const liveDocuments = defineWidget<Restrictions>({
  * that is not marginal, which is why the figure is shown rather than assumed to be zero — and
  * hidden when it really is.
  */
-export const versions = defineWidget<Restrictions>({
+export const versions = defineWidget({
   id: 'versions',
   index: 'nuxeo',
   title: 'Versions',
@@ -64,7 +64,7 @@ export const versions = defineWidget<Restrictions>({
  * `ecm:isTrashed` from its target, so this second figure counts publications pointing at a
  * deleted document rather than deleted proxies.
  */
-export const proxies = defineWidget<Restrictions>({
+export const proxies = defineWidget({
   id: 'proxies',
   index: 'nuxeo',
   title: 'Proxies',
@@ -81,7 +81,7 @@ export const proxies = defineWidget<Restrictions>({
     }),
 });
 
-export const trashedDocuments = defineWidget<Restrictions>({
+export const trashedDocuments = defineWidget({
   id: 'trashed-documents',
   index: 'nuxeo',
   title: 'Trashed',

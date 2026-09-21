@@ -10,29 +10,28 @@
  * Which is why none of them sits on the shipped Governance page. They are here to be composed
  * onto a screen where the content filters have no business.
  */
-import { ChartWidgetType } from '../../config/dashboard-config.model';
 import { countTile, topNChart } from '../builders';
 import { ParamSpecs, defineWidget } from '../definition';
 import { RETENTION_RULES } from './populations';
 
 const BUCKET_CHARTS = ['donut', 'pie', 'bar', 'hbar', 'ranked-list'] as const;
 
-interface RuleChartParams {
-  chart: ChartWidgetType;
-  size: number;
-}
-
-function ruleChartParams(chart: (typeof BUCKET_CHARTS)[number]): ParamSpecs {
+function ruleChartParams(chart: (typeof BUCKET_CHARTS)[number]) {
   return {
-    chart: { type: 'enum', values: BUCKET_CHARTS, default: chart, describe: 'How it is drawn.' },
+    chart: {
+      type: 'enum' as const,
+      values: BUCKET_CHARTS,
+      default: chart,
+      describe: 'How it is drawn.',
+    },
     size: {
-      type: 'number',
+      type: 'number' as const,
       default: 20,
       min: 1,
       max: 100,
       describe: 'How many values are listed.',
     },
-  };
+  } satisfies ParamSpecs;
 }
 
 export const retentionRules = defineWidget({
@@ -54,7 +53,7 @@ export const retentionRules = defineWidget({
  * non-empty list makes those documents disappear on their own at expiry, under the `system`
  * identity. It has therefore never been confronted with a live index.
  */
-export const rulesByEndAction = defineWidget<RuleChartParams>({
+export const rulesByEndAction = defineWidget({
   id: 'rules-by-end-action',
   index: 'nuxeo',
   title: 'Rules by End Action',
@@ -71,7 +70,7 @@ export const rulesByEndAction = defineWidget<RuleChartParams>({
 });
 
 /** Whether a rule is attached by hand or applied to everything matching it. */
-export const rulesByApplicationPolicy = defineWidget<RuleChartParams>({
+export const rulesByApplicationPolicy = defineWidget({
   id: 'rules-by-application-policy',
   index: 'nuxeo',
   title: 'Rules by Application',
@@ -87,7 +86,7 @@ export const rulesByApplicationPolicy = defineWidget<RuleChartParams>({
 });
 
 /** What starts the clock: the moment of attachment, an event, or a date held on the document. */
-export const rulesByStartingPoint = defineWidget<RuleChartParams>({
+export const rulesByStartingPoint = defineWidget({
   id: 'rules-by-starting-point',
   index: 'nuxeo',
   title: 'Rules by Starting Point',
@@ -108,7 +107,7 @@ export const rulesByStartingPoint = defineWidget<RuleChartParams>({
  * The distinction the index cannot make on a *document* — `ecm:isFlexibleRecord` never reaches it —
  * is readable here, on the rule. It is the only place it is.
  */
-export const rulesByFlexibility = defineWidget<RuleChartParams>({
+export const rulesByFlexibility = defineWidget({
   id: 'rules-by-flexibility',
   index: 'nuxeo',
   title: 'Rules by Flexibility',

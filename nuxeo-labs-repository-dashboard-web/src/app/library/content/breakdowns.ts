@@ -1,15 +1,9 @@
 /** How the live documents break down, by one dimension at a time. */
-import { ChartWidgetType } from '../../config/dashboard-config.model';
-import { RESTRICTION_PARAMS, Restrictions, restrict, topNChart } from '../builders';
+import { RESTRICTION_PARAMS, restrict, topNChart } from '../builders';
 import { ParamSpecs, defineWidget } from '../definition';
 import { LIVE_NOT_TRASHED } from '../populations';
 
 const BUCKET_CHARTS = ['donut', 'pie', 'bar', 'hbar', 'ranked-list'] as const;
-
-interface BreakdownParams extends Restrictions {
-  chart: ChartWidgetType;
-  size: number;
-}
 
 /**
  * The two knobs every breakdown offers.
@@ -18,21 +12,26 @@ interface BreakdownParams extends Restrictions {
  * list ask the index exactly the same question. Letting a composition choose is what keeps the
  * library from needing one entry per shape.
  */
-function breakdownParams(chart: (typeof BUCKET_CHARTS)[number], size = 10): ParamSpecs {
+function breakdownParams(chart: (typeof BUCKET_CHARTS)[number], size = 10) {
   return {
     ...RESTRICTION_PARAMS,
-    chart: { type: 'enum', values: BUCKET_CHARTS, default: chart, describe: 'How it is drawn.' },
+    chart: {
+      type: 'enum' as const,
+      values: BUCKET_CHARTS,
+      default: chart,
+      describe: 'How it is drawn.',
+    },
     size: {
-      type: 'number',
+      type: 'number' as const,
       default: size,
       min: 1,
       max: 100,
       describe: 'How many values are kept. The chart says so when it leaves some out.',
     },
-  };
+  } satisfies ParamSpecs;
 }
 
-export const documentsByType = defineWidget<BreakdownParams>({
+export const documentsByType = defineWidget({
   id: 'documents-by-type',
   index: 'nuxeo',
   title: 'By Document Type',
@@ -48,7 +47,7 @@ export const documentsByType = defineWidget<BreakdownParams>({
     }),
 });
 
-export const documentsByLifecycleState = defineWidget<BreakdownParams>({
+export const documentsByLifecycleState = defineWidget({
   id: 'documents-by-lifecycle-state',
   index: 'nuxeo',
   title: 'By Lifecycle State',
@@ -70,7 +69,7 @@ export const documentsByLifecycleState = defineWidget<BreakdownParams>({
  * `labels: "user"` also merges the two forms a principal reaches the index under, so one person
  * is one bar rather than two.
  */
-export const topContributors = defineWidget<BreakdownParams>({
+export const topContributors = defineWidget({
   id: 'top-contributors',
   index: 'nuxeo',
   title: 'Top Contributors',

@@ -46,6 +46,37 @@ export type ParamSpecs = Record<string, ParamSpec>;
 export type ParamValue = string | number | boolean | string[] | undefined;
 export type ParamValues = Record<string, ParamValue>;
 
+/** What one declared parameter is worth once it has been resolved. */
+type ValueOf<S extends ParamSpec> = S extends { type: 'number' }
+  ? number
+  : S extends { type: 'string' }
+    ? string
+    : S extends { type: 'string[]' }
+      ? string[]
+      : S extends { type: 'boolean' }
+        ? boolean
+        : S extends { type: 'enum'; values: readonly (infer V)[] }
+          ? V
+          : never;
+
+/**
+ * The argument a `build` receives, derived from the parameters it declares.
+ *
+ * Deriving it rather than taking it as a second type argument is what keeps the two descriptions
+ * from disagreeing. They used to be independent: a definition could declare `chart` and read
+ * `colour`, and nothing said so — neither the compiler, which saw a hand written interface, nor
+ * `resolveParams`, which fills only what is declared. The `undefined` then travelled all the way
+ * into a widget the planner still accepted.
+ *
+ * A parameter with a default is always present; one without may be absent, which is what makes
+ * `types` and `facets` optional without a second declaration saying so.
+ */
+export type ParamsOf<S extends ParamSpecs> = {
+  [K in keyof S as S[K] extends { default: unknown } ? K : never]: ValueOf<S[K]>;
+} & {
+  [K in keyof S as S[K] extends { default: unknown } ? never : K]?: ValueOf<S[K]>;
+};
+
 export interface WidgetDefinition {
   /** Stable, semantic, kebab-case. This is what a composition names, and what an AI reads. */
   readonly id: string;
@@ -60,18 +91,21 @@ export interface WidgetDefinition {
 }
 
 /**
- * Declares a widget, keeping its build function precisely typed.
+ * Declares a widget, typing its build function from the parameters it declares.
+ *
+ * `const S` is what makes an `enum` yield the union of its values rather than `string`: without
+ * it the literals in `values` widen on the way in, and a misspelt chart type would compile.
  *
  * The registry holds definitions of unlike parameter shapes, so the type has to be erased
  * somewhere. Doing it here means it happens once, rather than as a cast in every definition.
  */
-export function defineWidget<P extends object>(spec: {
+export function defineWidget<const S extends ParamSpecs = Record<string, never>>(spec: {
   id: string;
   index: EsIndex;
   title: string;
   summary: string;
-  params?: ParamSpecs;
-  build: (params: P) => WidgetBody;
+  params?: S;
+  build: (params: ParamsOf<S>) => WidgetBody;
 }): WidgetDefinition {
   return {
     id: spec.id,
@@ -79,7 +113,7 @@ export function defineWidget<P extends object>(spec: {
     title: spec.title,
     summary: spec.summary,
     params: spec.params ?? {},
-    build: (values) => spec.build(values as unknown as P),
+    build: (values) => spec.build(values as unknown as ParamsOf<S>),
   };
 }
 

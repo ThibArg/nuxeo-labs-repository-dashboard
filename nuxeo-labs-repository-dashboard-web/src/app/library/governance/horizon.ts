@@ -9,11 +9,7 @@
  * All three are bounded by `now`, which OpenSearch evaluates when it receives a request — they
  * only add up because they travel in one.
  */
-import {
-  CalendarInterval,
-  ChartWidgetType,
-  KpiSeverity,
-} from '../../config/dashboard-config.model';
+import { KpiSeverity } from '../../config/dashboard-config.model';
 import { countTile, trendChart } from '../builders';
 import { ParamSpecs, defineWidget } from '../definition';
 import { dateWindow } from '../predicates';
@@ -21,22 +17,18 @@ import { RETAIN_UNTIL, UNDER_RETENTION } from './populations';
 
 const SEVERITIES = ['neutral', 'accent', 'warning', 'danger', 'success'] as const;
 
-interface HorizonParams {
-  severity: KpiSeverity;
-}
-
-function severity(fallback: KpiSeverity): ParamSpecs {
+function severity(fallback: KpiSeverity) {
   return {
     severity: {
-      type: 'enum',
+      type: 'enum' as const,
       values: SEVERITIES,
       default: fallback,
       describe: 'Colour the tile carries, which is how urgency is read at a glance.',
     },
-  };
+  } satisfies ParamSpecs;
 }
 
-export const retentionExpiringThisWeek = defineWidget<HorizonParams>({
+export const retentionExpiringThisWeek = defineWidget({
   id: 'retention-expiring-this-week',
   index: 'nuxeo',
   title: 'Expiring This Week',
@@ -50,7 +42,7 @@ export const retentionExpiringThisWeek = defineWidget<HorizonParams>({
     }),
 });
 
-export const retentionExpiringInSixtyDays = defineWidget<HorizonParams>({
+export const retentionExpiringInSixtyDays = defineWidget({
   id: 'retention-expiring-in-60-days',
   index: 'nuxeo',
   title: 'Expiring < 60 Days',
@@ -64,7 +56,7 @@ export const retentionExpiringInSixtyDays = defineWidget<HorizonParams>({
     }),
 });
 
-export const retentionExpiringLater = defineWidget<HorizonParams>({
+export const retentionExpiringLater = defineWidget({
   id: 'retention-expiring-later',
   index: 'nuxeo',
   title: 'Expiring Later',
@@ -80,11 +72,6 @@ export const retentionExpiringLater = defineWidget<HorizonParams>({
 const TREND_CHARTS = ['area', 'line', 'bar'] as const;
 const INTERVALS = ['day', 'week', 'month', 'quarter', 'year'] as const;
 
-interface HistogramParams {
-  chart: ChartWidgetType;
-  interval: CalendarInterval;
-}
-
 /**
  * When the retentions currently in force run out.
  *
@@ -97,15 +84,20 @@ interface HistogramParams {
  * twenty-five bars of which twenty-two are nothing. On a trend that would hide a quiet week and
  * would be wrong; here a month with no expiry is not information, it is the gap between two.
  */
-export const retentionHorizon = defineWidget<HistogramParams>({
+export const retentionHorizon = defineWidget({
   id: 'retention-horizon',
   index: 'nuxeo',
   title: 'When Retentions Lapse',
   summary: 'When the retentions currently in force run out, empty periods left out.',
   params: {
-    chart: { type: 'enum', values: TREND_CHARTS, default: 'bar', describe: 'How it is drawn.' },
+    chart: {
+      type: 'enum' as const,
+      values: TREND_CHARTS,
+      default: 'bar',
+      describe: 'How it is drawn.',
+    },
     interval: {
-      type: 'enum',
+      type: 'enum' as const,
       values: INTERVALS,
       default: 'month',
       describe: 'Width of one bucket. Buckets are cut in the reader\u2019s own time zone.',

@@ -7,16 +7,12 @@
  * instant for all of them.
  */
 import { KpiSeverity } from '../../config/dashboard-config.model';
-import { RESTRICTION_PARAMS, Restrictions, countTile, restrict } from '../builders';
-import { defineWidget } from '../definition';
+import { RESTRICTION_PARAMS, countTile, restrict } from '../builders';
+import { ParamSpecs, defineWidget } from '../definition';
 import { LIVE_NOT_TRASHED } from '../populations';
 import { dateWindow } from '../predicates';
 
 const SEVERITY_VALUES = ['neutral', 'accent', 'warning', 'danger', 'success'] as const;
-
-interface ExpiryParams extends Restrictions {
-  severity: KpiSeverity;
-}
 
 function severityParam(fallback: KpiSeverity) {
   return {
@@ -27,10 +23,10 @@ function severityParam(fallback: KpiSeverity) {
       default: fallback,
       describe: 'Colour the tile carries, which is how urgency is read at a glance.',
     },
-  };
+  } satisfies ParamSpecs;
 }
 
-export const documentsExpiringThisWeek = defineWidget<ExpiryParams>({
+export const documentsExpiringThisWeek = defineWidget({
   id: 'documents-expiring-this-week',
   index: 'nuxeo',
   title: 'Expiring This Week',
@@ -48,7 +44,7 @@ export const documentsExpiringThisWeek = defineWidget<ExpiryParams>({
     }),
 });
 
-export const documentsExpiringInSixtyDays = defineWidget<ExpiryParams>({
+export const documentsExpiringInSixtyDays = defineWidget({
   id: 'documents-expiring-in-60-days',
   index: 'nuxeo',
   title: 'Expiring < 60 Days',
@@ -66,7 +62,7 @@ export const documentsExpiringInSixtyDays = defineWidget<ExpiryParams>({
     }),
 });
 
-export const documentsExpired = defineWidget<ExpiryParams>({
+export const documentsExpired = defineWidget({
   id: 'documents-expired',
   index: 'nuxeo',
   title: 'Already Expired',

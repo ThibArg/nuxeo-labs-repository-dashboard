@@ -1,29 +1,28 @@
 /** How the volume of documents moved over the period. */
-import { CalendarInterval, ChartWidgetType } from '../../config/dashboard-config.model';
-import { RESTRICTION_PARAMS, Restrictions, restrict, trendChart } from '../builders';
+import { RESTRICTION_PARAMS, restrict, trendChart } from '../builders';
 import { ParamSpecs, defineWidget } from '../definition';
 import { LIVE_NOT_TRASHED } from '../populations';
 
 const TREND_CHARTS = ['area', 'line', 'bar'] as const;
 const INTERVALS = ['hour', 'day', 'week', 'month', 'quarter', 'year'] as const;
 
-interface TrendParams extends Restrictions {
-  chart: ChartWidgetType;
-  interval: CalendarInterval;
-}
-
-const TREND_PARAMS: ParamSpecs = {
+const TREND_PARAMS = {
   ...RESTRICTION_PARAMS,
-  chart: { type: 'enum', values: TREND_CHARTS, default: 'area', describe: 'How it is drawn.' },
+  chart: {
+    type: 'enum' as const,
+    values: TREND_CHARTS,
+    default: 'area',
+    describe: 'How it is drawn.',
+  },
   interval: {
-    type: 'enum',
+    type: 'enum' as const,
     values: INTERVALS,
     default: 'day',
     describe: 'Width of one bucket. Buckets are cut in the reader\u2019s own time zone.',
   },
-};
+} satisfies ParamSpecs;
 
-export const documentsCreated = defineWidget<TrendParams>({
+export const documentsCreated = defineWidget({
   id: 'documents-created',
   index: 'nuxeo',
   title: 'Documents Created',
@@ -47,7 +46,7 @@ export const documentsCreated = defineWidget<TrendParams>({
  * differently and the hint says which. It is the one wording on the page that a reader would
  * otherwise get wrong.
  */
-export const documentsModified = defineWidget<TrendParams>({
+export const documentsModified = defineWidget({
   id: 'documents-modified',
   index: 'nuxeo',
   title: 'Documents Modified',

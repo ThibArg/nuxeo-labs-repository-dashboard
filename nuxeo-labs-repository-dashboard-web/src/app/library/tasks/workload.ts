@@ -6,7 +6,7 @@
  * subtitle, and these summaries say it again, because a widget dropped onto another screen takes
  * its caveat with it or loses it.
  */
-import { ChartWidgetType, KpiSeverity } from '../../config/dashboard-config.model';
+import { KpiSeverity } from '../../config/dashboard-config.model';
 import { bandChart, countTile, recordTable, topNChart } from '../builders';
 import { ParamSpecs, defineWidget } from '../definition';
 import { dateWindow } from '../predicates';
@@ -15,32 +15,28 @@ import { ASSIGNEES, DUE_DATE, OPEN_TASKS } from './populations';
 const BUCKET_CHARTS = ['donut', 'pie', 'bar', 'hbar', 'ranked-list'] as const;
 const SEVERITIES = ['neutral', 'accent', 'warning', 'danger', 'success'] as const;
 
-interface RankedParams {
-  chart: ChartWidgetType;
-  size: number;
-}
-
-interface TileParams {
-  severity: KpiSeverity;
-}
-
-function rankedParams(chart: (typeof BUCKET_CHARTS)[number]): ParamSpecs {
+function rankedParams(chart: (typeof BUCKET_CHARTS)[number]) {
   return {
-    chart: { type: 'enum', values: BUCKET_CHARTS, default: chart, describe: 'How it is drawn.' },
+    chart: {
+      type: 'enum' as const,
+      values: BUCKET_CHARTS,
+      default: chart,
+      describe: 'How it is drawn.',
+    },
     size: {
-      type: 'number',
+      type: 'number' as const,
       default: 10,
       min: 1,
       max: 100,
       describe: 'How many are listed. The chart says so when it leaves some out.',
     },
-  };
+  } satisfies ParamSpecs;
 }
 
-function severity(fallback: KpiSeverity): ParamSpecs {
+function severity(fallback: KpiSeverity) {
   return {
     severity: {
-      type: 'enum',
+      type: 'enum' as const,
       values: SEVERITIES,
       default: fallback,
       describe: 'Colour the tile carries, which is how urgency is read at a glance.',
@@ -48,7 +44,7 @@ function severity(fallback: KpiSeverity): ParamSpecs {
   };
 }
 
-export const openTasks = defineWidget<TileParams>({
+export const openTasks = defineWidget({
   id: 'open-tasks',
   index: 'nuxeo',
   title: 'Open Tasks',
@@ -58,7 +54,7 @@ export const openTasks = defineWidget<TileParams>({
     countTile({ of: OPEN_TASKS, severity: params.severity, hint: 'Waiting on somebody right now' }),
 });
 
-export const overdueTasks = defineWidget<TileParams>({
+export const overdueTasks = defineWidget({
   id: 'overdue-tasks',
   index: 'nuxeo',
   title: 'Overdue',
@@ -72,7 +68,7 @@ export const overdueTasks = defineWidget<TileParams>({
     }),
 });
 
-export const tasksDueThisWeek = defineWidget<TileParams>({
+export const tasksDueThisWeek = defineWidget({
   id: 'tasks-due-this-week',
   index: 'nuxeo',
   title: 'Due Within 7 Days',
@@ -134,7 +130,7 @@ export const taskLateness = defineWidget({
     }),
 });
 
-export const tasksByAssignee = defineWidget<RankedParams>({
+export const tasksByAssignee = defineWidget({
   id: 'tasks-by-assignee',
   index: 'nuxeo',
   title: 'Open Tasks by Assignee',
@@ -151,7 +147,7 @@ export const tasksByAssignee = defineWidget<RankedParams>({
     }),
 });
 
-export const overdueTasksByAssignee = defineWidget<RankedParams>({
+export const overdueTasksByAssignee = defineWidget({
   id: 'overdue-tasks-by-assignee',
   index: 'nuxeo',
   title: 'Overdue by Assignee',
@@ -176,7 +172,7 @@ export const overdueTasksByAssignee = defineWidget<RankedParams>({
  * and is usually empty, and only `nt:processId` leads to the instance — a join the planner cannot
  * express, which is why there is no "tasks by workflow model" widget here.
  */
-export const tasksByName = defineWidget<RankedParams>({
+export const tasksByName = defineWidget({
   id: 'tasks-by-name',
   index: 'nuxeo',
   title: 'By Task Type',

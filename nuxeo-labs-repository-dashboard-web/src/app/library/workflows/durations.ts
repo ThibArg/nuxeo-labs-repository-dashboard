@@ -6,29 +6,28 @@
  * no model sits. Hence the rule these widgets exist to serve — **an aggregate over a mixed
  * population always ships beside a breakdown**, and the median beside the mean.
  */
-import { ChartWidgetType } from '../../config/dashboard-config.model';
 import { bandChart, countTile, topNChart } from '../builders';
 import { ParamSpecs, defineWidget } from '../definition';
 import { COMPLETED, TASK_DURATION, TASK_ENDED, WORKFLOW_DURATION } from './populations';
 
 const BUCKET_CHARTS = ['donut', 'pie', 'bar', 'hbar', 'ranked-list'] as const;
 
-interface RankedParams {
-  chart: ChartWidgetType;
-  size: number;
-}
-
-function rankedParams(chart: (typeof BUCKET_CHARTS)[number]): ParamSpecs {
+function rankedParams(chart: (typeof BUCKET_CHARTS)[number]) {
   return {
-    chart: { type: 'enum', values: BUCKET_CHARTS, default: chart, describe: 'How it is drawn.' },
+    chart: {
+      type: 'enum' as const,
+      values: BUCKET_CHARTS,
+      default: chart,
+      describe: 'How it is drawn.',
+    },
     size: {
-      type: 'number',
+      type: 'number' as const,
       default: 10,
       min: 1,
       max: 100,
       describe: 'How many are listed. The chart says so when it leaves some out.',
     },
-  };
+  } satisfies ParamSpecs;
 }
 
 export const averageWorkflowDuration = defineWidget({
@@ -80,7 +79,7 @@ export const averageTaskDuration = defineWidget({
 });
 
 /** The breakdown that names which model the overall average came from. */
-export const slowestWorkflowModels = defineWidget<RankedParams>({
+export const slowestWorkflowModels = defineWidget({
   id: 'slowest-workflow-models',
   index: 'audit_wf',
   title: 'Average Duration by Model',
@@ -100,7 +99,7 @@ export const slowestWorkflowModels = defineWidget<RankedParams>({
     }),
 });
 
-export const slowestTaskSteps = defineWidget<RankedParams>({
+export const slowestTaskSteps = defineWidget({
   id: 'slowest-task-steps',
   index: 'audit_wf',
   title: 'Slowest Steps',

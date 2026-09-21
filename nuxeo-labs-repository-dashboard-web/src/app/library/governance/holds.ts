@@ -8,7 +8,6 @@
  * Its own theme rather than a line among the records, because it answers a different question: not
  * how much is governed, but how much cannot be touched at all.
  */
-import { ChartWidgetType, KpiSeverity } from '../../config/dashboard-config.model';
 import { countTile, topNChart } from '../builders';
 import { defineWidget } from '../definition';
 import { UNDER_LEGAL_HOLD } from './populations';
@@ -16,23 +15,14 @@ import { UNDER_LEGAL_HOLD } from './populations';
 const BUCKET_CHARTS = ['donut', 'pie', 'bar', 'hbar', 'ranked-list'] as const;
 const SEVERITIES = ['neutral', 'accent', 'warning', 'danger', 'success'] as const;
 
-interface RankedParams {
-  chart: ChartWidgetType;
-  size: number;
-}
-
-interface TileParams {
-  severity: KpiSeverity;
-}
-
-export const documentsOnLegalHold = defineWidget<TileParams>({
+export const documentsOnLegalHold = defineWidget({
   id: 'documents-on-legal-hold',
   index: 'nuxeo',
   title: 'Under Legal Hold',
   summary: 'How many live documents are held indefinitely until somebody lifts the hold.',
   params: {
     severity: {
-      type: 'enum',
+      type: 'enum' as const,
       values: SEVERITIES,
       default: 'danger',
       describe: 'Colour the tile carries.',
@@ -46,15 +36,20 @@ export const documentsOnLegalHold = defineWidget<TileParams>({
     }),
 });
 
-export const legalHoldsByType = defineWidget<RankedParams>({
+export const legalHoldsByType = defineWidget({
   id: 'legal-holds-by-type',
   index: 'nuxeo',
   title: 'Legal Holds by Type',
   summary: 'Which document types are the ones nobody can touch.',
   params: {
-    chart: { type: 'enum', values: BUCKET_CHARTS, default: 'donut', describe: 'How it is drawn.' },
+    chart: {
+      type: 'enum' as const,
+      values: BUCKET_CHARTS,
+      default: 'donut',
+      describe: 'How it is drawn.',
+    },
     size: {
-      type: 'number',
+      type: 'number' as const,
       default: 10,
       min: 1,
       max: 100,

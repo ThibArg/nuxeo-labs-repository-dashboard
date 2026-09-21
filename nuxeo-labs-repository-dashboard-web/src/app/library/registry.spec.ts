@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { WIDGET_LIBRARY, findWidget, knownWidgetIds } from './registry';
+import { WidgetDefinition } from './definition';
 import { resolveParams } from './definition';
 import { compileComposition } from '../config/composition-compiler';
 import { planDashboard } from '../engine/query-planner';
@@ -24,6 +25,35 @@ describe('the widget library', () => {
     expect(WIDGET_LIBRARY.length).toBeGreaterThan(0);
     expect(findWidget(WIDGET_LIBRARY[0].id)).toBe(WIDGET_LIBRARY[0]);
     expect(findWidget('no-such-widget')).toBeUndefined();
+  });
+
+  /**
+   * The registry is a hand written list, so a definition file added and not registered simply
+   * would not exist — and nothing would say so: every other test here iterates `WIDGET_LIBRARY`,
+   * which by construction cannot notice an absentee. This walks the folder instead.
+   */
+  it('holds every definition the folder declares', () => {
+    const modules = (
+      import.meta as unknown as {
+        glob: (pattern: string, options: { eager: true }) => Record<string, object>;
+      }
+    ).glob('./**/*.ts', { eager: true });
+
+    const declared: string[] = [];
+    for (const [path, module] of Object.entries(modules)) {
+      if (path.endsWith('.spec.ts')) {
+        continue;
+      }
+      for (const value of Object.values(module)) {
+        const candidate = value as Partial<WidgetDefinition>;
+        if (candidate && typeof candidate === 'object' && candidate.id && candidate.build) {
+          declared.push(candidate.id);
+        }
+      }
+    }
+
+    expect(declared.length).toBeGreaterThan(0);
+    expect(declared.sort()).toEqual(knownWidgetIds());
   });
 
   it('names every widget once', () => {

@@ -21,17 +21,24 @@ import {
 import { ParamSpecs, WidgetBody } from './definition';
 import { Predicate, anyOf, compilePredicates } from './predicates';
 
-/** Parameters every repository widget accepts, so any of them can describe part of the content. */
-export const RESTRICTION_PARAMS: ParamSpecs = {
+/**
+ * Parameters every repository widget accepts, so any of them can describe part of the content.
+ *
+ * `satisfies` rather than an annotation: an annotation would widen this to
+ * `Record<string, ParamSpec>`, and a definition spreading it would then derive a build argument
+ * with an index signature instead of `types` and `facets` — which is exactly the looseness
+ * `ParamsOf` exists to remove.
+ */
+export const RESTRICTION_PARAMS = {
   types: {
-    type: 'string[]',
+    type: 'string[]' as const,
     describe: 'Restrict to these document types. Absent or empty means no constraint.',
   },
   facets: {
-    type: 'string[]',
+    type: 'string[]' as const,
     describe: 'Restrict to documents carrying these facets. Absent or empty means no constraint.',
   },
-};
+} satisfies ParamSpecs;
 
 export interface Restrictions {
   types?: string[];

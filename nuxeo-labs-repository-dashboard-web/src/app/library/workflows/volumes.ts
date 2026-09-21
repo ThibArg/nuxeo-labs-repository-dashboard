@@ -6,19 +6,15 @@ import { CANCELLED, COMPLETED, STARTED, TASK_CREATED, TASK_ENDED } from './popul
 
 const SEVERITIES = ['neutral', 'accent', 'warning', 'danger', 'success'] as const;
 
-interface TileParams {
-  severity: KpiSeverity;
-}
-
-function severity(fallback: KpiSeverity): ParamSpecs {
+function severity(fallback: KpiSeverity) {
   return {
     severity: {
-      type: 'enum',
+      type: 'enum' as const,
       values: SEVERITIES,
       default: fallback,
       describe: 'Colour the tile carries.',
     },
-  };
+  } satisfies ParamSpecs;
 }
 
 /**
@@ -28,7 +24,7 @@ function severity(fallback: KpiSeverity): ParamSpecs {
  * `DocumentRoute` on the repository index — so the hint says what this one is rather than letting
  * it be mistaken for the other.
  */
-export const workflowsStarted = defineWidget<TileParams>({
+export const workflowsStarted = defineWidget({
   id: 'workflows-started',
   index: 'audit_wf',
   title: 'Workflows Started',
@@ -42,7 +38,7 @@ export const workflowsStarted = defineWidget<TileParams>({
     }),
 });
 
-export const workflowsCompleted = defineWidget<TileParams>({
+export const workflowsCompleted = defineWidget({
   id: 'workflows-completed',
   index: 'audit_wf',
   title: 'Workflows Completed',
@@ -51,7 +47,7 @@ export const workflowsCompleted = defineWidget<TileParams>({
   build: (params) => countTile({ of: COMPLETED, severity: params.severity }),
 });
 
-export const workflowsCancelled = defineWidget<TileParams>({
+export const workflowsCancelled = defineWidget({
   id: 'workflows-cancelled',
   index: 'audit_wf',
   title: 'Workflows Cancelled',
@@ -60,7 +56,7 @@ export const workflowsCancelled = defineWidget<TileParams>({
   build: (params) => countTile({ of: CANCELLED, severity: params.severity }),
 });
 
-export const tasksCreated = defineWidget<TileParams>({
+export const tasksCreated = defineWidget({
   id: 'workflow-tasks-created',
   index: 'audit_wf',
   title: 'Tasks Created',
@@ -69,7 +65,7 @@ export const tasksCreated = defineWidget<TileParams>({
   build: (params) => countTile({ of: TASK_CREATED, severity: params.severity }),
 });
 
-export const tasksEnded = defineWidget<TileParams>({
+export const tasksEnded = defineWidget({
   id: 'workflow-tasks-ended',
   index: 'audit_wf',
   title: 'Tasks Ended',
