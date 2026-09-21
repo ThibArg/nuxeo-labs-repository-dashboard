@@ -1042,4 +1042,58 @@ describe('DashboardPageComponent', () => {
       expect(html).not.toContain('<dialog');
     });
   });
+
+  /*
+   * The filter bar is hidden on paper, so the page has to carry the same phrases the standalone
+   * file does. Only the stylesheet knows that this block is for printing, and jsdom applies none,
+   * so what a test can observe is that the phrases are there and that they follow the filters.
+   */
+  describe('printed page', () => {
+    afterEach(() => localStorage.clear());
+
+    async function render() {
+      stub = installFetchStub([
+        {
+          match: '/site/es/nuxeo/_search',
+          matchBody: isAggregationsRequest,
+          json: aggregationsResponse(),
+        },
+        {
+          match: '/site/es/nuxeo/_search',
+          matchBody: isFacetValuesRequest,
+          json: { hits: { total: { value: 0, relation: 'eq' }, hits: [] }, aggregations: {} },
+        },
+        ...supportRoutes(),
+      ]);
+      const fixture = TestBed.createComponent(DashboardPageComponent);
+      await settle(fixture);
+      return fixture;
+    }
+
+    function context(fixture: ComponentFixture<DashboardPageComponent>): string {
+      return (
+        (fixture.nativeElement as HTMLElement).querySelector('.nxd-print-context')?.textContent ??
+        ''
+      );
+    }
+
+    it('names the period the figures obeyed', async () => {
+      const fixture = await render();
+
+      expect(context(fixture)).toContain('Period: All time on dc:created');
+    });
+
+    it('names a bucket picked on a chart, which no button would state on paper', async () => {
+      const fixture = await render();
+
+      (
+        (fixture.nativeElement as HTMLElement).querySelector(
+          'button[data-testid="chart-pick"][data-field="ecm:currentLifeCycleState"][data-key="project"]',
+        ) as HTMLButtonElement
+      ).click();
+      await settle(fixture);
+
+      expect(context(fixture)).toContain('ecm:currentLifeCycleState');
+    });
+  });
 });

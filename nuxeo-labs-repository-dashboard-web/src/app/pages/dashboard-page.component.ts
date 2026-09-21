@@ -121,7 +121,7 @@ type GroupLabels = Map<string, Map<string, string>>;
             describe. Scrolling down to a chart used to lose that context entirely.
           -->
           <div
-            class="sticky top-0 z-20 -mx-8 mb-5 flex flex-wrap items-center gap-3 border-b border-subtle bg-canvas/95 px-8 py-3 backdrop-blur"
+            class="nxd-filter-bar sticky top-0 z-20 -mx-8 mb-5 flex flex-wrap items-center gap-3 border-b border-subtle bg-canvas/95 px-8 py-3 backdrop-blur"
           >
             @if (dateFilter(); as range) {
               <nxd-date-range-picker
@@ -167,6 +167,19 @@ type GroupLabels = Map<string, Map<string, string>>;
               (cleared)="clearFilters()"
             />
           </div>
+
+          <!--
+            The bar itself is dropped on paper: a row of seven period buttons and two empty date
+            fields describes an application rather than its figures, and never says which period
+            is in force. What a reader needs out of context is the constraints, in words.
+          -->
+          @if (filterContext().length) {
+            <ul class="nxd-print-context">
+              @for (line of filterContext(); track line) {
+                <li>{{ line }}</li>
+              }
+            </ul>
+          }
         }
 
         @if (runner.error(); as message) {
@@ -279,6 +292,17 @@ export class DashboardPageComponent {
       ),
   );
 
+  /**
+   * What the figures were filtered by, one phrase per constraint.
+   *
+   * Read twice over: by the standalone HTML file, and by the page itself when it is printed. The
+   * two must not drift, a reader having no way to tell which of them describes the other.
+   */
+  readonly filterContext = computed(() => {
+    const config = this.config();
+    return config ? describeFilters(config, this.filters()) : [];
+  });
+
   constructor() {
     // Reloads whenever the route points at another dashboard.
     effect(() => {
@@ -381,7 +405,7 @@ export class DashboardPageComponent {
     const html = buildDashboardHtml(element, {
       title: config.label,
       subtitle: config.subtitle ?? null,
-      context: describeFilters(config, this.filters()),
+      context: this.filterContext(),
       images: this.snapshots.capture(),
       css: await this.appStyles.load(),
       generatedAt: new Date(),
