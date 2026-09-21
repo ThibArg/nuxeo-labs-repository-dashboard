@@ -454,17 +454,28 @@ Answer the user in French, using *vous*.
 
 ## Where things stand
 
-Six live screens — Content, Users, Workflows, Tasks, Governance, Diagnostics. Build green, 845
-tests over 48 files. `UpcomingPageComponent` is gone with the last placeholder; the requirement
-notice it used to carry is now tested where it lives, in `requirement-notice.component.spec.ts`.
+Seven live screens — Content, Users, Downloads, Workflows, Tasks, Governance, Diagnostics. Build
+green, 932 tests over 51 files. `UpcomingPageComponent` is gone with the last placeholder; the
+requirement notice it used to carry is now tested where it lives, in
+`requirement-notice.component.spec.ts` — which witnesses on `audit`, deliberately, `setInput` being
+untyped and `retention` being the prerequisite most likely to be removed.
 
-**All five are composed.** 62 definitions over five builders — `countTile`, `topNChart`,
-`trendChart`, `bandChart`, `recordTable` — filling 58 places on the shipped screens, 57 of them
+**All six are composed.** 69 definitions over five builders — `countTile`, `topNChart`,
+`trendChart`, `bandChart`, `recordTable` — filling 65 places on the shipped screens, 64 of them
 distinct;
 `live-documents` serves both Content and Governance, which is the only sharing so far. Governance
 carries 17 of them, split four ways, and its five rule widgets sit on no page: they describe
 configuration, and `/RetentionRules` lives outside `/default-domain`, so a path scope would empty
 them silently.
+
+**Downloads is the newest, and it is the worked example the customisation guide is written from.**
+Seven definitions over `library/downloads/`, every one of them naming
+`extended.downloadReason` as well as `eventId: download` — because the event covers a reader
+saving a file and the interface fetching a thumbnail alike, and the second outnumbers the first
+524 to 15 on the sandbox. Its populations are exclusive and **not** exhaustive, `cmis` and
+`cmisRendition` being counted by neither, which is why the two tiles are two answers rather than a
+split of one total. It gives `labels: "document"` its second shipped example: `docUUID` resolved
+through `GET /api/v1/id/{uuid}`, confirmed live on a real document.
 
 Each migration was proved and then deleted. `migration.harness.ts` planned both forms over three
 filter states and compared them, and it lived through commits `d0213fd` to `e7f5235` only, because

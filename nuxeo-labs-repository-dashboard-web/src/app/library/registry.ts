@@ -28,6 +28,13 @@ import {
   topUsersByLogins,
 } from './users/activity';
 import {
+  documentsDownloaded,
+  downloads,
+  downloadsPerDay,
+  renditionsServed,
+} from './downloads/volumes';
+import { downloadsByType, topDownloadedDocuments, topDownloaders } from './downloads/breakdowns';
+import {
   tasksCreated,
   tasksEnded,
   workflowsCancelled,
@@ -110,6 +117,23 @@ export const USERS_WIDGETS: WidgetDefinition[] = [
   documentsModifiedByUser,
 ];
 
+/**
+ * What left the server, read from the audit index.
+ *
+ * Two of these describe the same event and are meant to be read against each other: `download`
+ * covers a reader saving a file and the interface fetching a thumbnail alike, so a screen that
+ * showed one figure would be describing whichever of the two happened to dominate.
+ */
+export const DOWNLOADS_WIDGETS: WidgetDefinition[] = [
+  downloads,
+  renditionsServed,
+  documentsDownloaded,
+  downloadsPerDay,
+  downloadsByType,
+  topDownloaders,
+  topDownloadedDocuments,
+];
+
 /** What the workflow engine did, read from the `audit_wf` view. */
 export const WORKFLOWS_WIDGETS: WidgetDefinition[] = [
   workflowsStarted,
@@ -180,6 +204,7 @@ export const GOVERNANCE_WIDGETS: WidgetDefinition[] = [
 export const WIDGET_LIBRARY: WidgetDefinition[] = [
   ...CONTENT_WIDGETS,
   ...USERS_WIDGETS,
+  ...DOWNLOADS_WIDGETS,
   ...WORKFLOWS_WIDGETS,
   ...TASKS_WIDGETS,
   ...GOVERNANCE_WIDGETS,

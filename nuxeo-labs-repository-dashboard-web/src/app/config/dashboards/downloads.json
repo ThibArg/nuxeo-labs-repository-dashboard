@@ -1,0 +1,33 @@
+{
+  "id": "downloads",
+  "label": "Downloads Dashboard",
+  "subtitle": "Read from the audit `download` event, which the interface also fires for thumbnails and previews. The two are counted separately rather than folded together.",
+  "filters": [
+    {
+      "type": "dateRange",
+      "field": "eventDate",
+      "default": "30d"
+    }
+  ],
+  "layout": [
+    {
+      "cells": [
+        { "use": "downloads", "as": "fileDownloads", "span": 4 },
+        { "use": "renditions-served", "as": "renditions", "span": 4 },
+        { "use": "documents-downloaded", "as": "distinctDocuments", "span": 4 }
+      ]
+    },
+    {
+      "cells": [{ "use": "downloads-per-day", "as": "perDay", "span": 12 }]
+    },
+    {
+      "cells": [
+        { "use": "downloads-by-type", "as": "byType", "span": 6 },
+        { "use": "top-downloaders", "as": "topPeople", "span": 6 }
+      ]
+    },
+    {
+      "cells": [{ "use": "top-downloaded-documents", "as": "topDocuments", "span": 12 }]
+    }
+  ]
+}

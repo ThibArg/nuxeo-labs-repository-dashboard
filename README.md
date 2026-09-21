@@ -10,9 +10,9 @@ The dashboard is a standalone Angular application packaged as a Nuxeo bundle. Ch
 are described by configuration rather than hard coded, and the widgets of one index are batched
 into a single OpenSearch aggregation request.
 
-> **Status: six screens live.** Content, Users, Workflows, Tasks and Governance are complete,
-> alongside Diagnostics. All five are composed from a reusable widget library of 62 definitions,
-> see [Roadmap](#roadmap).
+> **Status: seven screens live.** Content, Users, Downloads, Workflows, Tasks and Governance are
+> complete, alongside Diagnostics. All six are composed from a reusable widget library of 69
+> definitions, see [Roadmap](#roadmap).
 
 ## Screens
 
@@ -20,6 +20,7 @@ into a single OpenSearch aggregation request.
 | --- | --- |
 | **Content** | Repository index: repository composition (live, trashed, versions, proxies), `ecm:primaryType`, `ecm:currentLifeCycleState`, `dc:created`, `dc:modified`, `dc:creator`, `dc:expired` |
 | **Users** | Audit index: `loginSuccess`, `loginFailed`, `documentCreated` and `documentModified`, grouped by `principalName` over `eventDate` |
+| **Downloads** | Audit index: the `download` event split by `extended.downloadReason`, with `docUUID`, `docType` and `principalName` over `eventDate` |
 | **Workflows** | `audit_wf` passthrough view: workflow state derived from `eventId`, `extended.modelName`, `extended.workflowInitiator`, `extended.taskName`, `extended.action`, and durations from `extended.timeSinceWfStarted` and `extended.timeSinceTaskStarted` |
 | **Tasks** | Repository index: open tasks only, through the `Task` facet — `nt:dueDate`, `nt:actors`, `nt:name`, `nt:directive` |
 | **Governance** | Repository index: `ecm:isRecord`, `ecm:hasLegalHold`, `ecm:retainUntil`, the `Record` facet through `ecm:mixinType`, and `record:ruleIds` resolved against the `RetentionRule` documents |
@@ -121,16 +122,23 @@ semantic id, the index it reads, one sentence saying what it measures, and the p
 accepts. **The definitions are the catalogue**: point an assistant at that folder and it has
 everything it needs, with nothing generated to fall out of step.
 
-**62 definitions filling 58 places on the five shipped screens**, grouped by subject. Fifty-seven
+**69 definitions filling 65 places on the six shipped screens**, grouped by subject. Sixty-four
 of them are placed — `live-documents` twice — and the five describing retention rules are not:
 
 | Folder | Reads | Widgets |
 | --- | --- | --- |
 | `content/` | repository | 13 — composition tiles, expiry, breakdowns, trends |
 | `users/` | `audit` | 5 — logins, failed logins, who creates and modifies |
+| `downloads/` | `audit` | 7 — files saved against renditions served, by day, type, person and document |
 | `workflows/` | `audit_wf` | 18 — volumes, durations, models, steps, initiators |
 | `tasks/` | repository | 9 — what is waiting on whom, and how late |
 | `governance/` | repository | 17 — records, retention horizon, legal holds, and the rules themselves |
+
+Downloads is the one domain whose populations exist to separate two readings of a single event.
+`download` is audited out of the box and is fired both by a reader saving a file and by the
+interface fetching a thumbnail: measured on a repository in ordinary use, 524 of 539 entries were
+renditions. So every widget there names `extended.downloadReason` as well, and the screen shows
+the two figures side by side rather than presenting either of them as "downloads".
 
 Governance is split four ways — `records.ts`, `horizon.ts`, `holds.ts`, `rules.ts` — because they
 answer different questions: what is protected, until when, what cannot be touched at all, and how
@@ -154,8 +162,8 @@ export const documentsCreated = defineWidget<TrendParams>({
 });
 ```
 
-Fifty-eight widgets are placed across the five screens and they are eleven ideas — counting a
-population and ranking the top values of a field account for forty-eight on their own — so the
+Sixty-five widgets are placed across the six screens and they are eleven ideas — counting a
+population and ranking the top values of a field account for fifty-four on their own — so the
 reuse lives in **five builders**,
 `countTile`, `topNChart`, `trendChart`, `bandChart` and `recordTable`, while the *names* stay one
 per idea. A composition saying `topNChart('ecm:primaryType')` would be back to writing queries by

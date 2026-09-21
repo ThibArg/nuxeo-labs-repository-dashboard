@@ -48,6 +48,15 @@ export const NAV_ITEMS: NavItem[] = [
   },
   {
     /*
+     * Not gated either, for the reason Users is not: the page names the missing passthrough, and
+     * a greyed out entry could not.
+     */
+    path: '/downloads',
+    label: 'Downloads',
+    icon: 'M12 4v10m0 0 4-4m-4 4-4-4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2',
+  },
+  {
+    /*
      * Deliberately not gated on the retention feature: the page itself names the missing package
      * and links to its documentation, which a disabled entry could never do. Its record and legal
      * hold figures also read core fields that exist without the addon.

@@ -41,6 +41,12 @@ export const routes: Routes = [
     // would be worse than sending the reader there.
     requirementLabel: 'the OpenSearch audit passthrough',
   }),
+  dashboard('downloads', 'Downloads Dashboard', {
+    dashboardId: 'downloads',
+    requires: 'audit',
+    // Same as Users: the Diagnostics page carries the exact remedy, so no documentation URL.
+    requirementLabel: 'the OpenSearch audit passthrough',
+  }),
   dashboard('governance', 'Governance Dashboard', {
     dashboardId: 'governance',
     /*
