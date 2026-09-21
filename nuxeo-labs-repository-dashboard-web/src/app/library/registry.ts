@@ -51,6 +51,17 @@ import {
   workflowsCompletedPerDay,
   workflowsStartedPerDay,
 } from './workflows/activity';
+import {
+  distinctAssignees,
+  openTasks,
+  overdueTasks,
+  overdueTasksByAssignee,
+  overdueTasksTable,
+  taskLateness,
+  tasksByAssignee,
+  tasksByName,
+  tasksDueThisWeek,
+} from './tasks/workload';
 
 export const CONTENT_WIDGETS: WidgetDefinition[] = [
   totalDocuments,
@@ -99,10 +110,24 @@ export const WORKFLOWS_WIDGETS: WidgetDefinition[] = [
   tasksByStep,
 ];
 
+/** What is waiting on whom, read from the open tasks the repository still holds. */
+export const TASKS_WIDGETS: WidgetDefinition[] = [
+  openTasks,
+  overdueTasks,
+  tasksDueThisWeek,
+  distinctAssignees,
+  taskLateness,
+  tasksByAssignee,
+  overdueTasksByAssignee,
+  tasksByName,
+  overdueTasksTable,
+];
+
 export const WIDGET_LIBRARY: WidgetDefinition[] = [
   ...CONTENT_WIDGETS,
   ...USERS_WIDGETS,
   ...WORKFLOWS_WIDGETS,
+  ...TASKS_WIDGETS,
 ];
 
 const BY_ID = new Map(WIDGET_LIBRARY.map((definition) => [definition.id, definition]));

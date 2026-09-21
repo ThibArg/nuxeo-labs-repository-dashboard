@@ -20,6 +20,31 @@ import { DashboardComposition } from '../composition.model';
 import { compileComposition } from '../composition-compiler';
 import { planDashboard } from '../../engine/query-planner';
 
+/**
+ * Every clause one widget's figures are narrowed by, wherever the plan put it.
+ *
+ * A hand written dashboard could share clauses through `baseFilter`; a composition cannot express
+ * a clause at all, so each widget states its whole population. The documents counted are the same
+ * and the JSON is not, which is why equivalence is checked here rather than byte identity.
+ */
+function effectiveClauses(
+  config: DashboardConfig,
+  filters: FilterState,
+  widgetId: string,
+): string[] {
+  const plan = planDashboard(config, filters);
+  const request = plan.requests.find((candidate) => candidate.widgetIds.includes(widgetId))!;
+
+  const query = request.body.query as { bool?: { filter?: unknown[] } } | undefined;
+  const shared = query?.bool?.filter ?? [];
+
+  const aggs = (request.body.aggs ?? {}) as Record<string, { filter?: unknown }>;
+  const own = aggs[widgetId]?.filter;
+  const ownClauses = own ? ((own as { bool?: { filter?: unknown[] } }).bool?.filter ?? [own]) : [];
+
+  return [...shared, ...ownClauses].map((clause) => JSON.stringify(clause)).sort();
+}
+
 /** Three states that exercise different code: no bounds, bounds, and a constrained group. */
 export function migrationStates(groups: FilterState['groups'] = {}): [string, FilterState][] {
   return [
@@ -62,16 +87,55 @@ export function provesMigrationOf(
     expect(config!.index).toEqual(legacy.index);
   });
 
+  /*
+   * The real claim: every widget is narrowed by the same clauses as before. A table works here
+   * too — `planTable` merges the shared clauses into its own query, so reading that query gives
+   * the whole set and there is no wrapper to unwrap.
+   */
   it.each(migrationStates(groups))(
-    'plans over %s exactly what the hand written configuration planned',
+    'narrows every widget the same way over %s',
     (_name, filters) => {
       const { config } = compileComposition(source);
 
-      expect(JSON.stringify(planDashboard(config!, filters).requests, null, 1)).toEqual(
-        JSON.stringify(planDashboard(legacy, filters).requests, null, 1),
-      );
+      for (const widgetId of Object.keys(legacy.widgets)) {
+        expect(effectiveClauses(config!, filters, widgetId), widgetId).toEqual(
+          effectiveClauses(legacy, filters, widgetId),
+        );
+      }
     },
   );
+
+  /** What a table asks for beside its clauses: its columns, its page size and its sort. */
+  it('asks for the same rows, in the same order', () => {
+    const { config } = compileComposition(source);
+    const [, filters] = migrationStates(groups)[1];
+
+    const tables = (plan: DashboardConfig) =>
+      planDashboard(plan, filters)
+        .requests.filter((request) => request.kind === 'hits')
+        .map((request) => JSON.stringify({ ...request.body, query: undefined }));
+
+    expect(tables(config!)).toEqual(tables(legacy));
+  });
+
+  /*
+   * Byte identity, where the hand written form shared nothing through `baseFilter`. Where it did,
+   * the clauses move into the widgets and the JSON legitimately differs — the assertion above is
+   * what covers that case, and asserting bytes here as well would only force the compiler to
+   * reproduce an accident of how the file was typed.
+   */
+  if (!legacy.baseFilter?.length) {
+    it.each(migrationStates(groups))(
+      'plans over %s exactly what the hand written configuration planned',
+      (_name, filters) => {
+        const { config } = compileComposition(source);
+
+        expect(JSON.stringify(planDashboard(config!, filters).requests, null, 1)).toEqual(
+          JSON.stringify(planDashboard(legacy, filters).requests, null, 1),
+        );
+      },
+    );
+  }
 
   it('carries the labels and hints the page used to show', () => {
     const { config } = compileComposition(source);
