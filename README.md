@@ -11,8 +11,8 @@ are described by configuration rather than hard coded, and the widgets of one in
 into a single OpenSearch aggregation request.
 
 > **Status: six screens live.** Content, Users, Workflows, Tasks and Governance are complete,
-> alongside Diagnostics. Content is composed from a reusable widget library; the other four are
-> still written as configuration and are next in line, see [Roadmap](#roadmap).
+> alongside Diagnostics. All five are composed from a reusable widget library of 53 definitions,
+> see [Roadmap](#roadmap).
 
 ## Screens
 
@@ -67,6 +67,20 @@ semantic id, the index it reads, one sentence saying what it measures, and the p
 accepts. **The definitions are the catalogue**: point an assistant at that folder and it has
 everything it needs, with nothing generated to fall out of step.
 
+**53 definitions cover the 54 widgets that ship**, grouped by subject:
+
+| Folder | Reads | Widgets |
+| --- | --- | --- |
+| `content/` | repository | 13 — composition tiles, expiry, breakdowns, trends |
+| `users/` | `audit` | 5 — logins, failed logins, who creates and modifies |
+| `workflows/` | `audit_wf` | 18 — volumes, durations, models, steps, initiators |
+| `tasks/` | repository | 9 — what is waiting on whom, and how late |
+| `governance/` | repository | 8 — records, retention horizon, legal holds, rules |
+
+Eight rather than nine for Governance: the population its figures are a share of is exactly what
+Content's `live-documents` counts, so that one is shared. The first widget two screens have in
+common, which is the point of a library.
+
 ```ts
 export const documentsCreated = defineWidget<TrendParams>({
   id: 'documents-created',
@@ -79,9 +93,14 @@ export const documentsCreated = defineWidget<TrendParams>({
 ```
 
 Fifty-four widgets ship and they are eleven ideas — counting a population and ranking the top
-values of a field account for forty-two on their own — so the reuse lives in a handful of
-builders while the *names* stay one per idea. A composition saying `topNChart('ecm:primaryType')`
-would be back to writing queries by hand.
+values of a field account for forty-two on their own — so the reuse lives in **five builders**,
+`countTile`, `topNChart`, `trendChart`, `bandChart` and `recordTable`, while the *names* stay one
+per idea. A composition saying `topNChart('ecm:primaryType')` would be back to writing queries by
+hand.
+
+Two things a builder takes and a composition cannot: the bands of a distribution, and the columns
+of a table. "Under an hour, up to a day, up to a week, beyond" *is* what
+`workflow-duration-distribution` means — a different split is a different widget, not a setting.
 
 Every repository widget accepts `types` and `facets`, which narrow it to a few document types or
 to documents carrying a facet. An empty list means **no constraint**, never "no value": compiled
@@ -1089,7 +1108,11 @@ still appear in an audit index, through `Framework.doPrivileged` with no argumen
 │       │   │   ├── predicates.ts                the only clauses a definition may express
 │       │   │   ├── populations.ts               named populations of the repository
 │       │   │   ├── registry.ts                  every widget a composition may name
-│       │   │   └── content/                     the thirteen Content definitions
+│       │   │   ├── content/                     13 definitions, repository
+│       │   │   ├── users/                       5, audit index
+│       │   │   ├── workflows/                   18, audit_wf view
+│       │   │   ├── tasks/                       9, repository
+│       │   │   └── governance/                  8, repository
 │       │   ├── pages/                          generic dashboard page, diagnostics
 │       │   └── widgets/                        kpi, chart, ranked list, table, ECharts setup
 │       └── testing/                            fetch stub, chart stub, async helpers
@@ -1119,7 +1142,8 @@ still appear in an audit index, through `Framework.doPrivileged` with no argumen
 | 6 | Reusable widget library; a dashboard composes rather than configures. Content migrated | done |
 | 6b | One request per index, so a page can mix the repository and the audit | done |
 | 6c | A widget placeable anywhere, so a page can be laid out by hand | done |
-| 6d | The four remaining dashboards migrated, Governance split by theme | |
+| 6d | The four remaining dashboards migrated onto the library | done |
+| 6d2 | Governance enriched: retention horizon over time, and the rules themselves | |
 | 6e | A prompt and a security checklist for composing with an assistant | |
 
 ## Licence

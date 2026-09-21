@@ -21,7 +21,7 @@ Angular 22:
 ```bash
 cd nuxeo-labs-repository-dashboard-web
 export PATH="$PWD/node:$PATH"
-npm test                                      # 40 files, vitest + jsdom
+npm test                                      # 44 files, vitest + jsdom
 npm test -- --watch=false --include src/app/engine/agg-compiler.spec.ts   # one file
 npm test -- --watch=false --filter 'never emits a .keyword'               # one behaviour
 npm run build                                 # this is the typecheck
@@ -58,12 +58,11 @@ behaviour that changed, followed by a body arguing the reasoning and citing the 
   so a page *can* now read the repository and the audit in the same breath. What has not changed
   is that a trustworthy "workflows running now" figure needs `DocumentRoute` on the repository
   index, which is now a matter of adding that widget rather than of splitting the page.
-- **Two forms of dashboard file coexist, and will for a while.** Content is a *composition*, which
-  names widgets from `src/app/library/` and compiles to the configuration everything downstream
-  already understood; the other four are still written as that configuration. `isComposition`
-  discriminates on a `use` key inside a layout cell, which a compiled layout cannot hold — its
-  cells are plain strings. Use `src/testing/shipped.ts` in a spec rather than casting the import,
-  or the spec goes green for the wrong reason the day that dashboard is migrated.
+- **All five dashboards are compositions now**, naming widgets from `src/app/library/` and
+  compiling to the configuration everything downstream already understood. The compiled form is
+  still accepted — an older stored override holds one — and `isComposition` discriminates on a
+  `use` key inside a layout cell or on a `widgets` **array**, neither of which a compiled
+  configuration can hold. Use `src/testing/shipped.ts` in a spec rather than casting the import.
 - **Declaring a widget and placing it are two different things.** A composition may use `layout`,
   which the twelve column grid draws, or a flat `widgets` list, which a page component places
   itself. `DashboardSession` — provided per page, like `DashboardRunner` — holds everything a
@@ -233,9 +232,9 @@ it now carries six against two, which merge to eight. Every count in this file i
 - **`percentiles` answers a map under `values`**, keyed as OpenSearch formats it (`"50.0"`, but
   `"99.9"` for a fractional percent), so `result-mapper` reads the single entry rather than
   recomposing the key — and it sits under `metric`, not under the bucket name. Being multi-valued,
-  a `terms` ordered by it needs `metric.50` in the order path, not `metric`. **That ordering path
-  is the one thing no shipped configuration exercises**: the only two ordered `terms` in
-  `workflows.json` sort by `avg`, so it has never been confronted with a live index.
+  a `terms` ordered by it needs `metric.50` in the order path, not `metric`. Ordering by an `avg`
+  **is** exercised and has been confirmed live — `durationByModel` and `slowestSteps` come back in
+  descending order — but ordering by a *percentile* still is not, no shipped widget asking for it.
 - **`Blob.text()` strips a byte order mark**, the UTF-8 decode algorithm removing one by
   definition, so no assertion on the text of an exported CSV can ever see it. The mark is what
   keeps Excel from reading UTF-8 as the local encoding, so it is worth proving: read the bytes.
@@ -294,6 +293,7 @@ about the choices behind them.
 | The export root is a directive, not a view query | A query answers whatever came first; only the page knows where its dashboard stops and its chrome begins, and on a bespoke layout that line is wherever its author drew it |
 | The grid keeps only its span arithmetic | Drawing a widget is `<nxd-widget>`'s job there as anywhere else. Two descriptions of it would drift the first time a widget type is added |
 | No tabs, no sections, no layout grammar | Every UI idea would need a new grammar node and a new component, and the grammar would never be complete. Angular already is that language |
+| Bands and table columns live in the definition, not in a parameter | "Under an hour, up to a day, up to a week, beyond" is what that widget means. A parameter for it would need a shape the closed `ParamSpec` union does not have, and a different split is a different idea |
 
 ## Blob volumetry, set aside
 
@@ -336,22 +336,28 @@ Answer the user in French, using *vous*.
 
 ## Where things stand
 
-Six live screens — Content, Users, Workflows, Tasks, Governance, Diagnostics. Build green, 558
-tests over 42 files. `UpcomingPageComponent` is gone with the last placeholder; the requirement
+Six live screens — Content, Users, Workflows, Tasks, Governance, Diagnostics. Build green, 726
+tests over 44 files. `UpcomingPageComponent` is gone with the last placeholder; the requirement
 notice it used to carry is now tested where it lives, in `requirement-notice.component.spec.ts`.
 
-**Content is composed, the other four are still configured.** Thirteen definitions live in
-`src/app/library/content/`, over three builders — `countTile`, `topNChart`, `trendChart` — and
-five named populations. Migrating the rest is phase 6d, and the shape to copy is there. The
-equivalence of the two forms was proved and then deleted: `content-composition.spec.ts` planned
-both and compared the requests byte for byte, and it lived in commit `0d1117c` alone, because the
-hand written file it compared against went away in the next one.
+**All five are composed.** 53 definitions over five builders — `countTile`, `topNChart`,
+`trendChart`, `bandChart`, `recordTable` — cover the 54 widgets that ship; `live-documents` serves
+both Content and Governance, which is the only sharing so far.
 
-Two things the library still lacks, and both matter before phase 6d. **No audit widget exists**,
-so the two-index grouping is exercised by `index-grouping.spec.ts` and by a live probe, never by
-anything that ships. And **`topNChart` carries neither `order` nor `metric`**, which Workflows
-needs for the two `terms` it orders by `avg` — add them there rather than writing a fourth
-builder.
+Each migration was proved and then deleted. `migration.harness.ts` planned both forms over three
+filter states and compared them, and it lived through commits `d0213fd` to `e7f5235` only, because
+the hand written files it compared against went away one by one. Two things it taught, worth
+keeping:
+
+- **Byte identity only survives where the old file had no `baseFilter`.** Content, Users and
+  Workflows had none, so their plans matched exactly. Tasks and Governance shared clauses that way,
+  and a composition cannot express a clause at all, so those clauses moved into the widgets: the
+  documents counted are the same and the JSON is not. The harness compared the *effective clauses*
+  per widget instead, which is the claim that actually matters.
+- **It missed one real difference, which a page test caught.** Governance's `liveDocuments` used to
+  be read off `hits.total`, because the page's base filter happened to be exactly its population.
+  It now answers under its own wrapper. Across all five dashboards exactly one widget still reads
+  `hits.total` — Content's `totalAll`, which constrains nothing and is meant to.
 
 The work is pushed to `github.com/ThibArg/nuxeo-labs-repository-dashboard`, a public backup until
 the plugin is ready to be forked into `nuxeo-sandbox`; the README carries a warning saying so, and
