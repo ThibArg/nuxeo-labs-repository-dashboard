@@ -258,6 +258,18 @@ harness's fault** — it demanded bounds on every histogram, and read the percen
 rather than under `metric`. Worth remembering before concluding that a red live check means the
 application is wrong.
 
+**The mixed-page shapes were confronted the same way, on lts 2025.24.15, and the silent failure
+they close was measured rather than argued.** A composition over `documents-created`,
+`documents-by-type`, `distinct-users-per-day` and `top-users-by-logins`, filtered by a period, a
+document type, a container and a pick, planned two requests and both were accepted with no shard
+failure: 2861 hits on the repository bounded by `dc:created`, 6400 on the audit bounded by
+`eventDate` against 16443 unbounded. The same audit request carrying `ecm:primaryType` and
+`ecm:path.children` — what a shared filter did before it was attributed to an index — answered
+**status 200, no error, zero hits**. That is the whole argument, in one number. The group's
+candidate values answered 13 buckets on `nuxeo` and none on `audit`, which is the facet dialog that
+used to come back empty; and `byIndex: { "audit": "" }` left the audit half at 16443, so the escape
+hatch is honoured live.
+
 One path the dataset cannot exercise, so a green run proves nothing about it: **"N targeting
 trashed" on proxies**, which needs a proxy on a *live* document later trashed, proxies on versions
 inheriting a flag that stays false. **`time_zone` used to be on that list and no longer is**: a
@@ -333,6 +345,22 @@ it now carries six against two, which merge to eight. Every count in this file i
   `coreQueryPageProvider` and no Elasticsearch override of it exists anywhere in the LTS 2025 tree,
   so this is not the indexing lag it looks like. Any script that enumerates what it has just
   written has to converge rather than read once.
+- **A "downloads per day" chart counts thumbnails unless it says otherwise.** `download` is audited
+  out of the box — `DownloadService.EVENT_NAME`, routed by `audit-contrib.xml` with no property to
+  set — but `PreviewAdapter` and every rendition fire it too. Measured here: 539 events, of which
+  **524 `rendition` and 15 `download`**. `extended.downloadReason` is a `keyword` through the audit
+  mapping's dynamic template, so filtering on it costs nothing; not filtering on it means a chart
+  that measures the interface rather than the readers. `HEAD` requests and the `webengine` reason
+  are not logged at all, and a `nxbigblob` download carries no `docUUID`, no `docType` and no
+  `category`, so a breakdown by type silently loses those rows.
+- **There is no upload event in Nuxeo, at all.** Neither `BatchManager`, nor `BatchManagerComponent`,
+  nor the REST `BatchUploadObject` fires anything, and `blobUpdated` does not exist; `FileManager`
+  emits only `duplicatedFile`, which is not in the audit route. That is coherent — a batch upload
+  writes to temporary storage, with no document and no transaction, and may never be attached. The
+  approximations are `documentCreated` filtered on blob-carrying types, which over-counts, or a
+  contributed `extendedInfo` with an EL expression on `${source...}`. `documentModified` is not one:
+  the audit entry says nothing about *what* changed, `AbstractSession` passing only
+  `documentIsDirty` and the versioning options. Do not re-investigate this; the answer is no.
 
 ## Design decisions, and why
 
