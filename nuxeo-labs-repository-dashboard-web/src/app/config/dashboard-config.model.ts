@@ -254,6 +254,75 @@ export interface LayoutRow {
   cells: string[];
 }
 
+/**
+ * A titled block of rows, optionally foldable.
+ *
+ * `collapsible` is an attribute rather than a node of its own: a foldable block and a plain one
+ * are the same idea seen twice, and two grammar nodes for it would be two things to keep in step.
+ */
+export interface LayoutSection {
+  section: string;
+  rows: LayoutRow[];
+  collapsible?: boolean;
+  /** Starts folded. Only read when `collapsible` is true, since nothing could unfold it. */
+  collapsed?: boolean;
+}
+
+export interface LayoutTab {
+  label: string;
+  rows: LayoutRow[];
+}
+
+/** Named panels, one shown at a time. */
+export interface LayoutTabs {
+  tabs: LayoutTab[];
+}
+
+/**
+ * What a layout is made of.
+ *
+ * Deliberately two levels deep and no more: a node at the top, rows inside it. Tabs within tabs
+ * are a worse screen than the one they replace, and the bound is what keeps the grammar something
+ * a reader can hold in their head — and something the grid can draw without recursing.
+ */
+export type LayoutNode = LayoutRow | LayoutSection | LayoutTabs;
+
+export function isLayoutSection(node: LayoutNode): node is LayoutSection {
+  return 'section' in node;
+}
+
+export function isLayoutTabs(node: LayoutNode): node is LayoutTabs {
+  return 'tabs' in node;
+}
+
+export function isLayoutRow(node: LayoutNode): node is LayoutRow {
+  return 'cells' in node;
+}
+
+/** Every row a layout holds, whatever wraps it, in declaration order. */
+export function layoutRows(nodes: LayoutNode[]): LayoutRow[] {
+  return nodes.flatMap((node) => {
+    if (isLayoutRow(node)) {
+      return [node];
+    }
+    if (isLayoutSection(node)) {
+      return node.rows ?? [];
+    }
+    return (node.tabs ?? []).flatMap((tab) => tab.rows ?? []);
+  });
+}
+
+/**
+ * Every widget id a layout names, in declaration order.
+ *
+ * Reads the configuration, never the screen, which is what keeps the planner's promise: a widget
+ * sitting in a tab nobody opened or in a section left folded is planned all the same, so opening
+ * one costs nothing and the figures of two tabs describe the same instant.
+ */
+export function layoutCells(nodes: LayoutNode[]): string[] {
+  return layoutRows(nodes).flatMap((row) => row.cells ?? []);
+}
+
 export interface DashboardConfig {
   id: string;
   label: string;
@@ -274,7 +343,7 @@ export interface DashboardConfig {
   scopes?: Record<string, EsClause[]>;
   /** Scope applied to widgets that do not declare one. */
   defaultScope?: string;
-  layout: LayoutRow[];
+  layout: LayoutNode[];
   widgets: Record<string, WidgetConfig>;
 }
 

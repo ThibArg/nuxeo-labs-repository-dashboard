@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import contentSource from '../config/dashboards/content.json';
-import { DashboardConfig } from '../config/dashboard-config.model';
+import { DashboardConfig, layoutRows } from '../config/dashboard-config.model';
 import { DashboardOverrideService, validateConfig } from './dashboard-override.service';
 import { shippedConfig } from '../../testing/shipped';
 
@@ -64,7 +64,7 @@ describe('validateConfig', () => {
 
   it('reports a layout cell that names no widget', () => {
     const problems = validateConfig(
-      edited((config) => config.layout[0].cells.push('ghost')),
+      edited((config) => layoutRows(config.layout)[0].cells.push('ghost')),
       'content',
     ).problems;
 
@@ -196,5 +196,66 @@ describe('DashboardOverrideService', () => {
     localStorage.setItem('nxd.config.content', 'not json at all');
 
     expect(service.read('content')).toBeNull();
+  });
+});
+
+/**
+ * The grammar is checked here rather than by the planner, which never sees it.
+ *
+ * `layoutCells` walks whatever it is handed and simply finds nothing in a malformed node, so a
+ * mistyped container would otherwise save cleanly and render an empty page — the one failure an
+ * editor exists to prevent.
+ */
+describe('validating the layout grammar', () => {
+  const WIDGETS = { a: { type: 'kpi' as const, label: 'A' } };
+
+  function validate(layout: unknown): string[] {
+    return validateConfig(
+      JSON.stringify({ id: 'demo', label: 'Demo', index: 'nuxeo', layout, widgets: WIDGETS }),
+      'demo',
+    ).problems;
+  }
+
+  it('accepts a row, a section and a tabs side by side', () => {
+    expect(
+      validate([
+        { cells: ['a'] },
+        { section: 'Named', rows: [{ cells: [] }] },
+        { tabs: [{ label: 'One', rows: [{ cells: [] }] }] },
+      ]),
+    ).toEqual([]);
+  });
+
+  it('names an entry that is none of the three kinds', () => {
+    expect(validate([{ panel: 'nope' }])[0]).toContain('none of the three');
+  });
+
+  it('refuses a section with no title', () => {
+    expect(validate([{ cells: ['a'] }, { section: '  ', rows: [{ cells: [] }] }])).toContain(
+      'Layout entry 2 is a section with no title.',
+    );
+  });
+
+  it('refuses a section holding no row', () => {
+    expect(validate([{ cells: ['a'] }, { section: 'Empty', rows: [] }])).toContain(
+      'section "Empty" needs a "rows" list holding at least one row.',
+    );
+  });
+
+  it('refuses a tabs holding no tab', () => {
+    expect(validate([{ cells: ['a'] }, { tabs: [] }])).toContain(
+      'Layout entry 2 is a "tabs" holding no tab.',
+    );
+  });
+
+  it('refuses a tab with no label', () => {
+    expect(validate([{ cells: ['a'] }, { tabs: [{ rows: [{ cells: [] }] }] }])).toContain(
+      'Tab 1 of Layout entry 2 has no "label".',
+    );
+  });
+
+  /** A widget inside a tab counts as shown, or every tabbed dashboard would report orphans. */
+  it('counts a widget placed in a tab as placed', () => {
+    expect(validate([{ tabs: [{ label: 'One', rows: [{ cells: ['a'] }] }] }])).toEqual([]);
   });
 });

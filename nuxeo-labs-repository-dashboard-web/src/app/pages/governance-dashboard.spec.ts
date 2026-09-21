@@ -1,7 +1,13 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import governanceConfig from '../config/dashboards/governance.json';
-import { customRange, defaultFilterState, resolveSpan } from '../config/dashboard-config.model';
+import {
+  customRange,
+  defaultFilterState,
+  layoutCells,
+  layoutRows,
+  resolveSpan,
+} from '../config/dashboard-config.model';
 import { planDashboard } from '../engine/query-planner';
 import { PreflightService } from '../core/preflight.service';
 import { DashboardPageComponent } from './dashboard-page.component';
@@ -90,7 +96,7 @@ function supportRoutes(): StubRoute[] {
 
 describe('governance.json', () => {
   it('declares a widget for every layout cell, and no orphan widget', () => {
-    const referenced = new Set(GOVERNANCE.layout.flatMap((row) => row.cells));
+    const referenced = new Set(layoutCells(GOVERNANCE.layout));
     const declared = new Set(Object.keys(GOVERNANCE.widgets));
 
     expect([...referenced].filter((id) => !declared.has(id))).toEqual([]);
@@ -195,7 +201,7 @@ describe('governance.json', () => {
 
   it('fills complete grid lines, for every date range', () => {
     for (const range of ['all', '7d', '30d', '90d', '12m']) {
-      for (const row of GOVERNANCE.layout) {
+      for (const row of layoutRows(GOVERNANCE.layout)) {
         const spans = row.cells.map((id) => resolveSpan(GOVERNANCE.widgets[id], range) ?? 0);
         expect(spans.reduce((total, span) => total + span, 0) % 12).toBe(0);
       }

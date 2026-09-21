@@ -1,5 +1,14 @@
 import { Injectable } from '@angular/core';
-import { DashboardConfig, defaultFilterState } from '../config/dashboard-config.model';
+import {
+  DashboardConfig,
+  LayoutNode,
+  LayoutRow,
+  defaultFilterState,
+  isLayoutRow,
+  isLayoutSection,
+  isLayoutTabs,
+  layoutCells,
+} from '../config/dashboard-config.model';
 import { compileComposition } from '../config/composition-compiler';
 import { isComposition } from '../config/composition.model';
 import { planDashboard } from './query-planner';
@@ -131,8 +140,13 @@ function validateCompiled(config: DashboardConfig, expectedId: string): Validati
     return { config: null, problems };
   }
 
+  problems.push(...layoutProblems(config.layout));
+  if (problems.length) {
+    return { config: null, problems };
+  }
+
   // Cells and widgets have to match, which the planner cannot report: it only walks the layout.
-  const referenced = new Set(config.layout.flatMap((row) => row.cells ?? []));
+  const referenced = new Set(layoutCells(config.layout));
   const declared = new Set(Object.keys(config.widgets));
   for (const id of referenced) {
     if (!declared.has(id)) {
@@ -158,4 +172,71 @@ function validateCompiled(config: DashboardConfig, expectedId: string): Validati
 
 function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Checks the shape of the layout grammar, which the planner never sees.
+ *
+ * `layoutCells` walks whatever it is given and simply finds nothing in a malformed node, so a
+ * mistyped `tabs` would otherwise save cleanly and render an empty page. Naming it here is the
+ * whole point of validating against the real planner *and* against the grammar: one catches a
+ * widget that cannot be compiled, the other a container that holds nothing.
+ */
+function layoutProblems(nodes: LayoutNode[]): string[] {
+  const problems: string[] = [];
+
+  const checkRows = (rows: LayoutRow[] | undefined, inside: string): void => {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      problems.push(`${inside} needs a "rows" list holding at least one row.`);
+      return;
+    }
+    rows.forEach((row, index) => {
+      if (!Array.isArray(row?.cells)) {
+        problems.push(`Row ${index + 1} of ${inside} needs a "cells" list.`);
+      }
+    });
+  };
+
+  nodes.forEach((node, index) => {
+    const position = `Layout entry ${index + 1}`;
+
+    if (!node || typeof node !== 'object') {
+      problems.push(`${position} is not an object.`);
+      return;
+    }
+    if (isLayoutRow(node)) {
+      if (!Array.isArray(node.cells)) {
+        problems.push(`${position} has a "cells" that is not a list.`);
+      }
+      return;
+    }
+    if (isLayoutSection(node)) {
+      if (typeof node.section !== 'string' || !node.section.trim()) {
+        problems.push(`${position} is a section with no title.`);
+      }
+      checkRows(node.rows, `section "${node.section}"`);
+      return;
+    }
+    if (isLayoutTabs(node)) {
+      if (!Array.isArray(node.tabs) || node.tabs.length === 0) {
+        problems.push(`${position} is a "tabs" holding no tab.`);
+        return;
+      }
+      node.tabs.forEach((tab, tabIndex) => {
+        const named = typeof tab?.label === 'string' && tab.label.trim();
+        if (!named) {
+          problems.push(`Tab ${tabIndex + 1} of ${position} has no "label".`);
+        }
+        checkRows(tab?.rows, `tab "${named || tabIndex + 1}"`);
+      });
+      return;
+    }
+
+    problems.push(
+      `${position} is none of the three a layout accepts: a row with "cells", ` +
+        'a "section" with rows, or a "tabs" with labelled panels.',
+    );
+  });
+
+  return problems;
 }

@@ -17,6 +17,7 @@ import {
   isChartWidget,
   isKpiWidget,
   isTableWidget,
+  layoutCells,
   pathScopeFilter,
   scopeClauses,
   termsGroups,
@@ -188,7 +189,7 @@ export function histogramBounds(
 
 /** Every widget id referenced by the layout, in display order, ignoring unknown ids. */
 export function layoutWidgetIds(config: DashboardConfig): string[] {
-  return config.layout.flatMap((row) => row.cells).filter((id) => id in config.widgets);
+  return layoutCells(config.layout).filter((id) => id in config.widgets);
 }
 
 /** Widget ids the layout shows, in display order, grouped by the index each one reads. */

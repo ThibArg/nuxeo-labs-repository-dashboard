@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CompositionCell, DashboardComposition } from './composition.model';
+import { CompositionCell, DashboardComposition, isComposition } from './composition.model';
 import { compileComposition } from './composition-compiler';
 import { validateConfig } from '../engine/dashboard-override.service';
 import { planDashboard } from '../engine/query-planner';
@@ -177,5 +177,99 @@ describe('compiling a composition', () => {
     const { config } = compile([{ use: 'documents-by-type', as: 'byType' }]);
 
     expect(validateConfig(JSON.stringify(config), 'demo').problems).toEqual([]);
+  });
+
+  describe('the layout grammar', () => {
+    const TABBED: DashboardComposition = {
+      id: 'demo',
+      label: 'Demo',
+      layout: [
+        { cells: [{ use: 'total-documents', as: 'total' }] },
+        {
+          section: 'Trends',
+          collapsible: true,
+          rows: [{ cells: [{ use: 'documents-created', as: 'created' }] }],
+        },
+        {
+          tabs: [
+            { label: 'By type', rows: [{ cells: [{ use: 'documents-by-type', as: 'byType' }] }] },
+            {
+              label: 'By author',
+              rows: [{ cells: [{ use: 'top-contributors', as: 'authors' }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    it('keeps the shape it was written in', () => {
+      const { config, problems } = compileComposition(TABBED);
+
+      expect(problems).toEqual([]);
+      expect(config!.layout).toEqual([
+        { cells: ['total'] },
+        { section: 'Trends', rows: [{ cells: ['created'] }], collapsible: true },
+        {
+          tabs: [
+            { label: 'By type', rows: [{ cells: ['byType'] }] },
+            { label: 'By author', rows: [{ cells: ['authors'] }] },
+          ],
+        },
+      ]);
+    });
+
+    it('compiles a widget wherever the grammar put it', () => {
+      const { config } = compileComposition(TABBED);
+
+      expect(Object.keys(config!.widgets).sort()).toEqual([
+        'authors',
+        'byType',
+        'created',
+        'total',
+      ]);
+    });
+
+    /**
+     * A composition whose every widget sits inside a `tabs` has no `use` at the top level. Read as
+     * already compiled, its cells would reach the planner as objects it cannot resolve, and the
+     * page would render nothing while saying nothing either.
+     */
+    it('is still recognised as a composition when nothing sits at the top level', () => {
+      const nested: DashboardComposition = {
+        id: 'demo',
+        label: 'Demo',
+        layout: [TABBED.layout![2]],
+      };
+
+      expect(isComposition(nested)).toBe(true);
+      expect(compileComposition(nested).problems).toEqual([]);
+    });
+
+    it('refuses a name reused across two different tabs', () => {
+      const clashing: DashboardComposition = {
+        id: 'demo',
+        label: 'Demo',
+        layout: [
+          {
+            tabs: [
+              { label: 'One', rows: [{ cells: [{ use: 'documents-by-type', as: 'chart' }] }] },
+              { label: 'Two', rows: [{ cells: [{ use: 'documents-created', as: 'chart' }] }] },
+            ],
+          },
+        ],
+      };
+
+      expect(compileComposition(clashing).problems[0]).toContain('Two cells are both called');
+    });
+
+    it('names a layout entry that is none of the three kinds', () => {
+      const wrong = {
+        id: 'demo',
+        label: 'Demo',
+        layout: [{ panel: 'nope' }],
+      } as unknown as DashboardComposition;
+
+      expect(compileComposition(wrong).problems[0]).toContain('none of the three');
+    });
   });
 });

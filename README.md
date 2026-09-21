@@ -63,6 +63,55 @@ title, and `filters`. A screen laid out by hand replaces `layout` with a flat `w
 naming — after the widget rather than after the field — is precisely what lets two widgets reading
 the same field travel together instead of overwriting each other.
 
+### Grouping widgets: sections and tabs
+
+A `layout` is a list of three kinds of entry. A **row** puts widgets side by side. A **section**
+gives a group of rows a heading, and optionally a fold. A **tabs** shows one panel at a time.
+
+```jsonc
+"layout": [
+  { "cells": [{ "use": "total-documents", "as": "total", "span": 12 }] },
+
+  {
+    "section": "Trends",
+    "collapsible": true,
+    "rows": [{ "cells": [{ "use": "documents-created", "as": "created" }] }]
+  },
+
+  {
+    "tabs": [
+      { "label": "Creation",     "rows": [{ "cells": [{ "use": "documents-created",  "as": "created2" }] }] },
+      { "label": "Modification", "rows": [{ "cells": [{ "use": "documents-modified", "as": "modified" }] }] }
+    ]
+  }
+]
+```
+
+| Key | Meaning |
+| --- | --- |
+| `section` | Heading shown above the rows |
+| `collapsible` | Adds a fold control. Without it the block is always open |
+| `collapsed` | Starts folded. Only read when `collapsible` is true |
+| `tabs` | Panels, each with a `label` and its own `rows` |
+
+The grammar is **bounded to two levels**: an entry at the top, rows inside it. No tabs within tabs
+and no sections within sections — that screen is worse than the one it replaces, and the bound is
+what keeps the grammar small enough to hold in your head. Anything past it is a page component,
+which is what "Laying it out yourself" below is for.
+
+Three things worth knowing before using either:
+
+- **Every widget is fetched, on screen or not.** A tab nobody opened and a section left folded are
+  planned with the rest, in the same request, at the same instant. That is what makes opening a tab
+  free and what lets two tabs be compared. The price is paying for what is not being looked at.
+- **A closed panel is removed from the page, not hidden.** ECharts sizes a chart against the box it
+  is drawn in, so a chart started inside a hidden panel would paint itself at zero width and stay
+  that way. The consequence is that **the HTML export carries the tab that was open** and not the
+  others, exactly as a photograph carries what was in frame.
+- **On paper the strip becomes a heading.** The tab strip and the fold control are controls, so
+  print and the standalone file drop them — and the open panel then names itself, or the reader
+  would be looking at figures that nothing accounts for.
+
 ### The widget library
 
 Each widget is a dozen lines in `nuxeo-labs-repository-dashboard-web/src/app/library/`, carrying a
@@ -252,6 +301,9 @@ migration, which is why it is still accepted and still documented.
   }
 }
 ```
+
+The layout grammar is the same here, with plain widget names in place of `use` cells: a `cells`
+entry holds strings, and `section` and `tabs` nest rows of them exactly as a composition does.
 
 | Key | Values |
 | --- | --- |

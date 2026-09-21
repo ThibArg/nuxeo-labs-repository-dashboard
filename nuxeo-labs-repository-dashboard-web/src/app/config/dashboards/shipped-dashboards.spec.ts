@@ -8,6 +8,7 @@ import {
   FilterState,
   customRange,
   dateRangeFilter,
+  layoutCells,
 } from '../dashboard-config.model';
 import { planDashboard } from '../../engine/query-planner';
 import { shippedConfig } from '../../../testing/shipped';
@@ -53,7 +54,7 @@ describe.each(DASHBOARDS)('%s', (_name, config) => {
   });
 
   it('declares a widget for every layout cell, and no orphan widget', () => {
-    const referenced = new Set(config.layout.flatMap((row) => row.cells));
+    const referenced = new Set(layoutCells(config.layout));
     const declared = new Set(Object.keys(config.widgets));
 
     expect([...referenced].filter((id) => !declared.has(id))).toEqual([]);

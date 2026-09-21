@@ -5,8 +5,16 @@
  * `query-planner`, `result-mapper`, the four widget components, the exports and the label service
  * are untouched, and every invariant their tests hold keeps holding.
  */
-import { DashboardConfig, LayoutRow, WidgetConfig } from './dashboard-config.model';
-import { CompositionCell, CompositionRow, DashboardComposition } from './composition.model';
+import { DashboardConfig, LayoutNode, LayoutRow, WidgetConfig } from './dashboard-config.model';
+import {
+  CompositionCell,
+  CompositionNode,
+  CompositionRow,
+  DashboardComposition,
+  isCompositionRow,
+  isCompositionSection,
+  isCompositionTabs,
+} from './composition.model';
 import { resolveParams } from '../library/definition';
 import { findWidget, knownWidgetIds } from '../library/registry';
 
@@ -21,14 +29,14 @@ function cellName(cell: CompositionCell): string {
 }
 
 /**
- * Rows to walk, whichever way the composition declared its widgets.
+ * Nodes to walk, whichever way the composition declared its widgets.
  *
  * A flat `widgets` list becomes one row: the planner reads the layout to know what to ask for, so
  * widgets a bespoke page places itself still have to appear in one. What that row looks like
  * matters only if somebody renders the default grid anyway, which is a reasonable fallback rather
  * than a design.
  */
-function rowsOf(composition: DashboardComposition): CompositionRow[] | null {
+function nodesOf(composition: DashboardComposition): CompositionNode[] | null {
   if (Array.isArray(composition.widgets) && composition.widgets.length) {
     return [{ cells: composition.widgets }];
   }
@@ -38,6 +46,14 @@ function rowsOf(composition: DashboardComposition): CompositionRow[] | null {
   return null;
 }
 
+/** Everything the walk accumulates, so that a cell is compiled in exactly one place. */
+interface Compilation {
+  widgets: Record<string, WidgetConfig>;
+  /** Index each compiled widget reads, by name rather than by position. */
+  indexByName: Map<string, string>;
+  problems: string[];
+}
+
 /**
  * Compiles a composition, naming every reason it cannot be rendered.
  *
@@ -45,12 +61,9 @@ function rowsOf(composition: DashboardComposition): CompositionRow[] | null {
  * to resolve would be a page whose figures nobody can account for.
  */
 export function compileComposition(composition: DashboardComposition): CompilationResult {
-  const problems: string[] = [];
-  const widgets: Record<string, WidgetConfig> = {};
-  const layout: LayoutRow[] = [];
-  const indices: string[] = [];
+  const state: Compilation = { widgets: {}, indexByName: new Map(), problems: [] };
 
-  const declared = rowsOf(composition);
+  const declared = nodesOf(composition);
   if (!declared) {
     return {
       config: null,
@@ -60,67 +73,16 @@ export function compileComposition(composition: DashboardComposition): Compilati
     };
   }
 
-  for (const row of declared) {
-    const cells: string[] = [];
-
-    for (const cell of row.cells ?? []) {
-      if (!cell?.use) {
-        problems.push('A layout cell names no widget: every cell needs a "use".');
-        continue;
-      }
-
-      const definition = findWidget(cell.use);
-      if (!definition) {
-        problems.push(
-          `No widget is called "${cell.use}". The library offers ${knownWidgetIds().join(', ')}.`,
-        );
-        continue;
-      }
-
-      const name = cellName(cell);
-      if (name in widgets) {
-        problems.push(
-          `Two cells are both called "${name}". Give one of them a different "as", ` +
-            'since that name is what identifies its figures in the shared request.',
-        );
-        continue;
-      }
-
-      const { values, problems: paramProblems } = resolveParams(definition, cell.with);
-      if (paramProblems.length) {
-        problems.push(...paramProblems);
-        continue;
-      }
-
-      let body;
-      try {
-        body = definition.build(values);
-      } catch (error) {
-        const reason = error instanceof Error ? error.message : String(error);
-        problems.push(`"${cell.use}" could not be built: ${reason}`);
-        continue;
-      }
-
-      const hint = cell.hint ?? body.hint;
-      widgets[name] = {
-        ...body,
-        label: cell.title ?? definition.title,
-        ...(hint ? { hint } : {}),
-        ...(cell.span !== undefined ? { span: cell.span } : {}),
-        ...(cell.spanByRange ? { spanByRange: cell.spanByRange } : {}),
-      } as WidgetConfig;
-
-      indices.push(definition.index);
-      cells.push(name);
-    }
-
-    if (cells.length) {
-      layout.push({ cells });
+  const layout: LayoutNode[] = [];
+  for (const node of declared) {
+    const compiled = compileNode(node, state);
+    if (compiled) {
+      layout.push(compiled);
     }
   }
 
-  if (problems.length) {
-    return { config: null, problems };
+  if (state.problems.length) {
+    return { config: null, problems: state.problems };
   }
   if (!layout.length) {
     return { config: null, problems: ['This composition holds no widget.'] };
@@ -131,7 +93,7 @@ export function compileComposition(composition: DashboardComposition): Compilati
    * what lets one page mix the repository and the audit: the planner groups by index and issues
    * one request per group, rather than the single one a dashboard used to be limited to.
    */
-  const primary = indices[0] as DashboardConfig['index'];
+  const primary = [...state.indexByName.values()][0] as DashboardConfig['index'];
 
   return {
     config: {
@@ -141,24 +103,127 @@ export function compileComposition(composition: DashboardComposition): Compilati
       index: primary,
       ...(composition.filters ? { filters: composition.filters } : {}),
       layout,
-      widgets: withIndexOverrides(widgets, layout, indices, primary),
+      widgets: withIndexOverrides(state, primary),
     },
     problems: [],
   };
 }
 
-/** Marks the widgets that read an index other than the page's. */
-function withIndexOverrides(
-  widgets: Record<string, WidgetConfig>,
-  layout: LayoutRow[],
-  indices: string[],
-  primary: string,
-): Record<string, WidgetConfig> {
-  const order = layout.flatMap((row) => row.cells);
-  order.forEach((name, position) => {
-    if (indices[position] !== primary) {
-      widgets[name] = { ...widgets[name], index: indices[position] as DashboardConfig['index'] };
+/** Compiles one node, keeping its shape, or drops it when it turned out to hold nothing. */
+function compileNode(node: CompositionNode, state: Compilation): LayoutNode | null {
+  if (isCompositionSection(node)) {
+    const rows = compileRows(node.rows ?? [], state);
+    return rows.length
+      ? {
+          section: node.section,
+          rows,
+          ...(node.collapsible ? { collapsible: true } : {}),
+          ...(node.collapsed ? { collapsed: true } : {}),
+        }
+      : null;
+  }
+
+  if (isCompositionTabs(node)) {
+    const tabs = (node.tabs ?? [])
+      .map((tab) => ({ label: tab.label, rows: compileRows(tab.rows ?? [], state) }))
+      .filter((tab) => tab.rows.length);
+    return tabs.length ? { tabs } : null;
+  }
+
+  if (isCompositionRow(node)) {
+    const cells = compileCells(node.cells ?? [], state);
+    return cells.length ? { cells } : null;
+  }
+
+  state.problems.push(
+    'A layout entry is none of the three a layout accepts: a row with "cells", ' +
+      'a "section" with rows, or a "tabs" with labelled panels.',
+  );
+  return null;
+}
+
+function compileRows(rows: CompositionRow[], state: Compilation): LayoutRow[] {
+  const compiled: LayoutRow[] = [];
+  for (const row of rows) {
+    const cells = compileCells(row?.cells ?? [], state);
+    if (cells.length) {
+      compiled.push({ cells });
     }
-  });
-  return widgets;
+  }
+  return compiled;
+}
+
+function compileCells(cells: CompositionCell[], state: Compilation): string[] {
+  const names: string[] = [];
+
+  for (const cell of cells) {
+    if (!cell?.use) {
+      state.problems.push('A layout cell names no widget: every cell needs a "use".');
+      continue;
+    }
+
+    const definition = findWidget(cell.use);
+    if (!definition) {
+      state.problems.push(
+        `No widget is called "${cell.use}". The library offers ${knownWidgetIds().join(', ')}.`,
+      );
+      continue;
+    }
+
+    const name = cellName(cell);
+    if (name in state.widgets) {
+      state.problems.push(
+        `Two cells are both called "${name}". Give one of them a different "as", ` +
+          'since that name is what identifies its figures in the shared request.',
+      );
+      continue;
+    }
+
+    const { values, problems: paramProblems } = resolveParams(definition, cell.with);
+    if (paramProblems.length) {
+      state.problems.push(...paramProblems);
+      continue;
+    }
+
+    let body;
+    try {
+      body = definition.build(values);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      state.problems.push(`"${cell.use}" could not be built: ${reason}`);
+      continue;
+    }
+
+    const hint = cell.hint ?? body.hint;
+    state.widgets[name] = {
+      ...body,
+      label: cell.title ?? definition.title,
+      ...(hint ? { hint } : {}),
+      ...(cell.span !== undefined ? { span: cell.span } : {}),
+      ...(cell.spanByRange ? { spanByRange: cell.spanByRange } : {}),
+    } as WidgetConfig;
+
+    state.indexByName.set(name, definition.index);
+    names.push(name);
+  }
+
+  return names;
+}
+
+/**
+ * Marks the widgets that read an index other than the page's.
+ *
+ * Keyed by name rather than by position: a layout is a tree now, so pairing a flat list of indices
+ * with a flat walk of the cells would be one refactor away from silently mislabelling a widget.
+ */
+function withIndexOverrides(state: Compilation, primary: string): Record<string, WidgetConfig> {
+  for (const [name, index] of state.indexByName) {
+    if (index !== primary) {
+      state.widgets[name] = {
+        ...state.widgets[name],
+        index: index as DashboardConfig['index'],
+      };
+    }
+  }
+  return state.widgets;
 }

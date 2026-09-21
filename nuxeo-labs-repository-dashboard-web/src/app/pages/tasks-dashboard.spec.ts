@@ -1,7 +1,12 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import tasksConfig from '../config/dashboards/tasks.json';
-import { defaultFilterState, resolveSpan } from '../config/dashboard-config.model';
+import {
+  defaultFilterState,
+  layoutCells,
+  layoutRows,
+  resolveSpan,
+} from '../config/dashboard-config.model';
 import { planDashboard } from '../engine/query-planner';
 import { DashboardPageComponent } from './dashboard-page.component';
 import { provideDashboardCharts } from '../widgets/echarts.setup';
@@ -105,7 +110,7 @@ function supportRoutes(): StubRoute[] {
 
 describe('tasks.json', () => {
   it('declares a widget for every layout cell, and no orphan widget', () => {
-    const referenced = new Set(TASKS.layout.flatMap((row) => row.cells));
+    const referenced = new Set(layoutCells(TASKS.layout));
     const declared = new Set(Object.keys(TASKS.widgets));
 
     expect([...referenced].filter((id) => !declared.has(id))).toEqual([]);
@@ -155,7 +160,7 @@ describe('tasks.json', () => {
 
   it('fills complete grid lines, for every date range', () => {
     for (const range of ['all', '7d', '30d', '90d', '12m', 'custom']) {
-      for (const row of TASKS.layout) {
+      for (const row of layoutRows(TASKS.layout)) {
         const spans = row.cells.map((id) => resolveSpan(TASKS.widgets[id], range) ?? 0);
         expect(spans.reduce((total, span) => total + span, 0) % 12).toBe(0);
       }

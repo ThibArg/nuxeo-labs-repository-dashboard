@@ -87,6 +87,8 @@ function document_(body: string, document: DashboardDocument): string {
   .nxd-export-context { margin: 0.75rem 0 0; padding-left: 1.1rem; font-size: 0.8rem; }
   .nxd-export-context li { margin-top: 0.15rem; }
   .nxd-export-stamp { margin-top: 0.75rem; font-size: 0.75rem; }
+  /* The tab strip was a row of buttons, and those are stripped: the panel names itself instead. */
+  .nxd-panel-label { display: block; margin: 0 0 0.25rem; }
 </style>
 </head>
 <body class="bg-canvas text-ink">

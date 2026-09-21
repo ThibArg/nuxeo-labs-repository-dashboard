@@ -53,8 +53,11 @@ function mount(dashboard: DashboardConfig, range: DateRangeOption) {
   return fixture;
 }
 
-function spans(fixture: { componentInstance: DashboardGridComponent }): number[][] {
-  return fixture.componentInstance.rows().map((row) => row.map((cell) => cell.span));
+function spans(fixture: { nativeElement: unknown }): number[][] {
+  const grids = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.nxd-grid')];
+  return grids.map((grid) =>
+    [...grid.children].map((cell) => Number(cell.getAttribute('data-span'))),
+  );
 }
 
 describe('DashboardGridComponent', () => {

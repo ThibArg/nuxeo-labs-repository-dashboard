@@ -21,7 +21,7 @@ Angular 22:
 ```bash
 cd nuxeo-labs-repository-dashboard-web
 export PATH="$PWD/node:$PATH"
-npm test                                      # 46 files, vitest + jsdom
+npm test                                      # 48 files, vitest + jsdom
 npm test -- --watch=false --include src/app/engine/agg-compiler.spec.ts   # one file
 npm test -- --watch=false --filter 'never emits a .keyword'               # one behaviour
 npm run build                                 # this is the typecheck
@@ -58,16 +58,16 @@ over `src/`, not a preference.
 
 | Write | Never | Measured |
 | --- | --- | --- |
-| `input()`, `output()` | `@Input()`, `@Output()` | 91 and 25, against 0 |
-| `@if`, `@for`, `@switch` | `*ngIf`, `*ngFor`, `ngClass`, `<ng-container>` | 43, 21 and 1, against 0 |
-| `signal`, `computed`, `effect` | RxJS, `Observable`, the `async` pipe | 35, 51 and 7, against 0 imports of `rxjs` |
-| `imports:` on the component | `NgModule`, `CommonModule` | 27 standalone declarations, against 0 |
-| `inject()` | injection through constructor parameters | 37, against 0 |
+| `input()`, `output()` | `@Input()`, `@Output()` | 94 and 25, against 0 |
+| `@if`, `@for`, `@switch` | `*ngIf`, `*ngFor`, `ngClass`, `<ng-container>` | 47, 23 and 1, against 0 |
+| `signal`, `computed`, `effect`, `linkedSignal` | RxJS, `Observable`, the `async` pipe | 35, 54, 7 and 4, against 0 imports of `rxjs` |
+| `imports:` on the component | `NgModule`, `CommonModule` | 30 standalone declarations, against 0 |
+| `inject()` | injection through constructor parameters | 38, against 0 |
 | `NuxeoHttpService` | `HttpClient` | plain `fetch`, against 0 |
-| `template:` inline, styles in `src/styles.css` | `templateUrl`, `styleUrl` | 27, against 0 |
+| `template:` inline, styles in `src/styles.css` | `templateUrl`, `styleUrl` | 30, against 0 |
 | a function from `core/format.ts` | a pipe | 0 pipes |
 | `(input)`, `(change)`, native `<dialog>` | `ngModel`, `FormsModule` | 0 imports of `@angular/forms` |
-| `ChangeDetectionStrategy.OnPush` | the default | 26 of the 27; the odd one is a test host |
+| `ChangeDetectionStrategy.OnPush` | the default | 29 of the 30; the odd one is a test host |
 
 `rxjs` sits in `package.json` because `@angular/core`, `@angular/common` and `@angular/router` each
 declare it a peer dependency. It is imported nowhere, and removing it would break the install rather
@@ -80,7 +80,8 @@ what went into `ngOnInit` belongs in a field initialiser, in a `computed`, or in
 native `<dialog>` with a signal, one debounces principal suggestions, one reopens the session when
 the route names another dashboard, one registers a chart's snapshot for the HTML export. The
 seventh is `testing/chart-widget.stub.ts` mirroring the sixth. Reaching for an eighth usually means
-the value wanted was a `computed`.
+the value wanted was a `computed` — or, when the value has to be writable *and* derived from an
+input, a `linkedSignal`, which is what the fold of a section and the open panel of a `tabs` use.
 
 Eleven services are `@Injectable({ providedIn: 'root' })`. The two that are not — `DashboardRunner`
 and `DashboardSession` — are provided by the page, which is what stops two dashboards from sharing
@@ -108,6 +109,14 @@ one state; a component placing widgets without declaring them fails at construct
   `<nxd-dashboard-header>` and `[nxdExportRoot]` all read it, so a bespoke screen writes a template
   and nothing else. `pages/bespoke-layout.spec.ts` is the worked example; there is no such screen
   in the product, deliberately.
+- **A layout is a tree of exactly three node kinds**, declared in `dashboard-config.model.ts`: a
+  row with `cells`, a `section` with `rows`, a `tabs` with labelled panels. It is bounded to two
+  levels — a node at the top, rows inside it — so the grid draws it without recursing, and
+  `isLayoutRow`, `isLayoutSection` and `isLayoutTabs` are the only way to tell them apart.
+  **`layoutCells` and `layoutRows` are the only walkers**, and every reader goes through them:
+  `query-planner.ts`, `validateConfig`, `toBlocks`, and the six specs that check a shipped file.
+  Reading `layout.flatMap((row) => row.cells)` again compiles for a flat dashboard and silently
+  loses every widget inside a tab.
 - **Dashboards are JSON** in `src/app/config/dashboards/`, copied to `assets/dashboards/` by
   `angular.json` and fetched at runtime. The specs `import` those very files, so a shipped
   configuration cannot drift from what is tested.
@@ -353,8 +362,11 @@ about the choices behind them.
 | An empty `types` or `facets` means no constraint | The same rule the filter dialog follows. Read the other way, a widget restricted to nothing in particular would match nothing at all |
 | A widget reads the session instead of eight inputs | Input drilling works while a grid is the only parent. A widget in a tab, a panel or a bespoke layout has none, so placement would have stayed the engine's business |
 | The export root is a directive, not a view query | A query answers whatever came first; only the page knows where its dashboard stops and its chrome begins, and on a bespoke layout that line is wherever its author drew it |
-| The grid keeps only its span arithmetic | Drawing a widget is `<nxd-widget>`'s job there as anywhere else. Two descriptions of it would drift the first time a widget type is added |
-| No tabs, no sections, no layout grammar | Every UI idea would need a new grammar node and a new component, and the grammar would never be complete. Angular already is that language |
+| The grid keeps only its span arithmetic | Drawing a widget is `<nxd-widget>`'s job there as anywhere else, and sizing a row is `<nxd-widget-rows>`'s. Two descriptions of it would drift the first time a widget type is added |
+| A layout grammar of exactly two nodes, and no more | The open-ended version was refused for a good reason — every UI idea would want a node, and the grammar would never be complete. What changed is who writes the page. A composition is checked by `validateConfig`, which runs the real planner and *names* what it refuses; a bespoke component is checked by a build, a test run and a `mvn install`, and a layout mistake by nothing at all. `tabs` and `section` cover the reorganisations people actually ask for; anything past them is still a component, deliberately |
+| `collapsible` is an attribute of `section`, not a third node | A foldable block and a plain one are one idea seen twice. Two nodes for it would be two things to keep in step, for no expressive gain |
+| The grammar is bounded to two levels | A node at the top, rows inside it. Tabs within tabs is a worse screen than the one it replaces, and the bound is what lets the grid draw without recursion — hence without `<ng-template>`, which the dialect does not use |
+| A closed tab and a folded section are removed from the DOM, not hidden | zrender sizes a canvas against the box it is mounted in, so a chart started inside a hidden panel paints itself at zero width and stays there. The cost is that neither carries into the HTML export, which is the bargain a snapshot already makes |
 | A widget describing configuration stays out of a page describing content | The same filters cannot serve both: retention rules live outside `/default-domain`, so a path scope empties them, and their creation date answers a question nobody asked |
 | Bands and table columns live in the definition, not in a parameter | "Under an hour, up to a day, up to a week, beyond" is what that widget means. A parameter for it would need a shape the closed `ParamSpec` union does not have, and a different split is a different idea |
 
@@ -399,8 +411,8 @@ Answer the user in French, using *vous*.
 
 ## Where things stand
 
-Six live screens — Content, Users, Workflows, Tasks, Governance, Diagnostics. Build green, 819
-tests over 46 files. `UpcomingPageComponent` is gone with the last placeholder; the requirement
+Six live screens — Content, Users, Workflows, Tasks, Governance, Diagnostics. Build green, 845
+tests over 48 files. `UpcomingPageComponent` is gone with the last placeholder; the requirement
 notice it used to carry is now tested where it lives, in `requirement-notice.component.spec.ts`.
 
 **All five are composed.** 62 definitions over five builders — `countTile`, `topNChart`,

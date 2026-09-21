@@ -39,14 +39,60 @@ export interface CompositionRow {
   cells: CompositionCell[];
 }
 
+/** A titled block of rows. `collapsible` makes it foldable; see `LayoutSection`. */
+export interface CompositionSection {
+  section: string;
+  rows: CompositionRow[];
+  collapsible?: boolean;
+  collapsed?: boolean;
+}
+
+export interface CompositionTab {
+  label: string;
+  rows: CompositionRow[];
+}
+
+/** Named panels, one shown at a time. */
+export interface CompositionTabs {
+  tabs: CompositionTab[];
+}
+
+/** Mirrors `LayoutNode`, cell for cell, and is bounded to the same two levels. */
+export type CompositionNode = CompositionRow | CompositionSection | CompositionTabs;
+
+export function isCompositionSection(node: CompositionNode): node is CompositionSection {
+  return 'section' in node;
+}
+
+export function isCompositionTabs(node: CompositionNode): node is CompositionTabs {
+  return 'tabs' in node;
+}
+
+export function isCompositionRow(node: CompositionNode): node is CompositionRow {
+  return 'cells' in node;
+}
+
+/** Every row a composition node holds, in declaration order. */
+export function compositionRows(nodes: CompositionNode[]): CompositionRow[] {
+  return nodes.flatMap((node) => {
+    if (isCompositionRow(node)) {
+      return [node];
+    }
+    if (isCompositionSection(node)) {
+      return node.rows ?? [];
+    }
+    return (node.tabs ?? []).flatMap((tab) => tab.rows ?? []);
+  });
+}
+
 export interface DashboardComposition {
   id: string;
   label: string;
   subtitle?: string;
   /** Interactive filters shown above the grid. Unchanged from the compiled form. */
   filters?: FilterConfig[];
-  /** Widgets laid out by the twelve column grid, row by row. */
-  layout?: CompositionRow[];
+  /** Widgets laid out by the twelve column grid, row by row, section by section. */
+  layout?: CompositionNode[];
   /**
    * Widgets the page places itself, when the grid is not what it wants.
    *
@@ -63,6 +109,10 @@ export interface DashboardComposition {
  *
  * Two discriminators, neither of which a compiled configuration can satisfy: `use` inside a layout
  * cell, whose cells are plain strings there, and a `widgets` **array**, which is a record there.
+ *
+ * It walks into sections and tabs, which is not a detail: a composition whose every widget sits
+ * inside a `tabs` has no `use` at the top level, and reading it as already compiled would hand the
+ * planner cells it cannot resolve.
  */
 export function isComposition(value: unknown): value is DashboardComposition {
   if (!value || typeof value !== 'object') {
@@ -76,7 +126,7 @@ export function isComposition(value: unknown): value is DashboardComposition {
   if (!Array.isArray(candidate.layout)) {
     return false;
   }
-  return candidate.layout.some((row) => {
+  return compositionRows(candidate.layout as CompositionNode[]).some((row) => {
     const cells = (row as { cells?: unknown })?.cells;
     return (
       Array.isArray(cells) &&
