@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import workflowsConfig from '../config/dashboards/workflows.json';
-import { DashboardConfig, defaultFilterState, resolveSpan } from '../config/dashboard-config.model';
+import { defaultFilterState, resolveSpan } from '../config/dashboard-config.model';
 import { planDashboard } from '../engine/query-planner';
 import { PreflightService } from '../core/preflight.service';
 import { DashboardPageComponent } from './dashboard-page.component';
@@ -17,8 +17,9 @@ import {
   isAggregationsRequest,
 } from '../../testing/fetch-stub';
 import { settle } from '../../testing/settle';
+import { shippedConfig } from '../../testing/shipped';
 
-const WORKFLOWS = workflowsConfig as DashboardConfig;
+const WORKFLOWS = shippedConfig('workflows.json', workflowsConfig);
 
 /**
  * The events the `audit_wf` view can actually return.
@@ -30,31 +31,6 @@ const WORKFLOWS = workflowsConfig as DashboardConfig;
  * this view will never hand them over, so a widget built on one of them would stay empty forever,
  * with nothing on screen to explain why.
  */
-const REACHABLE_EVENTS = [
-  'afterWorkflowStarted',
-  'afterWorkflowFinish',
-  'beforeWorkflowCanceled',
-  'workflowCanceled',
-  'afterWorkflowTaskCreated',
-  'afterWorkflowTaskEnded',
-  'afterWorkflowTaskReassigned',
-  'afterWorkflowTaskDelegated',
-];
-
-/** Event ids a scope accepts, whether it was written as a `term` or as a `terms`. */
-function eventsOf(clauses: unknown[]): string[] {
-  return clauses.flatMap((clause) => {
-    const { term, terms } = clause as {
-      term?: Record<string, string>;
-      terms?: Record<string, string[]>;
-    };
-    if (term?.['eventId']) {
-      return [term['eventId']];
-    }
-    return terms?.['eventId'] ?? [];
-  });
-}
-
 /** Every widget is scoped to an event, so each aggregation sits under a wrapper. */
 function wrapped(docCount: number, buckets: unknown[]) {
   return { doc_count: docCount, inner: { buckets }, distinct: { value: buckets.length } };
@@ -166,38 +142,6 @@ describe('workflows.json', () => {
     expect(plan.errors.size).toBe(0);
     expect(plan.requests).toHaveLength(1);
     expect(plan.requests[0].index).toBe('audit_wf');
-  });
-
-  it('builds every scope out of events this view can actually return', () => {
-    const scopes = WORKFLOWS.scopes!;
-    const used = Object.values(scopes).flatMap(eventsOf);
-
-    expect(used.length).toBeGreaterThan(0);
-    expect(used.filter((event) => !REACHABLE_EVENTS.includes(event))).toEqual([]);
-  });
-
-  /*
-   * A workflow has no state field, so state is derived from the event id. That derivation is only
-   * sound while no event feeds two scopes at once: a reader comparing the started, completed and
-   * cancelled tiles would otherwise be counting the same entry twice. These scopes are deliberately
-   * not a partition — three of the eight reachable events are counted by none of them — so only
-   * exclusivity is asserted here, never exhaustiveness.
-   */
-  it('declares scopes that no single event can satisfy twice', () => {
-    const scopes = Object.entries(WORKFLOWS.scopes!).filter(([, clauses]) => clauses.length);
-
-    for (const event of REACHABLE_EVENTS) {
-      const matching = scopes.filter(([, clauses]) => eventsOf(clauses).includes(event));
-      expect(matching.length).toBeLessThanOrEqual(1);
-    }
-  });
-
-  /*
-   * `workflowCanceled` is fired once per attached document, so counting it would multiply a single
-   * cancellation by the size of its attachment. `beforeWorkflowCanceled` fires once per instance.
-   */
-  it('counts a cancellation once, not once per attached document', () => {
-    expect(eventsOf(WORKFLOWS.scopes!['cancelled'])).toEqual(['beforeWorkflowCanceled']);
   });
 
   /*

@@ -1,7 +1,6 @@
 {
   "id": "workflows",
   "label": "Workflows Dashboard",
-  "index": "audit_wf",
   "filters": [
     {
       "type": "dateRange",
@@ -24,305 +23,67 @@
       ]
     }
   ],
-  "baseFilter": [],
-  "defaultScope": "all",
-  "scopes": {
-    "all": [],
-    "started": [
-      {
-        "term": {
-          "eventId": "afterWorkflowStarted"
-        }
-      }
-    ],
-    "completed": [
-      {
-        "term": {
-          "eventId": "afterWorkflowFinish"
-        }
-      }
-    ],
-    "cancelled": [
-      {
-        "term": {
-          "eventId": "beforeWorkflowCanceled"
-        }
-      }
-    ],
-    "taskCreated": [
-      {
-        "term": {
-          "eventId": "afterWorkflowTaskCreated"
-        }
-      }
-    ],
-    "taskEnded": [
-      {
-        "term": {
-          "eventId": "afterWorkflowTaskEnded"
-        }
-      }
-    ]
-  },
   "layout": [
     {
-      "cells": ["started", "completed", "cancelled", "tasksCreated"]
+      "cells": [
+        { "use": "workflows-started", "as": "started", "span": 3 },
+        { "use": "workflows-completed", "as": "completed", "span": 3 },
+        { "use": "workflows-cancelled", "as": "cancelled", "span": 3 },
+        { "use": "workflow-tasks-created", "as": "tasksCreated", "span": 3 }
+      ]
     },
     {
-      "cells": ["averageDuration", "medianDuration", "averageTaskDuration", "tasksEnded"]
+      "cells": [
+        {
+          "use": "average-workflow-duration",
+          "as": "averageDuration",
+          "span": 3,
+          "hint": "Every model at once, which no single model resembles — see the breakdown below"
+        },
+        { "use": "median-workflow-duration", "as": "medianDuration", "span": 3 },
+        { "use": "average-task-duration", "as": "averageTaskDuration", "span": 3 },
+        { "use": "workflow-tasks-ended", "as": "tasksEnded", "span": 3 }
+      ]
     },
     {
-      "cells": ["durationByModel", "slowestSteps"]
+      "cells": [
+        {
+          "use": "slowest-workflow-models",
+          "as": "durationByModel",
+          "span": 6,
+          "hint": "Slowest first. This is where the overall average comes from"
+        },
+        {
+          "use": "slowest-task-steps",
+          "as": "slowestSteps",
+          "span": 6,
+          "hint": "Average time a task waits before it is answered — filter by model to isolate one process"
+        }
+      ]
     },
     {
-      "cells": ["startedPerDay", "completedPerDay"]
+      "cells": [
+        { "use": "workflows-started-per-day", "as": "startedPerDay", "span": 6 },
+        { "use": "workflows-completed-per-day", "as": "completedPerDay", "span": 6 }
+      ]
     },
     {
-      "cells": ["byModel", "taskOutcomes"]
+      "cells": [
+        { "use": "workflows-by-model", "as": "byModel", "span": 6 },
+        { "use": "task-outcomes", "as": "taskOutcomes", "span": 6 }
+      ]
     },
     {
-      "cells": ["topInitiators", "topTaskPerformers"]
+      "cells": [
+        { "use": "top-workflow-initiators", "as": "topInitiators", "span": 6 },
+        { "use": "top-task-performers", "as": "topTaskPerformers", "span": 6 }
+      ]
     },
     {
-      "cells": ["byTaskName", "durationDistribution"]
+      "cells": [
+        { "use": "workflow-tasks-by-step", "as": "byTaskName", "span": 6 },
+        { "use": "workflow-duration-distribution", "as": "durationDistribution", "span": 6 }
+      ]
     }
-  ],
-  "widgets": {
-    "started": {
-      "type": "kpi",
-      "label": "Workflows Started",
-      "hint": "Instances started ({range}), not instances running now",
-      "scope": "started",
-      "span": 3
-    },
-    "completed": {
-      "type": "kpi",
-      "label": "Workflows Completed",
-      "severity": "success",
-      "scope": "completed",
-      "span": 3
-    },
-    "cancelled": {
-      "type": "kpi",
-      "label": "Workflows Cancelled",
-      "severity": "warning",
-      "scope": "cancelled",
-      "span": 3
-    },
-    "averageDuration": {
-      "type": "kpi",
-      "label": "Average Duration",
-      "hint": "Every model at once, which no single model resembles — see the breakdown below",
-      "scope": "completed",
-      "span": 3,
-      "metric": {
-        "avg": "extended.timeSinceWfStarted"
-      },
-      "format": "duration"
-    },
-    "medianDuration": {
-      "type": "kpi",
-      "label": "Median Duration",
-      "hint": "Half of the completed instances settle faster than this",
-      "scope": "completed",
-      "span": 3,
-      "metric": {
-        "percentile": {
-          "field": "extended.timeSinceWfStarted",
-          "percent": 50
-        }
-      },
-      "format": "duration"
-    },
-    "tasksCreated": {
-      "type": "kpi",
-      "label": "Tasks Created",
-      "scope": "taskCreated",
-      "span": 3
-    },
-    "tasksEnded": {
-      "type": "kpi",
-      "label": "Tasks Ended",
-      "scope": "taskEnded",
-      "span": 3
-    },
-    "averageTaskDuration": {
-      "type": "kpi",
-      "label": "Average Task Duration",
-      "hint": "From assignment to completion",
-      "scope": "taskEnded",
-      "span": 3,
-      "metric": {
-        "avg": "extended.timeSinceTaskStarted"
-      },
-      "format": "duration"
-    },
-    "durationByModel": {
-      "type": "hbar",
-      "label": "Average Duration by Model",
-      "hint": "Slowest first. This is where the overall average comes from",
-      "scope": "completed",
-      "span": 6,
-      "labels": "workflowModel",
-      "format": "duration",
-      "metric": {
-        "avg": "extended.timeSinceWfStarted"
-      },
-      "agg": {
-        "terms": {
-          "field": "extended.modelName",
-          "size": 10,
-          "order": "metric_desc"
-        }
-      }
-    },
-    "slowestSteps": {
-      "type": "hbar",
-      "label": "Slowest Steps",
-      "hint": "Average time a task waits before it is answered — filter by model to isolate one process",
-      "scope": "taskEnded",
-      "span": 6,
-      "labels": "message",
-      "format": "duration",
-      "metric": {
-        "avg": "extended.timeSinceTaskStarted"
-      },
-      "agg": {
-        "terms": {
-          "field": "extended.taskName",
-          "size": 10,
-          "order": "metric_desc"
-        }
-      }
-    },
-    "startedPerDay": {
-      "type": "area",
-      "label": "Workflows Started per Day",
-      "hint": "Instances started per day ({range})",
-      "scope": "started",
-      "span": 6,
-      "agg": {
-        "date_histogram": {
-          "field": "eventDate",
-          "calendar_interval": "day",
-          "format": "yyyy-MM-dd"
-        }
-      }
-    },
-    "completedPerDay": {
-      "type": "area",
-      "label": "Workflows Completed per Day",
-      "hint": "Instances finished per day ({range})",
-      "scope": "completed",
-      "span": 6,
-      "agg": {
-        "date_histogram": {
-          "field": "eventDate",
-          "calendar_interval": "day",
-          "format": "yyyy-MM-dd"
-        }
-      }
-    },
-    "byModel": {
-      "type": "donut",
-      "label": "By Workflow Model",
-      "hint": "Instances started, by model",
-      "scope": "started",
-      "span": 6,
-      "labels": "workflowModel",
-      "agg": {
-        "terms": {
-          "field": "extended.modelName",
-          "size": 10
-        }
-      }
-    },
-    "taskOutcomes": {
-      "type": "donut",
-      "label": "Task Outcomes",
-      "hint": "The button the assignee pressed, by its identifier",
-      "scope": "taskEnded",
-      "span": 6,
-      "agg": {
-        "terms": {
-          "field": "extended.action",
-          "size": 10
-        }
-      }
-    },
-    "topInitiators": {
-      "type": "ranked-list",
-      "label": "Top Initiators",
-      "hint": "By number of workflows started",
-      "scope": "started",
-      "span": 6,
-      "labels": "user",
-      "agg": {
-        "terms": {
-          "field": "extended.workflowInitiator",
-          "size": 10
-        }
-      }
-    },
-    "topTaskPerformers": {
-      "type": "ranked-list",
-      "label": "Tasks Completed by User",
-      "hint": "Server-side work counts for the user who triggered it",
-      "scope": "taskEnded",
-      "span": 6,
-      "labels": "user",
-      "agg": {
-        "terms": {
-          "field": "principalName",
-          "size": 10
-        }
-      }
-    },
-    "byTaskName": {
-      "type": "hbar",
-      "label": "Most Frequent Tasks",
-      "hint": "By number of tasks created",
-      "scope": "taskCreated",
-      "span": 6,
-      "labels": "message",
-      "agg": {
-        "terms": {
-          "field": "extended.taskName",
-          "size": 10
-        }
-      }
-    },
-    "durationDistribution": {
-      "type": "bar",
-      "label": "Workflow Duration",
-      "hint": "Completed instances, by how long they took",
-      "scope": "completed",
-      "span": 6,
-      "agg": {
-        "range": {
-          "field": "extended.timeSinceWfStarted",
-          "ranges": [
-            {
-              "key": "< 1 hour",
-              "to": 3600000
-            },
-            {
-              "key": "1 hour to 1 day",
-              "from": 3600000,
-              "to": 86400000
-            },
-            {
-              "key": "1 to 7 days",
-              "from": 86400000,
-              "to": 604800000
-            },
-            {
-              "key": "over 7 days",
-              "from": 604800000
-            }
-          ]
-        }
-      }
-    }
-  }
+  ]
 }
