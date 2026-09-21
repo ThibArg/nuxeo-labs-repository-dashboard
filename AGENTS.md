@@ -2,7 +2,7 @@
 
 Read `README.md` first: the product, the configuration schema, the deployment contributions, the
 label strategies, and — under "Indexing rules worth knowing" and "Who an action is credited to" —
-every field-level trap the queries depend on. `CUSTOMIZING.md` is for whoever forks this and
+every field-level trap the queries depend on. `CUSTOMISING.md` is for whoever forks this and
 changes it with an assistant; its "Requests that are not what they look like" table points back
 here for the arguments. This file carries only what neither of them does: how to drive the build,
 how the tests are wired, what must not be undone, and which roads were already walked.
@@ -316,7 +316,7 @@ against an enforced record; and a document carrying a legal hold *and* a retenti
 
 ## Roads already walked
 
-Each was asked for, investigated, set aside. `CUSTOMIZING.md` summarises them for a forker; this is
+Each was asked for, investigated, set aside. `CUSTOMISING.md` summarises them for a forker; this is
 the argument.
 
 - **Blob volumetry ("Total Size", "Live Docs Size", deduplicated, over every blob field).** A plain
@@ -416,7 +416,7 @@ definitions split four ways, five of which sit on no page, describing configurat
 content. Exactly one widget still reads `hits.total`: Content's `total-documents`, which constrains
 nothing and is meant to. 932 tests over 51 files, build green.
 
-Downloads is the newest screen and the worked example `CUSTOMIZING.md` is written from: seven
+Downloads is the newest screen and the worked example `CUSTOMISING.md` is written from: seven
 definitions naming `extended.downloadReason` beside `eventId: download`, and the second shipped use
 of `labels: "document"`, resolved through `GET /api/v1/id/{uuid}`.
 

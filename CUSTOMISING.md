@@ -106,7 +106,7 @@ A prompt that works here has four parts, and the fourth is the one people leave 
 | --- | --- |
 | **The context** | Which file, which screen, which widget. An assistant that has to guess will guess plausibly and wrongly |
 | **The intent** | What the reader of the screen should learn. Not "add a chart" but "show which document types people actually download" |
-| **The constraints** | The invariants of this codebase. The shortest useful form: *"read AGENTS.md and CUSTOMIZING.md first, and follow the dialect table"* |
+| **The constraints** | The invariants of this codebase. The shortest useful form: *"read AGENTS.md and CUSTOMISING.md first, and follow the dialect table"* |
 | **The verification** | What you will run, and what must be true afterwards. Ask for it in the same breath, or you will get code that compiles and figures nobody can account for |
 
 ### Two prompts to start from
