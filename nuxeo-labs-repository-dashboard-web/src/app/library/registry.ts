@@ -20,6 +20,13 @@ import {
 } from './content/expiry';
 import { documentsByLifecycleState, documentsByType, topContributors } from './content/breakdowns';
 import { documentsCreated, documentsModified } from './content/trends';
+import {
+  distinctUsersPerDay,
+  documentsCreatedByUser,
+  documentsModifiedByUser,
+  failedLogins,
+  topUsersByLogins,
+} from './users/activity';
 
 export const CONTENT_WIDGETS: WidgetDefinition[] = [
   totalDocuments,
@@ -37,7 +44,16 @@ export const CONTENT_WIDGETS: WidgetDefinition[] = [
   topContributors,
 ];
 
-export const WIDGET_LIBRARY: WidgetDefinition[] = [...CONTENT_WIDGETS];
+/** Who is using the repository, read from the audit index. */
+export const USERS_WIDGETS: WidgetDefinition[] = [
+  distinctUsersPerDay,
+  topUsersByLogins,
+  failedLogins,
+  documentsCreatedByUser,
+  documentsModifiedByUser,
+];
+
+export const WIDGET_LIBRARY: WidgetDefinition[] = [...CONTENT_WIDGETS, ...USERS_WIDGETS];
 
 const BY_ID = new Map(WIDGET_LIBRARY.map((definition) => [definition.id, definition]));
 

@@ -1,0 +1,45 @@
+{
+  "id": "users",
+  "label": "Users Dashboard",
+  "filters": [
+    {
+      "type": "dateRange",
+      "field": "eventDate",
+      "default": "30d"
+    }
+  ],
+  "layout": [
+    {
+      "cells": [
+        {
+          "use": "distinct-users-per-day",
+          "as": "uniqueLoginsPerDay",
+          "title": "Unique Users per Day",
+          "span": 12
+        }
+      ]
+    },
+    {
+      "cells": [
+        { "use": "top-users-by-logins", "as": "topUsers", "span": 6 },
+        { "use": "failed-logins", "as": "loginFailures", "span": 6 }
+      ]
+    },
+    {
+      "cells": [
+        {
+          "use": "documents-created-by-user",
+          "as": "creationsByUser",
+          "title": "Documents Created by User",
+          "span": 6
+        },
+        {
+          "use": "documents-modified-by-user",
+          "as": "modificationsByUser",
+          "title": "Documents Modified by User",
+          "span": 6
+        }
+      ]
+    }
+  ]
+}

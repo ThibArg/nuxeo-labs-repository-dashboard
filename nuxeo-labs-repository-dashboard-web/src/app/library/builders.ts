@@ -9,8 +9,13 @@
 import {
   CalendarInterval,
   ChartWidgetType,
+  ColumnConfig,
+  DateRangeBucket,
   KpiSeverity,
   LabelStrategy,
+  MetricConfig,
+  NumericRange,
+  TermsOrder,
   ValueFormat,
 } from '../config/dashboard-config.model';
 import { ParamSpecs, WidgetBody } from './definition';
@@ -55,6 +60,14 @@ export interface SecondaryFigure {
  */
 export function countTile(options: {
   of: Predicate[];
+  /**
+   * What is measured instead of the number of documents.
+   *
+   * An average, a minimum, a maximum and a percentile have no value over an empty set — the index
+   * answers null and the tile shows a dash rather than a zero, since `0 s` and "never happened"
+   * are not the same statement.
+   */
+  metric?: MetricConfig;
   severity?: KpiSeverity;
   hint?: string;
   format?: ValueFormat;
@@ -63,6 +76,7 @@ export function countTile(options: {
   const filter = compilePredicates(options.of);
   return {
     type: 'kpi',
+    ...(options.metric ? { metric: options.metric } : {}),
     ...(options.hint ? { hint: options.hint } : {}),
     ...(options.severity ? { severity: options.severity } : {}),
     ...(options.format ? { format: options.format } : {}),
@@ -80,12 +94,20 @@ export function countTile(options: {
   };
 }
 
-/** The values a field takes most often, drawn however the composition asked. */
+/**
+ * The values a field takes most often, drawn however the composition asked.
+ *
+ * `order: 'metric_desc'` ranks by the metric rather than by volume, which is what turns "the
+ * models people use most" into "the models that take longest". The compiler derives the order
+ * path, including the `metric.50` a percentile needs, so a definition cannot get it wrong.
+ */
 export function topNChart(options: {
   of: Predicate[];
   field: string;
   size: number;
   chart: ChartWidgetType;
+  metric?: MetricConfig;
+  order?: TermsOrder;
   labels?: LabelStrategy;
   hint?: string;
   format?: ValueFormat;
@@ -93,11 +115,18 @@ export function topNChart(options: {
   const filter = compilePredicates(options.of);
   return {
     type: options.chart,
+    ...(options.metric ? { metric: options.metric } : {}),
     ...(options.hint ? { hint: options.hint } : {}),
     ...(options.labels ? { labels: options.labels } : {}),
     ...(options.format ? { format: options.format } : {}),
     ...(filter.length ? { filter } : {}),
-    agg: { terms: { field: options.field, size: options.size } },
+    agg: {
+      terms: {
+        field: options.field,
+        size: options.size,
+        ...(options.order ? { order: options.order } : {}),
+      },
+    },
   };
 }
 
@@ -121,25 +150,100 @@ function keyFormat(interval: CalendarInterval): string {
   }
 }
 
-/** How a volume moved over the period. */
+/** How a volume, or a measure of it, moved over the period. */
 export function trendChart(options: {
   of: Predicate[];
   field: string;
   interval: CalendarInterval;
   chart: ChartWidgetType;
+  /** Computed per bucket instead of counting documents, e.g. how many distinct people logged in. */
+  metric?: MetricConfig;
+  /**
+   * Drops the empty buckets, which a histogram otherwise draws between its first and its last.
+   *
+   * Worth it on a field whose values are sparse and scattered: retention dates falling in three
+   * months over two years draw three bars this way and twenty-five otherwise. Never on a trend
+   * over the filtered period, where a quiet day is information.
+   */
+  minDocCount?: number;
   hint?: string;
+  format?: ValueFormat;
 }): WidgetBody {
   const filter = compilePredicates(options.of);
   return {
     type: options.chart,
+    ...(options.metric ? { metric: options.metric } : {}),
     ...(options.hint ? { hint: options.hint } : {}),
+    ...(options.format ? { format: options.format } : {}),
     ...(filter.length ? { filter } : {}),
     agg: {
       date_histogram: {
         field: options.field,
         calendar_interval: options.interval,
         format: keyFormat(options.interval),
+        ...(options.minDocCount !== undefined ? { min_doc_count: options.minDocCount } : {}),
       },
     },
+  };
+}
+
+/**
+ * A population split into bands somebody decided on.
+ *
+ * The bands are written by the definition rather than passed by the composition: "under an hour,
+ * up to a day, up to a week, beyond" *is* what `workflow-duration-distribution` means, and a
+ * parameter for them would need a shape the closed `ParamSpec` union does not have. A different
+ * split is a different widget.
+ *
+ * Numeric bands and date math bands are the same idea to a reader and two aggregations to the
+ * index, so one builder carries both.
+ */
+export function bandChart(options: {
+  of: Predicate[];
+  field: string;
+  chart: ChartWidgetType;
+  bands: { numeric: NumericRange[] } | { dates: DateRangeBucket[] };
+  hint?: string;
+  format?: ValueFormat;
+}): WidgetBody {
+  const filter = compilePredicates(options.of);
+  return {
+    type: options.chart,
+    ...(options.hint ? { hint: options.hint } : {}),
+    ...(options.format ? { format: options.format } : {}),
+    ...(filter.length ? { filter } : {}),
+    agg:
+      'numeric' in options.bands
+        ? { range: { field: options.field, ranges: options.bands.numeric } }
+        : { date_range: { field: options.field, ranges: options.bands.dates } },
+  };
+}
+
+/**
+ * The documents themselves, as rows.
+ *
+ * The only widget kind that needs `hits`, so the only one to keep a request of its own. Columns
+ * are written by the definition for the same reason the bands above are: which four fields answer
+ * "who is holding up what" is the idea, not a setting.
+ *
+ * Sorting matters more here than anywhere else. No dashboard lists records until it can paginate,
+ * so a table is a top N of its sort and nothing else — and a table of twenty rows sorted by
+ * nothing in particular describes nothing at all.
+ */
+export function recordTable(options: {
+  of: Predicate[];
+  columns: ColumnConfig[];
+  sort: { field: string; order: 'asc' | 'desc' }[];
+  size: number;
+  hint?: string;
+}): WidgetBody {
+  const filter = compilePredicates(options.of);
+  return {
+    type: 'table',
+    ...(options.hint ? { hint: options.hint } : {}),
+    ...(filter.length ? { filter } : {}),
+    columns: options.columns,
+    sort: options.sort,
+    size: options.size,
   };
 }
