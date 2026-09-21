@@ -33,7 +33,7 @@ import { WidgetOutletComponent } from './widget-outlet.component';
         [rangeLabel]="session.filters().range.label"
         [bucketLabels]="session.runner.bucketLabels().get(for()) ?? emptyBucketLabels"
         [columnLabels]="session.runner.columnLabels().get(for()) ?? emptyColumnLabels"
-        (picked)="session.pickBucket($event)"
+        (picked)="session.pickBucket($event, for())"
       />
     } @else if (session.config()) {
       <!--

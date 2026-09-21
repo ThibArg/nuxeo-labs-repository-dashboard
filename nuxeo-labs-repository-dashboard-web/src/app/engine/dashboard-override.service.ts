@@ -3,11 +3,15 @@ import {
   DashboardConfig,
   LayoutNode,
   LayoutRow,
+  dashboardIndices,
+  dateRangeFilter,
   defaultFilterState,
   isLayoutRow,
   isLayoutSection,
   isLayoutTabs,
   layoutCells,
+  pathScopeFilter,
+  termsGroups,
 } from '../config/dashboard-config.model';
 import { compileComposition } from '../config/composition-compiler';
 import { isComposition } from '../config/composition.model';
@@ -159,6 +163,8 @@ function validateCompiled(config: DashboardConfig, expectedId: string): Validati
     }
   }
 
+  problems.push(...mixedIndexProblems(config));
+
   try {
     for (const [widgetId, message] of planDashboard(config, defaultFilterState(config)).errors) {
       problems.push(`${widgetId}: ${message}`);
@@ -168,6 +174,68 @@ function validateCompiled(config: DashboardConfig, expectedId: string): Validati
   }
 
   return { config: problems.length ? null : config, problems };
+}
+
+/**
+ * Refuses a page reading two indices whose shared filters have not said which half they constrain.
+ *
+ * A shared filter is only shared among the widgets that can answer it. `ecm:path.children` and
+ * `ecm:primaryType` exist on the repository and nowhere else, so forwarded to the audit they do
+ * not leave that half unfiltered — they empty it. The failure is invisible: the page renders, the
+ * figures are zero, and nothing distinguishes that from a quiet week.
+ *
+ * So the declaration is demanded rather than guessed. Guessing would mean a table of which field
+ * lives on which index, which is a second description of the Nuxeo mapping and would be wrong the
+ * first time somebody adds a field. Naming what is missing costs the author one key and buys a
+ * page whose figures can be accounted for.
+ */
+function mixedIndexProblems(config: DashboardConfig): string[] {
+  const indices = dashboardIndices(config);
+  if (indices.length < 2) {
+    return [];
+  }
+
+  const problems: string[] = [];
+  const named = indices.join(' and ');
+
+  if (config.baseFilter?.length) {
+    problems.push(
+      `This dashboard reads ${named}, so "baseFilter" cannot apply to all of them. ` +
+        'Move those clauses onto the widgets that can answer them.',
+    );
+  }
+
+  const range = dateRangeFilter(config);
+  if (range) {
+    for (const index of indices) {
+      if (index !== config.index && range.byIndex?.[index] === undefined) {
+        problems.push(
+          `The period filters on "${range.field}", which "${index}" does not carry. ` +
+            `Add "byIndex": { "${index}": "<field>" } to it, or "" to leave ${index} unbounded.`,
+        );
+      }
+    }
+  }
+
+  for (const group of termsGroups(config)) {
+    if (!group.indices?.length) {
+      problems.push(
+        `Filter group "${group.id}" does not say which of ${named} it constrains. ` +
+          'Add "indices" to it: a group sent to an index that carries none of its fields ' +
+          'empties that half rather than leaving it alone.',
+      );
+    }
+  }
+
+  const scope = pathScopeFilter(config);
+  if (scope && !scope.indices?.length) {
+    problems.push(
+      `The path scope does not say which of ${named} it constrains. ` +
+        'Add "indices": ["nuxeo"] to it, "ecm:path.children" being a repository field.',
+    );
+  }
+
+  return problems;
 }
 
 function describe(error: unknown): string {

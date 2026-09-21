@@ -175,6 +175,18 @@ export type WidgetConfig = KpiWidgetConfig | ChartWidgetConfig | TableWidgetConf
 
 /* ==================== Filters ==================== */
 
+/**
+ * True when a filter declaring these indices constrains that one.
+ *
+ * Absent means every index, which is what a single-index dashboard wants and what every shipped
+ * file relies on. The declaration only becomes necessary on a page reading more than one, where
+ * `validateConfig` refuses to leave it implicit: `ecm:path.children` sent to the audit matches
+ * nothing at all, and a widget reading zero is a worse answer than a widget reading unfiltered.
+ */
+export function appliesTo(indices: EsIndex[] | undefined, index: EsIndex): boolean {
+  return !indices?.length || indices.includes(index);
+}
+
 export interface DateRangeFilterConfig {
   type: 'dateRange';
   field: string;
@@ -229,6 +241,14 @@ export interface TermsGroupConfig {
   label: string;
   /** Defaults to `or`. `and` is supported but not exposed in the UI. */
   combine?: 'or' | 'and';
+  /**
+   * Indices this group constrains. Absent means every index.
+   *
+   * A group names repository fields, so sending it to the audit would match nothing and empty the
+   * audit half of a mixed page the moment a reader checks a document type. The group is also read
+   * from here to decide which index its candidate values are counted on.
+   */
+  indices?: EsIndex[];
   members: TermsMemberConfig[];
 }
 
@@ -244,6 +264,14 @@ export interface PathScopeFilterConfig {
   label?: string;
   /** Container the picker opens on. Defaults to `/default-domain`. */
   root?: string;
+  /**
+   * Indices this scope constrains. Absent means every index.
+   *
+   * The clause is `ecm:path.children`, which only the repository carries. An audit entry holds
+   * `docPath` instead, and it is not the same question: the path recorded at the time of the event
+   * is not where the document sits today.
+   */
+  indices?: EsIndex[];
 }
 
 export type FilterConfig = DateRangeFilterConfig | TermsGroupConfig | PathScopeFilterConfig;
@@ -352,6 +380,30 @@ export class UnknownScopeError extends Error {
     super(`Unknown scope "${name}"`);
     this.name = 'UnknownScopeError';
   }
+}
+
+/**
+ * Distinct indices the placed widgets read, in the order the planner will group them.
+ *
+ * More than one is what turns every shared filter into a question: a clause naming a repository
+ * field is not merely useless against the audit, it matches nothing, so the widget reads zero and
+ * says nothing about it. `validateConfig` uses this to refuse a mixed page whose filters have not
+ * said which half they constrain.
+ */
+export function dashboardIndices(config: DashboardConfig): EsIndex[] {
+  const indices: EsIndex[] = [];
+  for (const widgetId of layoutCells(config.layout ?? [])) {
+    const widget = config.widgets?.[widgetId];
+    if (!widget) {
+      continue;
+    }
+    const index = widget.index ?? config.index;
+    if (!indices.includes(index)) {
+      indices.push(index);
+    }
+  }
+  // A configuration that places nothing still reads its own index, which is the honest answer.
+  return indices.length ? indices : [config.index];
 }
 
 /** Clauses of the scope a widget describes. */
@@ -505,6 +557,14 @@ export interface BucketPick {
   label: string;
   /** Strategy the widget resolved its keys with, so a principal expands the way it merged it. */
   labels?: LabelStrategy;
+  /**
+   * Index of the widget the bucket was clicked on, which is the only index the pick constrains.
+   *
+   * A group declares the indices it applies to; a pick has no declaration to read, so it carries
+   * the one thing that is certain about it — the chart it came from was reading this index, and
+   * the field belongs to it. Absent means every index, which is what a single-index page gives.
+   */
+  index?: EsIndex;
 }
 
 export interface FilterState {
@@ -541,6 +601,18 @@ export function dateRangeFilter(config: DashboardConfig): DateRangeFilterConfig 
 
 export function termsGroups(config: DashboardConfig): TermsGroupConfig[] {
   return (config.filters ?? []).filter((filter) => filter.type === 'termsGroup');
+}
+
+/**
+ * Index a group's candidate values are counted on.
+ *
+ * The first index it declares, because that is where its fields live; the page's own otherwise.
+ * Counting them on a page index the group does not constrain is how a fully populated dialog
+ * comes back empty: `ecm:primaryType` aggregated against the audit answers nothing, and the
+ * reader sees a filter with no values rather than a filter that does not apply here.
+ */
+export function indexOfGroup(config: DashboardConfig, group: TermsGroupConfig): EsIndex {
+  return group.indices?.[0] ?? config.index;
 }
 
 export function pathScopeFilter(config: DashboardConfig): PathScopeFilterConfig | null {

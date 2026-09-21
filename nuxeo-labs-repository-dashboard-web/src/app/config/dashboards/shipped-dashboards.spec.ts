@@ -1,16 +1,6 @@
-import contentConfig from './content.json';
-import governanceConfig from './governance.json';
-import tasksConfig from './tasks.json';
-import usersConfig from './users.json';
-import workflowsConfig from './workflows.json';
-import {
-  DashboardConfig,
-  FilterState,
-  customRange,
-  dateRangeFilter,
-  layoutCells,
-} from '../dashboard-config.model';
-import { planDashboard } from '../../engine/query-planner';
+import { DashboardConfig, FilterState, customRange, layoutCells } from '../dashboard-config.model';
+import { dateFieldFor, planDashboard } from '../../engine/query-planner';
+import { validateConfig } from '../../engine/dashboard-override.service';
 import { shippedConfig } from '../../../testing/shipped';
 
 /**
@@ -18,14 +8,26 @@ import { shippedConfig } from '../../../testing/shipped';
  *
  * A configuration file is the one thing a unit test cannot infer: adding a dashboard must not
  * require remembering these rules, so they are asserted over the whole set.
+ *
+ * The set is read off the folder rather than listed here. A hand written list is a second place
+ * to remember, and the one that gets forgotten: a dashboard added and not listed would be checked
+ * by nothing at all, and nothing would say so. `registry.spec.ts` walks the library folder for the
+ * same reason. `import.meta.glob` is a Vite feature and so is confined to the specs; the
+ * application itself fetches `assets/dashboards/<id>.json`, which `angular.json` fills with the
+ * same glob.
  */
-const DASHBOARDS: [string, DashboardConfig][] = [
-  ['content.json', shippedConfig('content.json', contentConfig)],
-  ['governance.json', shippedConfig('governance.json', governanceConfig)],
-  ['tasks.json', shippedConfig('tasks.json', tasksConfig)],
-  ['users.json', shippedConfig('users.json', usersConfig)],
-  ['workflows.json', shippedConfig('workflows.json', workflowsConfig)],
-];
+const MODULES = (
+  import.meta as unknown as {
+    glob: (pattern: string, options: { eager: true }) => Record<string, { default: unknown }>;
+  }
+).glob('./*.json', { eager: true });
+
+const SHIPPED: [string, unknown, DashboardConfig][] = Object.entries(MODULES).map(
+  ([path, module]) => {
+    const name = path.slice(path.lastIndexOf('/') + 1);
+    return [name, module.default, shippedConfig(name, module.default)];
+  },
+);
 
 /** A bounded period, which is what makes the planner emit histogram bounds at all. */
 const BOUNDED: FilterState = {
@@ -48,9 +50,30 @@ function everyAggregation(config: DashboardConfig): unknown[] {
   return found;
 }
 
-describe.each(DASHBOARDS)('%s', (_name, config) => {
+/**
+ * Anchors the discovery itself.
+ *
+ * An empty glob would make every `describe.each` below vanish, and a suite that asserts nothing
+ * is green. Naming one file rather than all five is deliberate: listing them would put back the
+ * hand written set this replaces, and adding a dashboard would once again mean editing a test.
+ */
+it('finds the dashboards the folder holds', () => {
+  expect(SHIPPED.length).toBeGreaterThan(0);
+  expect(SHIPPED.map(([name]) => name)).toContain('content.json');
+});
+
+describe.each(SHIPPED)('%s', (_name, source, config) => {
   it('compiles without a single widget error', () => {
     expect([...planDashboard(config, BOUNDED).errors]).toEqual([]);
+  });
+
+  /**
+   * Held to what an administrator's edit is held to, which is more than the planner alone checks:
+   * a mixed page whose shared filters have not said which half they constrain is refused there,
+   * and a shipped file has no business getting away with what the editor refuses.
+   */
+  it('passes the very validation an edited configuration passes', () => {
+    expect(validateConfig(JSON.stringify(source), config.id).problems).toEqual([]);
   });
 
   it('declares a widget for every layout cell, and no orphan widget', () => {
@@ -74,18 +97,33 @@ describe.each(DASHBOARDS)('%s', (_name, config) => {
    * Only a histogram on the very field the period constrains gets padded: for any other field the
    * selected days say nothing. The count is asserted rather than a mere presence, so a dashboard
    * carrying no date filter at all — Tasks — is checked to emit no bounds instead of being skipped.
+   *
+   * The field is resolved per index, not once: a mixed page bounds `dc:created` on one half and
+   * `eventDate` on the other, and counting only the primary one would call the audit histogram an
+   * unexpected bound and fail for the wrong reason.
    */
   it('states histogram bounds as numbers, never as a date string', () => {
-    const aggs = everyAggregation(config);
-    const dateField = dateRangeFilter(config)?.field;
-    const paddable = aggs.filter(
-      (node) =>
-        dateField !== undefined &&
-        (node as { date_histogram?: { field?: string } }).date_histogram?.field === dateField,
-    );
-    const bounds = aggs
-      .map((node) => (node as { extended_bounds?: Record<string, unknown> }).extended_bounds)
-      .filter((value): value is Record<string, unknown> => value !== undefined);
+    const paddable: unknown[] = [];
+    const bounds: Record<string, unknown>[] = [];
+
+    for (const request of planDashboard(config, BOUNDED).requests) {
+      const dateField = dateFieldFor(config, request.index);
+      const walk = (node: unknown): void => {
+        if (!node || typeof node !== 'object') {
+          return;
+        }
+        const histogram = (node as { date_histogram?: { field?: string } }).date_histogram;
+        if (dateField && histogram?.field === dateField) {
+          paddable.push(node);
+        }
+        const bound = (node as { extended_bounds?: Record<string, unknown> }).extended_bounds;
+        if (bound !== undefined) {
+          bounds.push(bound);
+        }
+        Object.values(node as Record<string, unknown>).forEach(walk);
+      };
+      walk(request.body.aggs);
+    }
 
     expect(bounds).toHaveLength(paddable.length);
     for (const bound of bounds) {

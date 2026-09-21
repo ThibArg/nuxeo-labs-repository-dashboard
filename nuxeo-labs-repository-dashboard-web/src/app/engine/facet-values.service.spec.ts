@@ -253,4 +253,49 @@ describe('FacetValuesService', () => {
       expect(a).toBe(b);
     });
   });
+
+  /**
+   * On a page reading two indices, a group names fields that live on one of them.
+   *
+   * Counting its candidate values on the page's index rather than on the group's own is how a
+   * perfectly populated dialog comes back empty: `ecm:primaryType` aggregated against the audit
+   * answers nothing, and the reader sees a filter with no values instead of a filter that does
+   * not apply here.
+   */
+  describe('on a page that reads two indices', () => {
+    const AUDIT_PAGE: DashboardConfig = {
+      ...CONFIG,
+      index: 'audit',
+      baseFilter: undefined,
+      filters: [
+        { type: 'dateRange', field: 'eventDate', byIndex: { nuxeo: 'dc:created' } },
+        { ...GROUP, indices: ['nuxeo'] },
+      ],
+    };
+
+    it('counts a group on the index it declares, not on the page index', async () => {
+      stub = installFetchStub([{ match: '/site/es/nuxeo/_search', json: response() }]);
+
+      await service.load(AUDIT_PAGE, termsGroups(AUDIT_PAGE)[0], state(), 'sig');
+
+      expect(stub.calls).toHaveLength(1);
+      expect(stub.calls[0].url).toContain('/site/es/nuxeo/_search');
+    });
+
+    /** And the filters it counts under are the ones that index is actually constrained by. */
+    it('bounds those values on that index own date field', async () => {
+      stub = installFetchStub([{ match: '/site/es/nuxeo/_search', json: response() }]);
+
+      await service.load(
+        AUDIT_PAGE,
+        termsGroups(AUDIT_PAGE)[0],
+        state({ range: { id: '30d', label: '', from: '2026-08-20', to: '2026-09-18' } }),
+        'sig',
+      );
+
+      const body = JSON.stringify(stub.bodies[0]);
+      expect(body).toContain('dc:created');
+      expect(body).not.toContain('eventDate');
+    });
+  });
 });

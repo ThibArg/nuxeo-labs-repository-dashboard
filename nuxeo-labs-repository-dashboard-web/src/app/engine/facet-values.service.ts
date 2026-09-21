@@ -3,6 +3,7 @@ import {
   DashboardConfig,
   FilterState,
   TermsGroupConfig,
+  indexOfGroup,
   selectionOf,
 } from '../config/dashboard-config.model';
 import { NuxeoHttpService } from '../core/nuxeo-http.service';
@@ -85,7 +86,7 @@ export class FacetValuesService {
     group: TermsGroupConfig,
     filters: FilterState,
   ): string {
-    return JSON.stringify(globalFilters(config, filters, group.id));
+    return JSON.stringify(globalFilters(config, filters, group.id, indexOfGroup(config, group)));
   }
 
   private async fetch(
@@ -106,9 +107,15 @@ export class FacetValuesService {
       ]),
     );
 
-    const response = await this.http.search(config.index, {
+    /*
+     * Counted on the index the group constrains, which is the page's own unless it says otherwise.
+     * A group declaring `indices` on a mixed page names fields that live there and nowhere else,
+     * so asking the other half for them would answer an empty dialog with no reason given.
+     */
+    const index = indexOfGroup(config, group);
+    const response = await this.http.search(index, {
       size: 0,
-      query: boolFilter(globalFilters(config, filters, group.id)),
+      query: boolFilter(globalFilters(config, filters, group.id, index)),
       aggs,
     });
 

@@ -11,6 +11,7 @@
  * clause at all: it names widgets and passes parameters.
  */
 import { FilterConfig } from './dashboard-config.model';
+import { EsIndex } from '../core/nuxeo.types';
 
 export interface CompositionCell {
   /** Id of a widget definition in the library. */
@@ -89,6 +90,15 @@ export interface DashboardComposition {
   id: string;
   label: string;
   subtitle?: string;
+  /**
+   * Index the page is built around, which is the one its filters are written against.
+   *
+   * Optional, and inferred from the widgets when a page reads a single index — which is every
+   * page that ships. It becomes required the moment a page mixes two, because otherwise the
+   * answer is "whichever widget happens to come first": moving a cell would change which index
+   * the facet value lists are counted on, and nothing on screen would say so.
+   */
+  index?: EsIndex;
   /** Interactive filters shown above the grid. Unchanged from the compiled form. */
   filters?: FilterConfig[];
   /** Widgets laid out by the twelve column grid, row by row, section by section. */

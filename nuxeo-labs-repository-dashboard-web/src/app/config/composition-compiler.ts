@@ -89,11 +89,36 @@ export function compileComposition(composition: DashboardComposition): Compilati
   }
 
   /*
-   * The first widget's index is the page's, and any widget reading another one says so. That is
-   * what lets one page mix the repository and the audit: the planner groups by index and issues
-   * one request per group, rather than the single one a dashboard used to be limited to.
+   * The page's index is the one its filters are written against, and any widget reading another
+   * one says so. That is what lets one page mix the repository and the audit: the planner groups
+   * by index and issues one request per group, rather than the single one a dashboard used to be
+   * limited to.
+   *
+   * Inferring it from the first widget is right while there is only one; past that it makes the
+   * order of the cells decide which index the facet value lists are counted on, so a mixed page
+   * has to say it out loud.
    */
-  const primary = [...state.indexByName.values()][0] as DashboardConfig['index'];
+  const present = [...new Set(state.indexByName.values())] as DashboardConfig['index'][];
+  const primary = composition.index ?? present[0];
+
+  if (!present.includes(primary)) {
+    return {
+      config: null,
+      problems: [
+        `"index" says "${primary}", which no widget on this page reads. ` +
+          `These do: ${present.join(', ')}.`,
+      ],
+    };
+  }
+  if (present.length > 1 && !composition.index) {
+    return {
+      config: null,
+      problems: [
+        `This dashboard reads ${present.join(' and ')}, so it has to name the one its filters ` +
+          'are written against. Add "index" beside "label".',
+      ],
+    };
+  }
 
   return {
     config: {

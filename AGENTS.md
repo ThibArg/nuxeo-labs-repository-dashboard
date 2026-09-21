@@ -162,6 +162,16 @@ made to render hints, and a broken `LabelStrategy` passed until it rendered buck
   the cost is not the round trips, it is that a partition read from four of them adds up by luck,
   and that `now` — which OpenSearch evaluates per request — stops being one instant across the
   tiles bounded by it.
+- **A shared clause is attributed to the indices it constrains, and a mixed page must say so.**
+  `dateRange.byIndex` was the first case; `termsGroup.indices`, `pathScope.indices` and the `index`
+  a pick carries from the chart it was clicked on are the rest, and `baseFilter` is refused outright
+  because it has no index it could belong to. Absent means every index, so the five shipped files
+  declare nothing and behave exactly as before. The reason it is *demanded* rather than derived:
+  knowing which field lives on which index would mean a copy of the Nuxeo mapping in here, wrong
+  the first time somebody adds a field — and the failure it prevents is silent, an audit request
+  carrying `ecm:path.children` coming back empty rather than unfiltered. `validateConfig` is the
+  gate, so a shipped file is held to it exactly as an administrator's edit is;
+  `index-grouping.spec.ts` is where the whole contract is written down.
 - **`AggConfig` stays a closed union, and `agg-compiler.ts` stays its only compiler.** No raw DSL
   reaches the passthrough, which would forward `script` verbatim for an administrator.
   `facet-values.service.ts` once built its own JSON and so escaped every guarantee; it no longer
@@ -199,8 +209,13 @@ made to render hints, and a broken `LabelStrategy` passed until it rendered buck
   outside them, so that spec asserts exclusivity only.
 - **Grid rows fill whole lines**: the spans of a row sum to a multiple of twelve, for every range.
 - **`shipped-dashboards.spec.ts`** re-checks every shipped file: no `.keyword`, numeric
-  `extended_bounds`, a widget per layout cell, a `cardinality` beside every top N. It asserts the
-  *count* of `extended_bounds`, since `tasks.json` deliberately has no `dateRange`.
+  `extended_bounds`, a widget per layout cell, a `cardinality` beside every top N, and the very
+  `validateConfig` an administrator's edit goes through. It asserts the *count* of
+  `extended_bounds`, since `tasks.json` deliberately has no `dateRange`, and it resolves the padded
+  field **per index** rather than once. It finds the files with `import.meta.glob` rather than
+  listing them, so adding a dashboard does not mean remembering to add it to a test — the same
+  reason `registry.spec.ts` walks the library folder. That is a Vite feature and belongs to the
+  specs only: `ng build` uses esbuild, so `registry.ts` stays hand written.
 
 ## Verifying against a real server
 

@@ -57,7 +57,9 @@ more, not writing a query.
 | `with` | Parameters the widget declares, see below |
 
 Beside the layout, a composition carries `id`, `label`, an optional `subtitle` shown under the
-title, and `filters`. A screen laid out by hand replaces `layout` with a flat `widgets` list.
+title, and `filters`. A screen laid out by hand replaces `layout` with a flat `widgets` list. A
+page whose widgets read more than one index also carries `index`, naming the one its filters are
+written against.
 
 `as` has to be unique because it is what names the aggregation inside the shared request. That
 naming — after the widget rather than after the field — is precisely what lets two widgets reading
@@ -494,6 +496,11 @@ Filters are declared alongside the widgets and rendered above the grid.
 ]
 ```
 
+Each of them also accepts the indices it constrains — `byIndex` for the period, `indices` for the
+other two. Absent means every index, which is what the five shipped files rely on; on a page
+reading two, saying nothing is refused rather than rendered. See
+[A shared filter is shared only with the half that can answer it](#a-shared-filter-is-shared-only-with-the-half-that-can-answer-it).
+
 ### Members union, groups intersect
 
 Document type and facet are two alternative answers to the same question — *what kind of document
@@ -911,6 +918,45 @@ audit, so the date filter names the second one per index.
 ```jsonc
 { "type": "dateRange", "field": "dc:created", "byIndex": { "audit": "eventDate" } }
 ```
+
+#### A shared filter is shared only with the half that can answer it
+
+The date filter was the first case of a rule that now covers all of them. `ecm:path.children` and
+`ecm:primaryType` live on the repository and nowhere else, so an audit request carrying them does
+not come back unfiltered — it comes back **empty**. The widget renders, the figure reads zero, and
+nothing distinguishes that from a quiet week.
+
+So every shared clause names the indices it constrains, and a page reading two of them is refused
+until each one has:
+
+```jsonc
+"filters": [
+  { "type": "dateRange", "field": "dc:created", "byIndex": { "audit": "eventDate" } },
+  { "type": "termsGroup", "id": "kind", "label": "Document kinds", "indices": ["nuxeo"], "members": [ /* … */ ] },
+  { "type": "pathScope", "indices": ["nuxeo"] }
+]
+```
+
+| Where | Key | Absent means |
+| --- | --- | --- |
+| `dateRange` | `byIndex` | the same field on every index, which is right for one and wrong for two |
+| `termsGroup` | `indices` | every index |
+| `pathScope` | `indices` | every index |
+| A pick | — | it carries the index of the chart it was clicked on |
+| `baseFilter` | — | refused outright on a mixed page: it has no index it could belong to |
+
+**Nothing is guessed.** Deriving which field lives on which index would mean a copy of the Nuxeo
+mapping inside this application, wrong the first time somebody adds a field. `validateConfig` names
+what is missing instead, and it runs on a shipped file exactly as it runs on an administrator's
+edit.
+
+A mixed page also has to name the index its filters are written against, `index` beside `label` in
+a composition. Inferring it from the first widget is right while there is only one; past that the
+order of the cells would decide which index the facet value lists are counted on, and moving a cell
+would empty a dialog with nothing on screen to explain it.
+
+None of this costs a single-index dashboard anything: every declaration is absent from the five
+files that ship, and every clause applies exactly as before.
 
 ### Labels
 

@@ -16,10 +16,13 @@ import {
   SELECT_ALL,
   TermsGroupConfig,
   TermsMemberConfig,
+  dashboardIndices,
   dateRangeFilter,
+  pathScopeFilter,
   termsGroups,
 } from '../config/dashboard-config.model';
 import { principalForms } from '../core/principal';
+import { EsIndex } from '../core/nuxeo.types';
 import { EsClause } from './es-query';
 
 export interface ActiveMember {
@@ -90,11 +93,18 @@ export function compileTermsGroup(group: TermsGroupConfig, state: FilterState): 
  * One clause per field, so two picks on the same field are alternatives rather than an
  * impossibility: nothing is at once a `File` and a `Note`, and a reader clicking both means "either
  * of these". Across fields the clauses stack, which is the ordinary reading of two filters.
+ *
+ * A pick carries the index of the chart it came from, and constrains that index alone. Clicking a
+ * document type on a repository chart says nothing an audit entry could answer, and sending it
+ * there would not widen the audit half but empty it.
  */
-export function compilePicks(picks: BucketPick[]): EsClause[] {
+export function compilePicks(picks: BucketPick[], index?: EsIndex): EsClause[] {
   const byField = new Map<string, { labels: LabelStrategy | undefined; values: string[] }>();
 
   for (const pick of picks) {
+    if (index !== undefined && pick.index !== undefined && pick.index !== index) {
+      continue;
+    }
     const entry = byField.get(pick.field) ?? { labels: pick.labels, values: [] };
     entry.values.push(pick.value);
     byField.set(pick.field, entry);
@@ -154,25 +164,58 @@ function listPhrase(values: string[], joiner: string): string {
  */
 export function describeFilters(config: DashboardConfig, state: FilterState): string[] {
   const lines: string[] = [];
+  const pageIndices = dashboardIndices(config);
 
   const range = dateRangeFilter(config);
   if (range) {
-    lines.push(`Period: ${state.range.label} on ${range.field}`);
+    /*
+     * Every field the period actually constrains, not just the primary one. A mixed page bounds
+     * `dc:created` on one half and `eventDate` on the other, and an exported sheet claiming
+     * `dc:created` over an audit chart describes a filter that was never applied to it. An index
+     * mapped to the empty string contributes nothing: it is unconstrained, and naming a field for
+     * it would be naming one nothing was filtered on.
+     */
+    const fields = [
+      ...new Set(pageIndices.map((index) => range.byIndex?.[index] ?? range.field)),
+    ].filter((field) => !!field);
+    if (fields.length) {
+      lines.push(`Period: ${state.range.label} on ${fields.join(' and ')}`);
+    }
   }
+
   if (state.path) {
-    lines.push(`Location: ${state.path} and everything inside it`);
+    const scope = pathScopeFilter(config);
+    lines.push(
+      `Location: ${state.path} and everything inside it${only(scope?.indices, pageIndices)}`,
+    );
   }
 
   for (const group of termsGroups(config)) {
     const active = activeMembers(group, state.groups[group.id] ?? {});
+    const suffix = only(group.indices, pageIndices);
     for (const entry of active) {
-      lines.push(`${group.label} — ${entry.member.label}: ${entry.values.join(', ')}`);
+      lines.push(`${group.label} — ${entry.member.label}: ${entry.values.join(', ')}${suffix}`);
     }
   }
 
   for (const pick of state.picks) {
-    lines.push(`${pick.field}: ${pick.label}`);
+    const suffix = only(pick.index ? [pick.index] : undefined, pageIndices);
+    lines.push(`${pick.field}: ${pick.label}${suffix}`);
   }
 
   return lines;
+}
+
+/**
+ * Names the half a constraint applies to, and only where there is more than one half.
+ *
+ * A reader of an exported sheet is entitled to know that a document type narrowed the repository
+ * figures and left the audit ones alone. On the single-index pages that ship there is nothing to
+ * say, so nothing is said.
+ */
+function only(indices: EsIndex[] | undefined, pageIndices: EsIndex[]): string {
+  if (pageIndices.length < 2 || !indices?.length || indices.length >= pageIndices.length) {
+    return '';
+  }
+  return ` (${indices.join(', ')} only)`;
 }

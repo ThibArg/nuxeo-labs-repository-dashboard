@@ -261,9 +261,10 @@ export class DashboardSession {
    *
    * A value whose field a group declares is routed into that group rather than kept apart, so the
    * two ways of expressing one constraint — this click and the facet dialog — never disagree on
-   * screen. Everything else becomes a pick.
+   * screen. Everything else becomes a pick, stamped with the index of the chart it came from: the
+   * field belongs to that index, and sending it to the other half of a mixed page would empty it.
    */
-  pickBucket(click: BucketClick): void {
+  pickBucket(click: BucketClick, widgetId?: string): void {
     const config = this.config();
     if (!config) {
       return;
@@ -273,7 +274,8 @@ export class DashboardSession {
     if (routed) {
       this.toggleMemberValue(routed.group, routed.member, click.value);
     } else {
-      this.togglePick(click);
+      const index = widgetId ? (config.widgets[widgetId]?.index ?? config.index) : undefined;
+      this.togglePick({ ...click, ...(index ? { index } : {}) });
     }
     void this.runCurrent();
   }
@@ -371,7 +373,7 @@ export class DashboardSession {
     this.storage.write(this.dashboardId(), group, selection);
   }
 
-  private togglePick(click: BucketClick): void {
+  private togglePick(click: BucketPick): void {
     this.filters.update((state) => {
       const without = state.picks.filter(
         (pick) => pick.field !== click.field || pick.value !== click.value,

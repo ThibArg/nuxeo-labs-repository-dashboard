@@ -13,6 +13,7 @@ import {
   DashboardConfig,
   FilterState,
   WidgetConfig,
+  appliesTo,
   dateRangeFilter,
   isChartWidget,
   isKpiWidget,
@@ -108,9 +109,17 @@ export function dateFieldFor(config: DashboardConfig, index: EsIndex): string | 
 /**
  * Clauses shared by every widget of the dashboard.
  *
+ * Every clause is attributed to the indices it constrains, because a shared filter is only shared
+ * among the widgets that can answer it. `ecm:path.children` means nothing to an audit entry, and a
+ * `terms` on `ecm:primaryType` matches none of them: forwarded anyway, they do not leave the audit
+ * half unfiltered, they empty it. On a page reading two indices `validateConfig` refuses to leave
+ * any of this implicit; on the single-index pages that ship, every declaration is absent and every
+ * clause applies, exactly as before.
+ *
  * @param skipGroupId group left out of the result, used when computing the values of that very
  *                    group so that its own lists stay stable while the user edits them.
- * @param index       index the clauses are built for, which decides the date field.
+ * @param index       index the clauses are built for, which decides the date field and which of
+ *                    the other filters are in force.
  */
 export function globalFilters(
   config: DashboardConfig,
@@ -134,7 +143,7 @@ export function globalFilters(
   }
 
   for (const group of termsGroups(config)) {
-    if (group.id === skipGroupId) {
+    if (group.id === skipGroupId || !appliesTo(group.indices, index)) {
       continue;
     }
     const clause = compileTermsGroup(group, filters);
@@ -149,7 +158,8 @@ export function globalFilters(
    * the path of the document they were cut from — harmless where the dashboard already excludes
    * them in its `baseFilter`, and worth knowing where it does not.
    */
-  if (pathScopeFilter(config) && filters.path) {
+  const scope = pathScopeFilter(config);
+  if (scope && filters.path && appliesTo(scope.indices, index)) {
     clauses.push({ term: { 'ecm:path.children': filters.path } });
   }
 
@@ -158,7 +168,7 @@ export function globalFilters(
    * declares, so no dialog shows a list this could collapse — and a reader who has drilled into a
    * lifecycle state expects the type list beside it to describe what is left.
    */
-  clauses.push(...compilePicks(filters.picks));
+  clauses.push(...compilePicks(filters.picks, index));
 
   return clauses;
 }
