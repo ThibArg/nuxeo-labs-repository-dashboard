@@ -48,6 +48,44 @@ npm start                                     # :4200, proxying /nuxeo to the se
 Commits are single-line imperative subjects of about sixty characters with no prefix, stating the
 behaviour that changed, followed by a body arguing the reasoning and citing the evidence. Match it.
 
+## The dialect
+
+Nothing rejects an idiom this codebase does not use. There is no linter, and `npm run build` only
+catches what fails to compile — after a full pass, and only if it is run. The application is
+**Angular 22: zoneless, standalone, signal based**, which is about two years old, so the abundant
+and confident answer is Angular 15 and it does not belong here. Every line below is a count taken
+over `src/`, not a preference.
+
+| Write | Never | Measured |
+| --- | --- | --- |
+| `input()`, `output()` | `@Input()`, `@Output()` | 91 and 25, against 0 |
+| `@if`, `@for`, `@switch` | `*ngIf`, `*ngFor`, `ngClass`, `<ng-container>` | 43, 21 and 1, against 0 |
+| `signal`, `computed`, `effect` | RxJS, `Observable`, the `async` pipe | 35, 51 and 7, against 0 imports of `rxjs` |
+| `imports:` on the component | `NgModule`, `CommonModule` | 27 standalone declarations, against 0 |
+| `inject()` | injection through constructor parameters | 37, against 0 |
+| `NuxeoHttpService` | `HttpClient` | plain `fetch`, against 0 |
+| `template:` inline, styles in `src/styles.css` | `templateUrl`, `styleUrl` | 27, against 0 |
+| a function from `core/format.ts` | a pipe | 0 pipes |
+| `(input)`, `(change)`, native `<dialog>` | `ngModel`, `FormsModule` | 0 imports of `@angular/forms` |
+| `ChangeDetectionStrategy.OnPush` | the default | 26 of the 27; the odd one is a test host |
+
+`rxjs` sits in `package.json` because `@angular/core`, `@angular/common` and `@angular/router` each
+declare it a peer dependency. It is imported nowhere, and removing it would break the install rather
+than shrink anything. `@angular/forms` was in the same list and was not load bearing at all: nothing
+declared it a peer dependency, so it is gone.
+
+**There is no lifecycle hook anywhere**, and adding the first one is almost always the wrong move:
+what went into `ngOnInit` belongs in a field initialiser, in a `computed`, or in the constructor.
+`effect` is deliberate and rare — six in the application, each load bearing: three synchronise a
+native `<dialog>` with a signal, one debounces principal suggestions, one reopens the session when
+the route names another dashboard, one registers a chart's snapshot for the HTML export. The
+seventh is `testing/chart-widget.stub.ts` mirroring the sixth. Reaching for an eighth usually means
+the value wanted was a `computed`.
+
+Eleven services are `@Injectable({ providedIn: 'root' })`. The two that are not — `DashboardRunner`
+and `DashboardSession` — are provided by the page, which is what stops two dashboards from sharing
+one state; a component placing widgets without declaring them fails at construction.
+
 ## How it is wired
 
 - **No Java at all.** Five resources under `nuxeo-labs-repository-dashboard-web/nuxeo/` deploy the
