@@ -282,6 +282,9 @@ about the choices behind them.
 | The container picker reads the index, not `@children` | `@children` returns every child whatever its type, so finding four folders under ten thousand files means paginating through the files. `ecm:mixinType: Folderish` asks the question directly, and the dashboard already is a search client |
 | The page export clones the live DOM | Re-rendering each widget would be a second description of how a KPI, a list and a table look, drifting the moment a type is added. Only the canvas cannot be cloned, so only the charts are swapped for an image |
 | No whole page PNG | The browser cannot rasterise DOM, and 27 of the 54 shipped widgets are KPI tiles rather than charts, so `getDataURL` reaches half of nothing. It needs a screenshotting dependency, and an approximate one |
+| The print sheet names `[echarts]` and puts its canvas back in the flow | zrender positions its canvas absolutely, so the shell's `height: auto` reset leaves the card with nothing in its flow: it collapses to its title while the drawing paints its on-screen width over the neighbouring column. Measured on a real tirage: canvases of 679 and 1414 px in columns of 461, and rows advancing 140 px for a chart 399 px tall. Do not fold the exception back into the reset |
+| The span is written twice on a grid cell | A custom property cannot be matched by a selector, and the print sheet has to give a full width widget both of its two paper columns. Halving a trend over three hundred days makes a band of unreadable dates |
+| The printed page states its filters instead of showing the bar | Seven period buttons and two empty `dd/mm/yyyy` fields describe an application and never say which period is in force. `DashboardSession.filterContext` feeds the sheet and the standalone file from one place, so the two cannot drift, and `<nxd-dashboard-filters>` carries both the bar and the block replacing it |
 | The configuration editor is a text area, not a form | The grammar is already a closed union in the model; a form would be a second description of it, drifting the first time a widget type is added. Validation runs the real planner, so editor and dashboard cannot disagree |
 | An override that stops compiling is ignored, not rendered | A configuration can break without being touched, a field having gone away. Falling back to what ships is still correct; a column of errors with no way out is not |
 | A path scope is not persisted either | It is the filter a reader is most likely to forget having set, and the one whose figures look perfectly ordinary while describing a corner of the repository |
@@ -339,7 +342,7 @@ Answer the user in French, using *vous*.
 
 ## Where things stand
 
-Six live screens — Content, Users, Workflows, Tasks, Governance, Diagnostics. Build green, 771
+Six live screens — Content, Users, Workflows, Tasks, Governance, Diagnostics. Build green, 773
 tests over 45 files. `UpcomingPageComponent` is gone with the last placeholder; the requirement
 notice it used to carry is now tested where it lives, in `requirement-notice.component.spec.ts`.
 

@@ -229,15 +229,24 @@ body {
   .nxd-date-input:disabled {
     opacity: 0.5;
   }
+
+  /*
+   * The filter bar in words, for paper only. On screen the buttons already say what is in force,
+   * and say it where it is edited.
+   */
+  .nxd-print-context {
+    display: none;
+  }
 }
 
 /*
  * Printing, which is also how a reader saves a PDF to pass around.
  *
  * Everything that acts on a page is dropped: a paper copy carrying a Refresh button and a filter
- * dialog describes an application rather than a set of figures. The filter bar itself goes with
- * them, which is why an exported HTML file writes the active filters out as text instead — on
- * paper the browser's own header carries the URL, and the reader is the one who set them.
+ * dialog describes an application rather than a set of figures. The filter bar goes with them, and
+ * the constraints it was showing are written out as text instead — the same phrases the standalone
+ * HTML file carries, for the same reason: a sheet showing 5,941 documents says nothing unless it
+ * also says which 5,941.
  */
 @media print {
   nxd-sidebar,
@@ -245,10 +254,31 @@ body {
   nxd-page-header details,
   nxd-config-editor,
   nxd-facet-group-dialog,
-  nxd-path-scope-picker,
-  nxd-filter-chips button,
+  .nxd-filter-bar,
   .nxd-icon-button {
     display: none !important;
+  }
+
+  .nxd-print-context {
+    display: block;
+    margin: 0 0 1.25rem;
+    padding-left: 1.1rem;
+    font-size: 0.75rem;
+    color: var(--color-ink-muted);
+  }
+
+  /*
+   * Backgrounds carry meaning here: the severity of a tile, the bar of a ranked list. A browser
+   * drops them by default. The page itself goes back to white, a full sheet of canvas grey saying
+   * nothing that the ink does not.
+   */
+  html {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  body {
+    background: #fff !important;
   }
 
   /* The shell scrolls its own pane on screen, which clips everything past the first page. */
@@ -259,6 +289,30 @@ body {
     overflow: visible !important;
     height: auto !important;
     max-height: none !important;
+  }
+
+  /*
+   * zrender sizes its canvas in screen pixels and positions it absolutely, so the rule above
+   * leaves the card with nothing in its flow: it collapses to its title while the drawing paints
+   * the width it had on screen over the neighbouring column. Letting the canvas back into the
+   * flow, at the width of its own card, is what gives the card its height back and keeps the
+   * drawing's proportions. Do not fold these three rules into the reset above.
+   */
+  [echarts],
+  [echarts] > div {
+    width: auto !important;
+    height: auto !important;
+  }
+
+  [echarts] canvas {
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+  }
+
+  /* The hover layer is a second canvas over the first; in the flow it would print underneath it. */
+  [echarts] canvas ~ canvas {
+    display: none !important;
   }
 
   .nxd-card {
@@ -278,5 +332,14 @@ body {
 
   .nxd-grid > * {
     grid-column: span 1 !important;
+  }
+
+  /*
+   * A widget given the whole width keeps it. Halving a trend over three hundred days makes a
+   * band of unreadable dates, and the chart is a bitmap taken at screen width, so the reduction
+   * falls on the labels rather than on the layout.
+   */
+  .nxd-grid > [data-span='12'] {
+    grid-column: span 2 !important;
   }
 }

@@ -160,8 +160,8 @@ anything its author writes.
 
       @if (tab() === 'creation') {
         <div class="nxd-grid">
-          <nxd-widget for="createdTrend" [style.--nxd-span]="8" />
-          <nxd-widget for="topContributors" [style.--nxd-span]="4" />
+          <nxd-widget for="createdTrend" [style.--nxd-span]="8" [attr.data-span]="8" />
+          <nxd-widget for="topContributors" [style.--nxd-span]="4" [attr.data-span]="4" />
         </div>
       } @else {
         <nxd-widget for="modifiedTrend" />
@@ -200,6 +200,10 @@ Three consequences worth knowing before building tabs:
 - **A `<nxd-widget>` naming something the configuration no longer declares says so** rather than
   rendering nothing. An administrator who removed it from the composition has no other way of
   finding where the template still asks for it.
+- **The span is written twice**, as a custom property for the screen and as `data-span` for paper:
+  a selector cannot match a custom property, and the print sheet needs one to give a full width
+  widget both of its two paper columns. The grid does it; a bespoke page placing widgets by hand
+  has to do it too.
 
 ### The compiled form
 
@@ -565,9 +569,25 @@ read beside is not in the export.
 
 **Print or save as PDF** relies on a print stylesheet instead: navigation, controls and dialogs are
 dropped, cards are kept off page boundaries, and the twelve column grid becomes two so that it
-fits a sheet. Nothing about a whole page PNG: the browser has no way to rasterise DOM, and half
-of these widgets are not charts — 27 of the 54 shipped are KPI tiles. It would need a
-screenshotting dependency, and an approximate one.
+fits a sheet. A widget given the whole width keeps it, since halving a trend over three hundred
+days makes a band of unreadable dates.
+
+Three things that sheet has to say out loud, because a browser would otherwise get them wrong:
+
+- **The filter bar becomes words.** Seven period buttons and two empty `dd/mm/yyyy` fields
+  describe an application and never say which period is in force, so the bar is dropped and the
+  constraints are written out — the same phrases the standalone file carries, from the same place,
+  so the two cannot drift.
+- **Backgrounds are printed.** The severity of a tile and the bar of a ranked list carry meaning,
+  and a browser drops them by default. The canvas grey of the page itself goes back to white.
+- **Charts are put back in the flow.** zrender sizes its canvas in screen pixels and positions it
+  absolutely, so the reset that unclips the shell leaves a card with nothing in its flow: it
+  collapses to its title while the drawing paints its on-screen width over the neighbouring
+  column.
+
+Nothing about a whole page PNG: the browser has no way to rasterise DOM, and half of these widgets
+are not charts — 27 of the 54 shipped are KPI tiles. It would need a screenshotting dependency,
+and an approximate one.
 
 ### Persistence
 

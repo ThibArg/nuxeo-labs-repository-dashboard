@@ -33,7 +33,7 @@ import { PathScopePickerComponent } from './path-scope-picker.component';
         describe. Scrolling down to a chart used to lose that context entirely.
       -->
       <div
-        class="sticky top-0 z-20 -mx-8 mb-5 flex flex-wrap items-center gap-3 border-b border-subtle bg-canvas/95 px-8 py-3 backdrop-blur"
+        class="nxd-filter-bar sticky top-0 z-20 -mx-8 mb-5 flex flex-wrap items-center gap-3 border-b border-subtle bg-canvas/95 px-8 py-3 backdrop-blur"
       >
         @if (session.dateFilter(); as range) {
           <nxd-date-range-picker
@@ -79,6 +79,22 @@ import { PathScopePickerComponent } from './path-scope-picker.component';
           (cleared)="session.clearFilters()"
         />
       </div>
+
+      <!--
+        The bar itself is dropped on paper: a row of seven period buttons and two empty date fields
+        describes an application rather than its figures, and never says which period is in force.
+        What a reader needs out of context is the constraints, in words.
+
+        It lives here rather than on the page because this component owns the bar: a bespoke screen
+        dropping this tag in would otherwise get the bar without the thing that replaces it.
+      -->
+      @if (session.filterContext().length) {
+        <ul class="nxd-print-context">
+          @for (line of session.filterContext(); track line) {
+            <li>{{ line }}</li>
+          }
+        </ul>
+      }
 
       @for (group of session.groups(); track group.id) {
         <nxd-facet-group-dialog

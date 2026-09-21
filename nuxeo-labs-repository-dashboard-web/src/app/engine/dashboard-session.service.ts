@@ -109,6 +109,18 @@ export class DashboardSession {
       this.filters().picks.length > 0,
   );
 
+  /**
+   * What the figures were filtered by, one phrase per constraint.
+   *
+   * Read in two places: by the standalone HTML file, and by the page itself when it is printed,
+   * the filter bar being dropped on paper. The two must not drift — a reader has no way of telling
+   * which of them describes the other — so both take it from here.
+   */
+  readonly filterContext = computed(() => {
+    const config = this.config();
+    return config ? describeFilters(config, this.filters()) : [];
+  });
+
   /** Anything at all narrowing the figures, which is what makes "Clear filters" worth offering. */
   readonly anyConstrained = computed(
     () =>
@@ -230,7 +242,7 @@ export class DashboardSession {
     const html = buildDashboardHtml(this.exportRoot, {
       title: config.label,
       subtitle: config.subtitle ?? null,
-      context: describeFilters(config, this.filters()),
+      context: this.filterContext(),
       images: this.snapshots.capture(),
       css: await this.appStyles.load(),
       generatedAt: new Date(),

@@ -125,6 +125,30 @@ describe('DashboardGridComponent', () => {
     });
   });
 
+  /**
+   * The print sheet matches `.nxd-grid > [data-span='12']` to give a full width widget both of its
+   * paper columns, and a selector cannot match a custom property. So the span is written twice,
+   * and this is what keeps the second copy from being tidied away as a duplicate.
+   */
+  describe('the span the print sheet reads', () => {
+    it('sits on the cell as an attribute, beside the custom property', () => {
+      const fixture = mount(config(), ALL);
+      const cells = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.nxd-grid > *')];
+
+      expect(cells.map((cell) => cell.getAttribute('data-span'))).toEqual(['12', '12']);
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelectorAll(".nxd-grid > [data-span='12']"),
+      ).toHaveLength(2);
+    });
+
+    it('follows spanByRange, so a widget halved for a short period prints halved', () => {
+      const fixture = mount(config(), LAST_30);
+      const cells = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.nxd-grid > *')];
+
+      expect(cells.map((cell) => cell.getAttribute('data-span'))).toEqual(['6', '6']);
+    });
+  });
+
   describe('errors', () => {
     it('prefers a per widget error over the dashboard wide one', () => {
       const fixture = mount(config(), ALL);

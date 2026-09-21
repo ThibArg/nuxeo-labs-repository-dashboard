@@ -26,7 +26,16 @@ const GRID_COLUMNS = 12;
       @for (row of rows(); track $index) {
         <div class="nxd-grid">
           @for (cell of row; track cell.id) {
-            <nxd-widget [for]="cell.id" [style.--nxd-span]="cell.span" />
+            <!--
+              The span is written twice on purpose. A custom property cannot be matched by a
+              selector, and the print sheet has to single out a full width widget to keep both of
+              its two paper columns.
+            -->
+            <nxd-widget
+              [for]="cell.id"
+              [style.--nxd-span]="cell.span"
+              [attr.data-span]="cell.span"
+            />
           }
         </div>
       }
