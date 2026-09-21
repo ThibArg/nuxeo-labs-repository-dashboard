@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DashboardConfig, FilterState } from '../config/dashboard-config.model';
+import { compileComposition } from '../config/composition-compiler';
 import { planDashboard } from './query-planner';
 
 /**
@@ -102,5 +103,72 @@ describe('planning a dashboard that reads two indices', () => {
     const audit = plan.requests.find((request) => request.index === 'audit')!;
 
     expect(JSON.stringify(audit.body.query)).not.toContain('dc:created');
+  });
+});
+
+/**
+ * The same thing, out of the library rather than out of a fixture.
+ *
+ * Until Users and Workflows were migrated the grouping was exercised by the synthetic
+ * configuration above and by nothing else: no shipped widget read the audit, so a page mixing the
+ * two indices could be written in a spec and nowhere near a screen. These are the real
+ * definitions, and this is the composition somebody would actually write.
+ */
+describe('a composition mixing the repository and the audit', () => {
+  const MIXED = {
+    id: 'activity',
+    label: 'Activity',
+    filters: [{ type: 'dateRange' as const, field: 'dc:created', byIndex: { audit: 'eventDate' } }],
+    layout: [
+      {
+        cells: [
+          { use: 'documents-created', as: 'created' },
+          { use: 'distinct-users-per-day', as: 'people' },
+          { use: 'documents-by-type', as: 'byType' },
+        ],
+      },
+    ],
+  };
+
+  it('compiles, and marks the widget that reads another index', () => {
+    const { config, problems } = compileComposition(MIXED);
+
+    expect(problems).toEqual([]);
+    expect(config!.index).toBe('nuxeo');
+    expect(config!.widgets['people'].index).toBe('audit');
+    expect(config!.widgets['created'].index).toBeUndefined();
+  });
+
+  it('costs one request per index, not one per widget', () => {
+    const { config } = compileComposition(MIXED);
+    const plan = planDashboard(config!, BOUNDED);
+
+    expect(plan.requests).toHaveLength(2);
+    expect(plan.requests.map((request) => request.index)).toEqual(['nuxeo', 'audit']);
+    expect(Object.keys(plan.requests[0].body.aggs ?? {}).sort()).toEqual(['byType', 'created']);
+    expect(Object.keys(plan.requests[1].body.aggs ?? {})).toEqual(['people']);
+  });
+
+  it('constrains each half on the date field its own index carries', () => {
+    const { config } = compileComposition(MIXED);
+    const [repository, audit] = planDashboard(config!, BOUNDED).requests;
+
+    expect(JSON.stringify(repository.body.query)).toContain('dc:created');
+    expect(JSON.stringify(audit.body.query)).toContain('eventDate');
+    expect(JSON.stringify(audit.body.query)).not.toContain('dc:created');
+  });
+
+  /**
+   * The repository half keeps excluding versions and proxies while the audit half does not, each
+   * widget carrying the population it describes. A shared base filter could not have done this:
+   * `ecm:isVersion` means nothing to an audit entry.
+   */
+  it('lets each half keep a population the other could not express', () => {
+    const { config } = compileComposition(MIXED);
+    const [repository, audit] = planDashboard(config!, BOUNDED).requests;
+
+    expect(JSON.stringify(repository.body.aggs)).toContain('ecm:isVersion');
+    expect(JSON.stringify(audit.body.aggs)).toContain('loginSuccess');
+    expect(JSON.stringify(audit.body.aggs)).not.toContain('ecm:isVersion');
   });
 });
