@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import tasksConfig from '../config/dashboards/tasks.json';
-import { DashboardConfig, defaultFilterState, resolveSpan } from '../config/dashboard-config.model';
+import { defaultFilterState, resolveSpan } from '../config/dashboard-config.model';
 import { planDashboard } from '../engine/query-planner';
 import { DashboardPageComponent } from './dashboard-page.component';
 import { provideDashboardCharts } from '../widgets/echarts.setup';
@@ -16,8 +16,9 @@ import {
   isHitsRequest,
 } from '../../testing/fetch-stub';
 import { settle } from '../../testing/settle';
+import { shippedConfig } from '../../testing/shipped';
 
-const TASKS = tasksConfig as DashboardConfig;
+const TASKS = shippedConfig('tasks.json', tasksConfig);
 
 /** Every widget is scoped to open tasks, so each aggregation sits under a wrapper. */
 function wrapped(docCount: number, buckets: unknown[]) {
@@ -121,24 +122,21 @@ describe('tasks.json', () => {
   });
 
   /*
-   * A workflow model may declare its own task document type, so the facet is the only reliable
-   * way to catch every task. `RoutingTask` alone would silently miss them.
+   * That the population is the Task facet in state `opened` is now a property of the library,
+   * held in `library/tasks/populations.spec.ts`. What the page still owes the reader is the
+   * reason: a nightly job deletes finished workflows and every task they carry, so a count of
+   * completed tasks would read ten today and zero tomorrow.
    */
-  it('selects tasks by facet rather than by document type', () => {
-    expect(TASKS.baseFilter).toEqual([{ term: { 'ecm:mixinType': 'Task' } }]);
-    expect(JSON.stringify(TASKS)).not.toContain('RoutingTask');
-  });
-
-  /*
-   * A nightly job deletes finished workflows and every task they carry, so a count of completed
-   * tasks would read ten today and zero tomorrow. The audit keeps that history; the repository
-   * does not, and the dashboard must not pretend otherwise.
-   */
-  it('describes open tasks only, and says why on screen', () => {
-    expect(TASKS.defaultScope).toBe('open');
-    expect(Object.keys(TASKS.scopes!)).not.toContain('ended');
+  it('says on screen why it counts open tasks only', () => {
     expect(TASKS.subtitle).toContain('nightly');
     expect(TASKS.subtitle).toContain('nuxeo.routing.disable.cleanup.workflow.instances');
+  });
+
+  it('narrows every widget to the tasks, and never to one task document type', () => {
+    const plan = planDashboard(TASKS, defaultFilterState(TASKS));
+
+    expect(JSON.stringify(plan.requests)).toContain('"ecm:mixinType":"Task"');
+    expect(JSON.stringify(plan.requests)).not.toContain('RoutingTask');
   });
 
   /*

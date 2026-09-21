@@ -2,7 +2,6 @@
   "id": "tasks",
   "label": "Tasks Dashboard",
   "subtitle": "Open tasks only. A nightly job deletes finished workflows and every task they carry, so completed tasks are not counted here — the Workflows dashboard reads them from the audit, which keeps them. Set nuxeo.routing.disable.cleanup.workflow.instances=true to retain them in the repository.",
-  "index": "nuxeo",
   "filters": [
     {
       "type": "termsGroup",
@@ -22,216 +21,29 @@
       ]
     }
   ],
-  "baseFilter": [
-    {
-      "term": {
-        "ecm:mixinType": "Task"
-      }
-    }
-  ],
-  "defaultScope": "open",
-  "scopes": {
-    "all": [],
-    "open": [
-      {
-        "term": {
-          "ecm:currentLifeCycleState": "opened"
-        }
-      }
-    ]
-  },
   "layout": [
     {
-      "cells": ["openTasks", "overdue", "dueThisWeek", "assignees"]
+      "cells": [
+        { "use": "open-tasks", "as": "openTasks", "span": 3 },
+        { "use": "overdue-tasks", "as": "overdue", "span": 3 },
+        { "use": "tasks-due-this-week", "as": "dueThisWeek", "span": 3 },
+        { "use": "distinct-assignees", "as": "assignees", "span": 3 }
+      ]
     },
     {
-      "cells": ["lateness", "byAssignee"]
+      "cells": [
+        { "use": "task-lateness", "as": "lateness", "span": 6 },
+        { "use": "tasks-by-assignee", "as": "byAssignee", "span": 6 }
+      ]
     },
     {
-      "cells": ["overdueByAssignee", "byTaskType"]
+      "cells": [
+        { "use": "overdue-tasks-by-assignee", "as": "overdueByAssignee", "span": 6 },
+        { "use": "tasks-by-name", "as": "byTaskType", "span": 6 }
+      ]
     },
     {
-      "cells": ["overdueTable"]
+      "cells": [{ "use": "overdue-tasks-table", "as": "overdueTable", "span": 12 }]
     }
-  ],
-  "widgets": {
-    "openTasks": {
-      "type": "kpi",
-      "label": "Open Tasks",
-      "hint": "Waiting on somebody right now",
-      "span": 3
-    },
-    "overdue": {
-      "type": "kpi",
-      "label": "Overdue",
-      "hint": "Past their due date",
-      "severity": "danger",
-      "span": 3,
-      "filter": [
-        {
-          "range": {
-            "nt:dueDate": {
-              "lt": "now"
-            }
-          }
-        }
-      ]
-    },
-    "dueThisWeek": {
-      "type": "kpi",
-      "label": "Due Within 7 Days",
-      "hint": "Not late yet",
-      "severity": "warning",
-      "span": 3,
-      "filter": [
-        {
-          "range": {
-            "nt:dueDate": {
-              "gte": "now",
-              "lte": "now+7d"
-            }
-          }
-        }
-      ]
-    },
-    "assignees": {
-      "type": "kpi",
-      "label": "Assignees",
-      "hint": "People and groups with work waiting",
-      "span": 3,
-      "metric": {
-        "cardinality": "nt:actors"
-      }
-    },
-    "lateness": {
-      "type": "bar",
-      "label": "How Late They Are",
-      "hint": "Open tasks, by how far past their due date",
-      "span": 6,
-      "agg": {
-        "date_range": {
-          "field": "nt:dueDate",
-          "ranges": [
-            {
-              "key": "over 30 days late",
-              "to": "now-30d"
-            },
-            {
-              "key": "8 to 30 days late",
-              "from": "now-30d",
-              "to": "now-7d"
-            },
-            {
-              "key": "up to 7 days late",
-              "from": "now-7d",
-              "to": "now"
-            },
-            {
-              "key": "due within 7 days",
-              "from": "now",
-              "to": "now+7d"
-            },
-            {
-              "key": "due later",
-              "from": "now+7d"
-            }
-          ]
-        }
-      }
-    },
-    "byAssignee": {
-      "type": "hbar",
-      "label": "Open Tasks by Assignee",
-      "hint": "A task assigned to a group counts once, for that group",
-      "span": 6,
-      "labels": "user",
-      "agg": {
-        "terms": {
-          "field": "nt:actors",
-          "size": 10
-        }
-      }
-    },
-    "overdueByAssignee": {
-      "type": "ranked-list",
-      "label": "Overdue by Assignee",
-      "hint": "Who is holding up the most work",
-      "span": 6,
-      "labels": "user",
-      "filter": [
-        {
-          "range": {
-            "nt:dueDate": {
-              "lt": "now"
-            }
-          }
-        }
-      ],
-      "agg": {
-        "terms": {
-          "field": "nt:actors",
-          "size": 10
-        }
-      }
-    },
-    "byTaskType": {
-      "type": "donut",
-      "label": "By Task Type",
-      "hint": "Which step of a workflow the work is waiting at",
-      "span": 6,
-      "labels": "message",
-      "agg": {
-        "terms": {
-          "field": "nt:name",
-          "size": 10
-        }
-      }
-    },
-    "overdueTable": {
-      "type": "table",
-      "label": "Overdue Tasks",
-      "hint": "Oldest first",
-      "span": 12,
-      "size": 20,
-      "filter": [
-        {
-          "range": {
-            "nt:dueDate": {
-              "lt": "now"
-            }
-          }
-        }
-      ],
-      "sort": [
-        {
-          "field": "nt:dueDate",
-          "order": "asc"
-        }
-      ],
-      "columns": [
-        {
-          "field": "nt:name",
-          "label": "Task",
-          "labels": "message"
-        },
-        {
-          "field": "nt:actors",
-          "label": "Assigned to",
-          "labels": "user",
-          "width": "w-48"
-        },
-        {
-          "field": "nt:dueDate",
-          "label": "Due",
-          "format": "daysUntil",
-          "width": "w-32"
-        },
-        {
-          "field": "nt:directive",
-          "label": "Directive",
-          "labels": "message"
-        }
-      ]
-    }
-  }
+  ]
 }
