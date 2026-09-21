@@ -232,6 +232,24 @@ describe('agg-compiler', () => {
       }
     });
 
+    /**
+     * The operator is read from the object, not inferred from it. TypeScript is erased at runtime,
+     * so a metric parsed from JSON arrives carrying whatever key it was written with — and taking
+     * the first one sent `significant_terms`, far more expensive than anything the union names,
+     * where a single value was expected.
+     */
+    it('rejects an aggregation the union never named', () => {
+      expect(() => compileMetric({ significant_terms: 'dc:creator' } as never)).toThrow(
+        UnsupportedAggregationError,
+      );
+    });
+
+    it('rejects a field that is not a name, rather than failing on it later', () => {
+      expect(() => compileMetric({ sum: { field: 'x' } } as never)).toThrow(
+        UnsupportedAggregationError,
+      );
+    });
+
     it('validates the percentile field like any other', () => {
       expect(() => compileMetric({ percentile: { field: 'a.keyword', percent: 50 } })).toThrow(
         UnsupportedAggregationError,

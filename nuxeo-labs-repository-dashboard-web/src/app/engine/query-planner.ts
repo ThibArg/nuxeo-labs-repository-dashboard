@@ -30,6 +30,7 @@ import {
   compileMetric,
   metricUndefinedWhenEmpty,
 } from './agg-compiler';
+import { compileClauses } from './clause-compiler';
 import { compilePicks, compileTermsGroup } from './facet-clause';
 import { EsClause, boolFilter, dayRangeFilter, startOfLocalDayMillis } from './es-query';
 
@@ -116,7 +117,12 @@ export function globalFilters(
   skipGroupId?: string,
   index: EsIndex = config.index,
 ): EsClause[] {
-  const clauses: EsClause[] = [...(config.baseFilter ?? [])];
+  /*
+   * The base filter is written by hand in the compiled form, so it goes through the clause
+   * compiler like every other predicate. A page whose shared filter cannot be compiled fails as a
+   * page rather than widget by widget, which is right: every figure on it would be wrong.
+   */
+  const clauses: EsClause[] = compileClauses(config.baseFilter);
 
   const field = dateFieldFor(config, index);
   if (field) {
@@ -306,8 +312,11 @@ function planAggregationWidget(
   widget: WidgetConfig,
   bounds: HistogramBounds | null,
 ): AggregationWidgetPlan {
-  // The scope narrows the shared query before the widget's own predicate does.
-  const ownFilter = [...scopeClauses(config, widget), ...(widget.filter ?? [])];
+  /*
+   * The scope narrows the shared query before the widget's own predicate does. Both are compiled
+   * rather than forwarded, so a refusal lands in the per widget error map the editor renders.
+   */
+  const ownFilter = compileClauses([...scopeClauses(config, widget), ...(widget.filter ?? [])]);
 
   if (isKpiWidget(widget)) {
     const metric = compileMetric(widget.metric);
@@ -348,7 +357,7 @@ function planAggregationWidget(
       nested[METRIC_AGG] = metric;
     }
     if (secondary) {
-      nested[SECONDARY_AGG] = { filter: boolFilter(secondary.filter) };
+      nested[SECONDARY_AGG] = { filter: boolFilter(compileClauses(secondary.filter)) };
     }
     if (Object.keys(nested).length) {
       wrapper['aggs'] = nested;
@@ -442,7 +451,10 @@ function planTable(
   const body: EsSearchBody = {
     size: widget.size ?? 20,
     track_total_hits: true,
-    query: boolFilter([...shared, ...scopeClauses(config, widget), ...(widget.filter ?? [])]),
+    query: boolFilter([
+      ...shared,
+      ...compileClauses([...scopeClauses(config, widget), ...(widget.filter ?? [])]),
+    ]),
     // `ecm:uuid` is always fetched so that rows can link back to Web UI.
     _source: [...new Set([...sourceFields, 'ecm:uuid'])],
   };

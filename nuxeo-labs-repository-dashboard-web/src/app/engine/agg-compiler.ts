@@ -7,6 +7,7 @@
  */
 import { AggConfig, MetricConfig, TermsOrder } from '../config/dashboard-config.model';
 import { EsClause } from './es-query';
+import { compileClause } from './clause-compiler';
 
 /** Name of the nested single value metric aggregation. */
 export const METRIC_AGG = 'metric';
@@ -100,6 +101,9 @@ function assertTimeZone(zone: string): string {
   return zone;
 }
 
+/** Everything `MetricConfig` names beside `count` and `percentile`, which are handled apart. */
+const SINGLE_VALUE_METRICS = ['cardinality', 'sum', 'avg', 'min', 'max'] as const;
+
 export function compileMetric(metric: MetricConfig | undefined): EsClause | null {
   if (!metric || 'count' in metric) {
     return null;
@@ -111,7 +115,16 @@ export function compileMetric(metric: MetricConfig | undefined): EsClause | null
     }
     return { percentiles: { field: assertAggregatableField(field), percents: [percent] } };
   }
-  const [operator, field] = Object.entries(metric)[0] as [string, string];
+  /*
+   * Read from the object rather than inferred from it. TypeScript is erased at runtime, so a
+   * metric parsed from JSON arrives here carrying whatever key it was written with, and taking
+   * the first one would send `significant_terms` — far more expensive than anything the union
+   * names — where a single value was expected.
+   */
+  const [operator, field] = Object.entries(metric)[0] ?? [];
+  if (!SINGLE_VALUE_METRICS.includes(operator as never) || typeof field !== 'string') {
+    throw new UnsupportedAggregationError(`"${operator}" is not a metric this dashboard computes`);
+  }
   return { [operator]: { field: assertAggregatableField(field) } };
 }
 
@@ -267,7 +280,15 @@ export function compileAgg(
     if (!filters || !Object.keys(filters).length) {
       throw new UnsupportedAggregationError('a filters aggregation needs at least one filter');
     }
-    return withMetric({ filters: { filters } });
+    /*
+     * The sub-filters are query clauses, so they go through the clause compiler like any other.
+     * This was the one place an aggregation could still carry raw DSL, which made the closed
+     * union true of everything except itself.
+     */
+    const compiled = Object.fromEntries(
+      Object.entries(filters).map(([key, clause]) => [key, compileClause(clause)]),
+    );
+    return withMetric({ filters: { filters: compiled } });
   }
 
   throw new UnsupportedAggregationError(
