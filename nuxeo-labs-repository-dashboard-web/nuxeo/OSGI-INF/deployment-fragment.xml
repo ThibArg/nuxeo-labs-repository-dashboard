@@ -16,19 +16,32 @@
       <exclude>web/nuxeo.war/ui/i18n/**</exclude>
     </unzip>
 
-    <!-- Web UI translations have to be appended to the existing bundles, not overwritten -->
-    <delete path="${bundle.fileName}.tmp" />
-    <mkdir path="${bundle.fileName}.tmp" />
-    <unzip from="${bundle.fileName}" to="${bundle.fileName}.tmp">
+    <!--
+      Web UI translations have to be appended to the existing bundles, not overwritten.
+
+      The scratch directory is `.i18n-tmp` rather than the `.tmp` the platform's own fragments use
+      — `nuxeo-drive-core` among them — and the suffix is the whole point. `mp-install` copies the
+      bundle to `<jar>.tmp` before renaming it, so a `<jar>.tmp` *directory* left behind by an
+      interrupted deployment makes every later install die on
+
+        Cannot execute command. Parameter 'destFile' is not a file: …jar.tmp
+
+      with nothing naming the leftover. Worse, it looks harmless: `nuxeo.war/dashboard/` was
+      unzipped at an earlier start and Tomcat keeps serving it, so the plugin answers on every URL
+      while running whatever was built two versions ago. Measured here, and it cost a day.
+    -->
+    <delete path="${bundle.fileName}.i18n-tmp" />
+    <mkdir path="${bundle.fileName}.i18n-tmp" />
+    <unzip from="${bundle.fileName}" to="${bundle.fileName}.i18n-tmp">
       <include>web/nuxeo.war/ui/i18n/**</include>
     </unzip>
-    <append from="${bundle.fileName}.tmp/web/nuxeo.war/ui/i18n/messages.json"
+    <append from="${bundle.fileName}.i18n-tmp/web/nuxeo.war/ui/i18n/messages.json"
             to="nuxeo.war/ui/i18n/messages.json" addNewLine="true" />
-    <append from="${bundle.fileName}.tmp/web/nuxeo.war/ui/i18n/messages-fr.json"
+    <append from="${bundle.fileName}.i18n-tmp/web/nuxeo.war/ui/i18n/messages-fr.json"
             to="nuxeo.war/ui/i18n/messages-fr.json" addNewLine="true" />
-    <append from="${bundle.fileName}.tmp/web/nuxeo.war/ui/i18n/messages-fr.json"
+    <append from="${bundle.fileName}.i18n-tmp/web/nuxeo.war/ui/i18n/messages-fr.json"
             to="nuxeo.war/ui/i18n/messages-fr-FR.json" addNewLine="true" />
-    <delete path="${bundle.fileName}.tmp" />
+    <delete path="${bundle.fileName}.i18n-tmp" />
 
   </install>
 
