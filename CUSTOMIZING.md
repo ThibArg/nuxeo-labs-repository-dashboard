@@ -2,11 +2,31 @@
 
 ## TL;DR
 
-This plugin is **meant to be forked**. There is no settings screen that will give you the dashboard
-you want, and there never will be: the interesting changes are new figures, new screens and new
-rules, and those are code.
+**What ships already answers a lot.** Seven screens — Content, Users, Downloads, Workflows, Tasks,
+Governance and Diagnostics — built out of 69 reusable widgets, with a filter bar that remembers the
+document kinds you picked, cross-filtering by clicking a chart, a CSV and a PNG per widget, an HTML
+file and a print sheet for the whole page, and a **Configure** dialog that lets an administrator
+re-lay a screen out without touching the code. For a good many repositories that is the end of the
+story, and it is meant to be.
 
-So the loop is:
+**But if you want something else, you absolutely can have it.** Reorganise the widgets, drop the
+ones nobody looks at, add your own, build a screen about your own document types, remove a whole
+section, or strip the plugin down to the single screen your customer asked for. None of that is
+off-limits, and this guide is how you do it.
+
+Three sizes of change. Knowing which one you are in saves most of the effort:
+
+| What you want | Where it happens | What it costs |
+| --- | --- | --- |
+| Move, resize or rename a widget; change how it is drawn; restrict it to a few document types | The **Configure** dialog, live | Nothing. No code, no rebuild, no deployment |
+| The same, but for everyone and permanently | The dashboard's JSON file in your own copy | `mvn clean install`, a new `.zip` |
+| A new widget, a new screen, a screen removed, a figure that means something else | The code in your own copy | An AI assistant, the same build, and the checks below |
+
+The Configure dialog is the one to try first, and its limit is worth knowing: **an edit made there
+lives in that browser only**, so a colleague opening the same page still sees what ships. It is
+ideal for working out what you want, and not a way to deliver it.
+
+### When it is code, the loop is
 
 1. **Copy or fork this repository.** It becomes your plugin. You own it.
 2. **Point an AI coding assistant at your copy** and describe the change you want. The prompts in
@@ -18,14 +38,15 @@ So the loop is:
 5. **Rename the plugin** ([Shipping your own plugin](#shipping-your-own-plugin)) and deploy your
    `.zip`.
 
-Five things to know before you start.
+### Five things to know before you start
 
+- **Most changes are smaller than they look.** Six settings are already exposed to the JSON a
+  dashboard is described by, and a great many requests land there — no code, and often no rebuild
+  either.
 - **This is an Angular 22 + TypeScript application**, zoneless, standalone and signal based, with
   **no Java at all**. If your assistant proposes `@Input()`, `*ngIf`, RxJS or an `NgModule`, it is
   writing Angular 15 and it does not belong here. `AGENTS.md` names the dialect in a table; point
   your assistant at it.
-- **Most changes are smaller than they look.** Six settings are already exposed to the JSON a
-  dashboard is described by, and a great many requests land there — no code, no rebuild.
 - **The compilers are a safety boundary, not an obstacle.** The dashboard talks to Nuxeo through a
   passthrough that forwards an administrator's payload verbatim. `agg-compiler.ts` and
   `clause-compiler.ts` are what stop a configuration from running arbitrary OpenSearch. An
@@ -40,9 +61,9 @@ Five things to know before you start.
 
 ## The principle
 
-You are not configuring a product. You are **editing an Angular application and rebuilding a Nuxeo
-package from it**. The AI is there to do the editing; your job is to describe the change precisely,
-then to check what came back.
+Past what the Configure dialog can do, you are **editing an Angular application and rebuilding a
+Nuxeo package from it**. The AI is there to do the editing; your job is to describe the change
+precisely, then to check what came back.
 
 ### Make it yours first
 
