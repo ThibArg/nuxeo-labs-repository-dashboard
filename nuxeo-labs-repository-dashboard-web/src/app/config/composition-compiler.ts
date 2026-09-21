@@ -6,7 +6,7 @@
  * are untouched, and every invariant their tests hold keeps holding.
  */
 import { DashboardConfig, LayoutRow, WidgetConfig } from './dashboard-config.model';
-import { CompositionCell, DashboardComposition } from './composition.model';
+import { CompositionCell, CompositionRow, DashboardComposition } from './composition.model';
 import { resolveParams } from '../library/definition';
 import { findWidget, knownWidgetIds } from '../library/registry';
 
@@ -21,6 +21,24 @@ function cellName(cell: CompositionCell): string {
 }
 
 /**
+ * Rows to walk, whichever way the composition declared its widgets.
+ *
+ * A flat `widgets` list becomes one row: the planner reads the layout to know what to ask for, so
+ * widgets a bespoke page places itself still have to appear in one. What that row looks like
+ * matters only if somebody renders the default grid anyway, which is a reasonable fallback rather
+ * than a design.
+ */
+function rowsOf(composition: DashboardComposition): CompositionRow[] | null {
+  if (Array.isArray(composition.widgets) && composition.widgets.length) {
+    return [{ cells: composition.widgets }];
+  }
+  if (Array.isArray(composition.layout) && composition.layout.length) {
+    return composition.layout;
+  }
+  return null;
+}
+
+/**
  * Compiles a composition, naming every reason it cannot be rendered.
  *
  * Nothing is compiled on a best effort basis: a page half built out of the widgets that happened
@@ -32,11 +50,17 @@ export function compileComposition(composition: DashboardComposition): Compilati
   const layout: LayoutRow[] = [];
   const indices: string[] = [];
 
-  if (!Array.isArray(composition.layout) || composition.layout.length === 0) {
-    return { config: null, problems: ['"layout" must list at least one row.'] };
+  const declared = rowsOf(composition);
+  if (!declared) {
+    return {
+      config: null,
+      problems: [
+        'A composition needs either a "layout" with at least one row, or a "widgets" list.',
+      ],
+    };
   }
 
-  for (const row of composition.layout) {
+  for (const row of declared) {
     const cells: string[] = [];
 
     for (const cell of row.cells ?? []) {
@@ -99,7 +123,7 @@ export function compileComposition(composition: DashboardComposition): Compilati
     return { config: null, problems };
   }
   if (!layout.length) {
-    return { config: null, problems: ['"layout" holds no widget.'] };
+    return { config: null, problems: ['This composition holds no widget.'] };
   }
 
   /*

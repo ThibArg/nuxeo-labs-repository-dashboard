@@ -64,6 +64,13 @@ behaviour that changed, followed by a body arguing the reasoning and citing the 
   discriminates on a `use` key inside a layout cell, which a compiled layout cannot hold — its
   cells are plain strings. Use `src/testing/shipped.ts` in a spec rather than casting the import,
   or the spec goes green for the wrong reason the day that dashboard is migrated.
+- **Declaring a widget and placing it are two different things.** A composition may use `layout`,
+  which the twelve column grid draws, or a flat `widgets` list, which a page component places
+  itself. `DashboardSession` — provided per page, like `DashboardRunner` — holds everything a
+  reader does to a dashboard, and `<nxd-widget for="…">`, `<nxd-dashboard-filters>`,
+  `<nxd-dashboard-header>` and `[nxdExportRoot]` all read it, so a bespoke screen writes a template
+  and nothing else. `pages/bespoke-layout.spec.ts` is the worked example; there is no such screen
+  in the product, deliberately.
 - **Dashboards are JSON** in `src/app/config/dashboards/`, copied to `assets/dashboards/` by
   `angular.json` and fetched at runtime. The specs `import` those very files, so a shipped
   configuration cannot drift from what is tested.
@@ -120,6 +127,10 @@ made to render hints, and a broken `LabelStrategy` passed until it rendered buck
   the exception — a definition carries a sensible one and a composition may replace it.
 - **The compiler compiles everything or nothing.** A page built out of the cells that happened to
   resolve is a page whose figures nobody can account for.
+- **Every declared widget is planned, whether it is on screen or not.** That is what makes opening
+  a tab free and what keeps the figures of two tabs comparable. Never filter the plan down to what
+  is rendered: a widget discovered when its tab opens would arrive in a request of its own, at its
+  own instant.
 - **The expiry tiles are a partition too** — `expired`, `expiringWeek`, `expiring60`, never two.
   The sixty day window starts at `gt: now+7d`, so J+7 belongs to the week alone. A reader adds the
   three figures up, so an overlap is a wrong answer, not a detail.
@@ -279,6 +290,10 @@ about the choices behind them.
 | A definition goes through typed predicates, never `EsClause` | The four dashboards still in the old form carry 27 hand written clauses, using two shapes in the end, and the passthrough forwards `script` verbatim for an administrator. A composition cannot express a clause at all |
 | The editor opens on the source, not on the compilation | Handing back the thirteen widgets a composition stands for answers a question nobody asked, and turns the next edit into a fork of the shipped file rather than a change to it |
 | An empty `types` or `facets` means no constraint | The same rule the filter dialog follows. Read the other way, a widget restricted to nothing in particular would match nothing at all |
+| A widget reads the session instead of eight inputs | Input drilling works while a grid is the only parent. A widget in a tab, a panel or a bespoke layout has none, so placement would have stayed the engine's business |
+| The export root is a directive, not a view query | A query answers whatever came first; only the page knows where its dashboard stops and its chrome begins, and on a bespoke layout that line is wherever its author drew it |
+| The grid keeps only its span arithmetic | Drawing a widget is `<nxd-widget>`'s job there as anywhere else. Two descriptions of it would drift the first time a widget type is added |
+| No tabs, no sections, no layout grammar | Every UI idea would need a new grammar node and a new component, and the grammar would never be complete. Angular already is that language |
 
 ## Blob volumetry, set aside
 
@@ -321,8 +336,8 @@ Answer the user in French, using *vous*.
 
 ## Where things stand
 
-Six live screens — Content, Users, Workflows, Tasks, Governance, Diagnostics. Build green, 550
-tests over 40 files. `UpcomingPageComponent` is gone with the last placeholder; the requirement
+Six live screens — Content, Users, Workflows, Tasks, Governance, Diagnostics. Build green, 558
+tests over 42 files. `UpcomingPageComponent` is gone with the last placeholder; the requirement
 notice it used to carry is now tested where it lives, in `requirement-notice.component.spec.ts`.
 
 **Content is composed, the other four are still configured.** Thirteen definitions live in

@@ -33,6 +33,12 @@ import { ChartSnapshotRegistry } from '../app/widgets/chart-snapshot.registry';
       <span>{{ config().label }}</span>
       <!-- Rendered so that hint interpolation stays observable through the stub. -->
       <span data-testid="chart-hint">{{ config().hint }}</span>
+      <!--
+        The real chart hands its error to WidgetHostComponent, which this stub does not use. Without
+        it, which of the two errors reached a widget — its own or the dashboard's — could not be
+        observed from a page test at all.
+      -->
+      <span data-testid="chart-error">{{ error() }}</span>
       <span data-testid="chart-bucket-count">{{ bucketCount() }}</span>
       <!--
         Rendered for the same reason as the hint: label resolution happens before the chart is

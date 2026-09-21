@@ -1,44 +1,32 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
-import {
-  DashboardConfig,
-  DateRangeOption,
-  WidgetConfig,
-  resolveSpan,
-} from '../config/dashboard-config.model';
-import { WidgetData } from '../engine/result-mapper';
-import { BucketClick } from '../widgets/chart-widget.component';
-import { WidgetOutletComponent } from '../widgets/widget-outlet.component';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { resolveSpan } from '../config/dashboard-config.model';
+import { DashboardSession } from '../engine/dashboard-session.service';
+import { WidgetComponent } from '../widgets/widget.component';
 
 interface RenderedCell {
   id: string;
-  widget: WidgetConfig;
   span: number;
 }
 
 const GRID_COLUMNS = 12;
 
+/**
+ * The twelve column grid a dashboard falls back on.
+ *
+ * It owns one thing only, the span arithmetic; drawing a widget is `<nxd-widget>`'s job, here as
+ * anywhere else. A bespoke page that wants tabs or panels writes its own markup and drops the
+ * same tag into it, rather than extending a layout grammar this would have to grow.
+ */
 @Component({
   selector: 'nxd-dashboard-grid',
-  imports: [WidgetOutletComponent],
+  imports: [WidgetComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="flex flex-col gap-4">
       @for (row of rows(); track $index) {
         <div class="nxd-grid">
           @for (cell of row; track cell.id) {
-            <div [style.--nxd-span]="cell.span" [attr.data-widget-id]="cell.id">
-              <nxd-widget-outlet
-                [config]="cell.widget"
-                [widgetId]="cell.id"
-                [data]="data().get(cell.id)"
-                [loading]="loading()"
-                [error]="errorFor(cell.id)"
-                [rangeLabel]="range().label"
-                [bucketLabels]="bucketLabels().get(cell.id) ?? emptyBucketLabels"
-                [columnLabels]="columnLabels().get(cell.id) ?? emptyColumnLabels"
-                (picked)="picked.emit($event)"
-              />
-            </div>
+            <nxd-widget [for]="cell.id" [style.--nxd-span]="cell.span" />
           }
         </div>
       }
@@ -46,20 +34,7 @@ const GRID_COLUMNS = 12;
   `,
 })
 export class DashboardGridComponent {
-  readonly config = input.required<DashboardConfig>();
-  readonly range = input.required<DateRangeOption>();
-  readonly data = input<Map<string, WidgetData>>(new Map());
-  readonly bucketLabels = input<Map<string, Map<string, string>>>(new Map());
-  readonly columnLabels = input<Map<string, Map<string, Map<string, string>>>>(new Map());
-  readonly loading = input(false);
-  readonly error = input<string | null>(null);
-  readonly widgetErrors = input<Map<string, string>>(new Map());
-
-  /** A bucket the reader clicked, in any widget of the grid. */
-  readonly picked = output<BucketClick>();
-
-  protected readonly emptyBucketLabels = new Map<string, string>();
-  protected readonly emptyColumnLabels = new Map<string, Map<string, string>>();
+  private readonly session = inject(DashboardSession);
 
   /**
    * Resolves the layout into rows of cells with an explicit span.
@@ -70,8 +45,11 @@ export class DashboardGridComponent {
    * charts declared in the same row end up stacked.
    */
   readonly rows = computed<RenderedCell[][]>(() => {
-    const config = this.config();
-    const rangeId = this.range().id;
+    const config = this.session.config();
+    if (!config) {
+      return [];
+    }
+    const rangeId = this.session.filters().range.id;
 
     return config.layout
       .map((row) => {
@@ -86,15 +64,9 @@ export class DashboardGridComponent {
 
         return present.map((id, index) => ({
           id,
-          widget: config.widgets[id],
           span: declared[index] ?? (index === present.length - 1 ? even + remainder : even),
         }));
       })
       .filter((row) => row.length > 0);
   });
-
-  /** A per widget configuration error takes precedence over the dashboard wide one. */
-  errorFor(widgetId: string): string | null {
-    return this.widgetErrors().get(widgetId) ?? this.error();
-  }
 }

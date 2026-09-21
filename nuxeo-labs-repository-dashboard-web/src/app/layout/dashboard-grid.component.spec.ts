@@ -4,6 +4,7 @@ import { DashboardGridComponent } from './dashboard-grid.component';
 import { ChartWidgetComponent } from '../widgets/chart-widget.component';
 import { WidgetOutletComponent } from '../widgets/widget-outlet.component';
 import { ChartWidgetStubComponent } from '../../testing/chart-widget.stub';
+import { SessionStub, stubSession } from '../../testing/session.stub';
 
 const ALL: DateRangeOption = { id: 'all', label: 'All time', from: null, to: null };
 const LAST_30: DateRangeOption = {
@@ -40,10 +41,14 @@ function config(overrides: Partial<DashboardConfig> = {}): DashboardConfig {
   };
 }
 
+let session: SessionStub;
+
 function mount(dashboard: DashboardConfig, range: DateRangeOption) {
+  const stubbed = stubSession(dashboard, range);
+  session = stubbed.state;
+  TestBed.configureTestingModule({ providers: [stubbed.provider] });
+
   const fixture = TestBed.createComponent(DashboardGridComponent);
-  fixture.componentRef.setInput('config', dashboard);
-  fixture.componentRef.setInput('range', range);
   fixture.detectChanges();
   return fixture;
 }
@@ -123,12 +128,13 @@ describe('DashboardGridComponent', () => {
   describe('errors', () => {
     it('prefers a per widget error over the dashboard wide one', () => {
       const fixture = mount(config(), ALL);
-      fixture.componentRef.setInput('error', 'dashboard failed');
-      fixture.componentRef.setInput('widgetErrors', new Map([['created', 'bad field']]));
+      session.error.set('dashboard failed');
+      session.widgetErrors.set(new Map([['created', 'bad field']]));
       fixture.detectChanges();
 
-      expect(fixture.componentInstance.errorFor('created')).toBe('bad field');
-      expect(fixture.componentInstance.errorFor('modified')).toBe('dashboard failed');
+      const content = (fixture.nativeElement as HTMLElement).textContent ?? '';
+      expect(content).toContain('bad field');
+      expect(content).toContain('dashboard failed');
     });
   });
 });

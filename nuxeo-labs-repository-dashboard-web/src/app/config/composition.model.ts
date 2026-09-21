@@ -45,24 +45,38 @@ export interface DashboardComposition {
   subtitle?: string;
   /** Interactive filters shown above the grid. Unchanged from the compiled form. */
   filters?: FilterConfig[];
-  layout: CompositionRow[];
+  /** Widgets laid out by the twelve column grid, row by row. */
+  layout?: CompositionRow[];
+  /**
+   * Widgets the page places itself, when the grid is not what it wants.
+   *
+   * Declaring without placing is what lets a bespoke screen — tabs, panels, anything its author
+   * writes — reuse the library. The set still has to be declared here rather than discovered from
+   * the markup, because the planner needs to know every widget before the first request: a widget
+   * found only when its tab is opened would arrive in a request of its own, at its own instant.
+   */
+  widgets?: CompositionCell[];
 }
 
 /**
  * True for a composition rather than a compiled configuration.
  *
- * `use` inside a layout cell is the discriminator, and it is unambiguous: a compiled layout holds
- * plain strings there.
+ * Two discriminators, neither of which a compiled configuration can satisfy: `use` inside a layout
+ * cell, whose cells are plain strings there, and a `widgets` **array**, which is a record there.
  */
 export function isComposition(value: unknown): value is DashboardComposition {
   if (!value || typeof value !== 'object') {
     return false;
   }
-  const layout = (value as { layout?: unknown }).layout;
-  if (!Array.isArray(layout)) {
+  const candidate = value as { layout?: unknown; widgets?: unknown };
+
+  if (Array.isArray(candidate.widgets)) {
+    return true;
+  }
+  if (!Array.isArray(candidate.layout)) {
     return false;
   }
-  return layout.some((row) => {
+  return candidate.layout.some((row) => {
     const cells = (row as { cells?: unknown })?.cells;
     return (
       Array.isArray(cells) &&

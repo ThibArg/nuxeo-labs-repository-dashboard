@@ -98,6 +98,83 @@ requests over a moving index add up by luck. The expiry tiles are worse: they ar
 which OpenSearch evaluates when it *receives* a request, so one request means one instant and
 eight mean eight — and a document expiring at exactly J+7 can then be counted twice or not at all.
 
+### Laying it out yourself
+
+The twelve column grid is a default, not a constraint. A dashboard can declare its widgets without
+saying where they go, and a page component then puts them wherever it likes — tabs, panels,
+anything its author writes.
+
+```jsonc
+{
+  "id": "content-tabs",
+  "label": "Content",
+  "filters": [{ "type": "dateRange", "field": "dc:created" }],
+  "widgets": [
+    { "use": "documents-created",  "as": "createdTrend" },
+    { "use": "documents-modified", "as": "modifiedTrend" },
+    { "use": "top-contributors",   "as": "topContributors" }
+  ]
+}
+```
+
+```ts
+@Component({
+  providers: [DashboardRunner, DashboardSession],
+  imports: [DashboardHeaderComponent, DashboardFiltersComponent, WidgetComponent, ExportRootDirective],
+  template: `
+    <nxd-dashboard-header />
+    <section class="px-8 pb-8" nxdExportRoot>
+      <nxd-dashboard-filters />
+
+      <!-- From here on, everything belongs to whoever writes this page. -->
+      <div role="tablist" class="flex gap-2 border-b border-subtle">
+        <button (click)="tab.set('creation')">Creation</button>
+        <button (click)="tab.set('modification')">Modification</button>
+      </div>
+
+      @if (tab() === 'creation') {
+        <div class="nxd-grid">
+          <nxd-widget for="createdTrend" [style.--nxd-span]="8" />
+          <nxd-widget for="topContributors" [style.--nxd-span]="4" />
+        </div>
+      } @else {
+        <nxd-widget for="modifiedTrend" />
+      }
+    </section>
+  `,
+})
+export class ContentTabsPage {
+  private readonly session = inject(DashboardSession);
+  readonly tab = signal<'creation' | 'modification'>('creation');
+  constructor() { void this.session.open('content-tabs'); }
+}
+```
+
+Four reusable pieces, all reading the same session and none needing a single input wired:
+
+| Tag | What it carries |
+| --- | --- |
+| `<nxd-dashboard-header />` | Title, Refresh, Export page, Configure, and the editor behind it |
+| `<nxd-dashboard-filters />` | Period, container picker, facet groups, chips, and their dialogs |
+| `<nxd-widget for="…" />` | One widget, drawn wherever the tag sits |
+| `[nxdExportRoot]` | Which part of the page the HTML export takes away |
+
+`DashboardSession` is what they all read: which configuration is in force, what it is filtered by,
+what the last run answered. It is provided **per page** — a component placing widgets must declare
+`providers: [DashboardRunner, DashboardSession]`, or injection fails at construction.
+
+Three consequences worth knowing before building tabs:
+
+- **Every declared widget is fetched, on screen or not.** A tab nobody has opened costs nothing to
+  open, and its figures describe the same instant as the ones being read. The price is paying for
+  what is not being looked at.
+- **A chart that has never been rendered has no photograph**, so the HTML export of a tabbed page
+  carries the tab that was open. A snapshot shows what was on screen, which is defensible, but it
+  is not everything the dashboard declares.
+- **A `<nxd-widget>` naming something the configuration no longer declares says so** rather than
+  rendering nothing. An administrator who removed it from the composition has no other way of
+  finding where the template still asks for it.
+
 ### The compiled form
 
 A composition compiles to the configuration the engine plans, batches and renders, and a dashboard
@@ -1004,7 +1081,7 @@ still appear in an audit index, through `Framework.doPrivileged` with no argumen
 │       ├── app/
 │       │   ├── config/                         widget model, composition compiler, dashboards/*.json
 │       │   ├── core/                           HTTP, preflight, labels, formatting
-│       │   ├── engine/                         agg compiler, query planner, result mapper, runner
+│       │   ├── engine/                         agg compiler, query planner, result mapper, runner, session
 │       │   ├── layout/                         shell, sidebar, grid, date range picker
 │       │   ├── library/                        the widget catalogue
 │       │   │   ├── definition.ts                what a widget is; parameter shapes
@@ -1041,7 +1118,7 @@ still appear in an audit index, through `Framework.doPrivileged` with no argumen
 | 5 | Governance dashboard, on records, legal holds and retention | done |
 | 6 | Reusable widget library; a dashboard composes rather than configures. Content migrated | done |
 | 6b | One request per index, so a page can mix the repository and the audit | done |
-| 6c | Sections and tabs in a composition | |
+| 6c | A widget placeable anywhere, so a page can be laid out by hand | done |
 | 6d | The four remaining dashboards migrated, Governance split by theme | |
 | 6e | A prompt and a security checklist for composing with an assistant | |
 

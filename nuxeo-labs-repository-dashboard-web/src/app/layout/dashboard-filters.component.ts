@@ -1,0 +1,99 @@
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { DashboardSession } from '../engine/dashboard-session.service';
+import { DateRangePickerComponent } from './date-range-picker.component';
+import { FacetGroupButtonComponent } from './facet-group-button.component';
+import { FacetGroupDialogComponent } from './facet-group-dialog.component';
+import { FilterChipsComponent } from './filter-chips.component';
+import { PathScopePickerComponent } from './path-scope-picker.component';
+
+/**
+ * Everything narrowing the figures, and the dialogs behind it.
+ *
+ * Self-contained on purpose: the buttons and the dialogs they open travel together, so a bespoke
+ * page gets a working period, facet groups and container picker from one tag rather than from
+ * sixty lines it would have to keep in step with this one.
+ *
+ * Renders nothing when the dashboard declares no filter, which is what keeps it droppable into a
+ * page without knowing whether that dashboard has any.
+ */
+@Component({
+  selector: 'nxd-dashboard-filters',
+  imports: [
+    DateRangePickerComponent,
+    FacetGroupButtonComponent,
+    FacetGroupDialogComponent,
+    FilterChipsComponent,
+    PathScopePickerComponent,
+  ],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `
+    @if (session.hasFilters()) {
+      <!--
+        Sticky, because the filter bar is the only thing naming the population the figures
+        describe. Scrolling down to a chart used to lose that context entirely.
+      -->
+      <div
+        class="sticky top-0 z-20 -mx-8 mb-5 flex flex-wrap items-center gap-3 border-b border-subtle bg-canvas/95 px-8 py-3 backdrop-blur"
+      >
+        @if (session.dateFilter(); as range) {
+          <nxd-date-range-picker
+            [selected]="session.filters().range"
+            [field]="range.field"
+            [disabled]="session.runner.loading()"
+            (rangeChange)="session.changeRange($event)"
+          />
+          <span class="text-xs text-ink-subtle">on {{ range.field }}</span>
+        }
+
+        @if (session.pathFilter(); as scope) {
+          <nxd-path-scope-picker
+            [label]="scope.label ?? 'Location'"
+            [current]="session.browsedPath()"
+            [selected]="session.filters().path"
+            [containers]="session.containers()"
+            [open]="session.pathPickerOpen()"
+            [loading]="session.browsing()"
+            [disabled]="session.runner.loading()"
+            (opened)="session.openPathPicker()"
+            (closed)="session.closePathPicker()"
+            (browse)="session.browseTo($event)"
+            (applied)="session.applyPath($event)"
+          />
+        }
+
+        @for (group of session.groups(); track group.id) {
+          <nxd-facet-group-button
+            [group]="group"
+            [selection]="session.selectionFor(group.id)"
+            [labels]="session.labelsFor(group.id)"
+            [disabled]="session.runner.loading()"
+            (opened)="session.openGroup(group)"
+          />
+        }
+
+        <nxd-filter-chips
+          [picks]="session.filters().picks"
+          [clearable]="session.anyConstrained()"
+          [disabled]="session.runner.loading()"
+          (removed)="session.removePick($event)"
+          (cleared)="session.clearFilters()"
+        />
+      </div>
+
+      @for (group of session.groups(); track group.id) {
+        <nxd-facet-group-dialog
+          [group]="group"
+          [open]="session.openGroupId() === group.id"
+          [values]="session.valuesFor(group.id)"
+          [labels]="session.labelsFor(group.id)"
+          [selection]="session.selectionFor(group.id)"
+          (applied)="session.applyGroup(group, $event)"
+          (closed)="session.closeGroup()"
+        />
+      }
+    }
+  `,
+})
+export class DashboardFiltersComponent {
+  protected readonly session = inject(DashboardSession);
+}

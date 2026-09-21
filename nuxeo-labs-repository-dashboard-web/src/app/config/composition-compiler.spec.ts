@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { DashboardComposition } from './composition.model';
+import { CompositionCell, DashboardComposition } from './composition.model';
 import { compileComposition } from './composition-compiler';
 import { validateConfig } from '../engine/dashboard-override.service';
 import { planDashboard } from '../engine/query-planner';
 import { defaultFilterState } from './dashboard-config.model';
 
-function composition(cells: DashboardComposition['layout'][number]['cells']): DashboardComposition {
+function composition(cells: CompositionCell[]): DashboardComposition {
   return { id: 'demo', label: 'Demo', layout: [{ cells }] };
 }
 
-function compile(cells: DashboardComposition['layout'][number]['cells']) {
+function compile(cells: CompositionCell[]) {
   return compileComposition(composition(cells));
 }
 
@@ -146,11 +146,11 @@ describe('compiling a composition', () => {
   });
 
   describe('what it refuses outright', () => {
-    it('refuses a layout with no row', () => {
+    it('refuses a composition declaring no widget at all', () => {
       const { config, problems } = compileComposition({ id: 'demo', label: 'Demo', layout: [] });
 
       expect(config).toBeNull();
-      expect(problems[0]).toContain('at least one row');
+      expect(problems[0]).toContain('either a "layout" with at least one row, or a "widgets" list');
     });
 
     it('refuses a cell naming no widget', () => {
