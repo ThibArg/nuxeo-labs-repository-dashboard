@@ -1,12 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import governanceConfig from '../config/dashboards/governance.json';
-import {
-  DashboardConfig,
-  defaultFilterState,
-  resolveSpan,
-  scopeClauses,
-} from '../config/dashboard-config.model';
+import { defaultFilterState, resolveSpan } from '../config/dashboard-config.model';
 import { planDashboard } from '../engine/query-planner';
 import { PreflightService } from '../core/preflight.service';
 import { DashboardPageComponent } from './dashboard-page.component';
@@ -22,8 +17,9 @@ import {
   isAggregationsRequest,
 } from '../../testing/fetch-stub';
 import { settle } from '../../testing/settle';
+import { shippedConfig } from '../../testing/shipped';
 
-const GOVERNANCE = governanceConfig as DashboardConfig;
+const GOVERNANCE = shippedConfig('governance.json', governanceConfig);
 
 const SHORT_RULE = '15285cbe-0fa5-4c38-98fd-b69bac31f02e';
 const LONG_RULE = 'c667a0e3-e9b8-4cd8-a30d-5a12f00d7a71';
@@ -37,9 +33,15 @@ function aggregationsResponse(): unknown {
   return {
     took: 4,
     timed_out: false,
-    // `liveDocuments` is unscoped and unfiltered, so the planner reads it off the total.
     hits: { total: { value: 866, relation: 'eq' }, hits: [] },
     aggregations: {
+      /*
+       * Every tile states the population it describes, so every tile answers under its own
+       * wrapper — `liveDocuments` included. It used to be read off `hits.total`, which worked
+       * only because the page's base filter happened to be its population, and would have
+       * silently changed meaning the day another clause joined that filter.
+       */
+      liveDocuments: { doc_count: 866 },
       records: { doc_count: 22, secondary: { doc_count: 19 } },
       underRetention: { doc_count: 19 },
       legalHold: { doc_count: 2 },
@@ -95,9 +97,9 @@ describe('governance.json', () => {
    * population than its title claims.
    */
   it('counts the rule breakdown over the records a rule was attached to', () => {
-    expect(scopeClauses(GOVERNANCE, GOVERNANCE.widgets['byRule'])).toEqual([
-      { term: { 'ecm:mixinType': 'Record' } },
-    ]);
+    expect(GOVERNANCE.widgets['byRule'].filter).toContainEqual({
+      term: { 'ecm:mixinType': 'Record' },
+    });
     expect(GOVERNANCE.widgets['byRule'].hint).toContain('carries no rule');
   });
 
@@ -106,8 +108,9 @@ describe('governance.json', () => {
      * The three tiles are presented as a breakdown of Under Retention, so a reader adds them up.
      * They must partition it exactly: every retained document in one tile, and in one only.
      *
-     * The scope is evaluated with the widget's own filter rather than separately, because that is
-     * what reaches the server: the lower bound of every tile comes from the scope alone.
+     * Every clause the widget carries is evaluated together, because that is what reaches the
+     * server: the lower bound of all three comes from the retained population rather than from
+     * the tile, and reading the tile's own window alone would miss it.
      */
     const TILES = ['expiringWeek', 'expiring60', 'expiringLater'];
     const DAY = 86_400_000;
@@ -124,8 +127,7 @@ describe('governance.json', () => {
     }
 
     function counts(widgetId: string, retainUntil: number): boolean {
-      const widget = GOVERNANCE.widgets[widgetId];
-      const clauses = [...scopeClauses(GOVERNANCE, widget), ...(widget.filter ?? [])] as {
+      const clauses = (GOVERNANCE.widgets[widgetId].filter ?? []) as {
         range?: Record<string, Record<string, string>>;
       }[];
 
