@@ -174,9 +174,9 @@ export const documentsCreated = defineWidget<TrendParams>({
 });
 ```
 
-Sixty-five widgets are placed across the six screens and they are eleven ideas — counting a
-population and ranking the top values of a field account for fifty-four on their own — so the
-reuse lives in **five builders**,
+Sixty-five widgets are placed across the six screens, and counting a population and ranking the top
+values of a field account for fifty-four of them on their own — so the reuse lives in
+**five builders**,
 `countTile`, `topNChart`, `trendChart`, `bandChart` and `recordTable`, while the *names* stay one
 per idea. A composition saying `topNChart('ecm:primaryType')` would be back to writing queries by
 hand.
@@ -185,9 +185,11 @@ Two things a builder takes and a composition cannot: the bands of a distribution
 of a table. "Under an hour, up to a day, up to a week, beyond" *is* what
 `workflow-duration-distribution` means — a different split is a different widget, not a setting.
 
-Every repository widget accepts `types` and `facets`, which narrow it to a few document types or
-to documents carrying a facet. An empty list means **no constraint**, never "no value": compiled
-the other way, a widget restricted to nothing in particular would match nothing at all.
+The thirteen Content definitions accept `types` and `facets`, which narrow them to a few document
+types or to documents carrying a facet. The other repository widgets do not declare them, and a
+parameter a definition never declared is **refused rather than ignored**. An empty list means **no
+constraint**, never "no value": compiled the other way, a widget restricted to nothing in
+particular would match nothing at all.
 
 #### What a parameter may be
 
@@ -303,7 +305,7 @@ Four consequences worth knowing before building tabs:
 ### The compiled form
 
 A composition compiles to the configuration the engine plans, batches and renders, and a dashboard
-may also be written in that form directly. **No shipped dashboard is**, all five being
+may also be written in that form directly. **No shipped dashboard is**, all six being
 compositions; what still arrives in this form is an edit stored by an administrator before the
 migration, which is why it is still accepted and still documented.
 
@@ -359,10 +361,11 @@ JSON, and it rejects anything else — including a `.keyword` suffix, which woul
 nothing on a Nuxeo index.
 
 **Filters are closed too, since `clause-compiler.ts`.** `baseFilter`, `scopes`, a widget's
-`filter` and a secondary figure's are typed `EsClause`, and every one of them is now rebuilt out
-of a closed set — `term`, `terms`, `range`, `exists`, `bool` — rather than forwarded. Rebuilding
-rather than checking is the point: a clause that passes leaves nothing behind it, so a key nobody
-thought to refuse cannot ride along beside one that was accepted.
+`filter`, a secondary figure's, and the sub-filters of a `filters` aggregation are typed
+`EsClause`, and every one of them is now rebuilt out of a closed set — `term`, `terms`, `range`,
+`exists`, `bool` — rather than forwarded. Rebuilding rather than checking is the point: a clause
+that passes leaves nothing behind it, so a key nobody thought to refuse cannot ride along beside
+one that was accepted.
 
 Two shapes are worth naming among the refusals. A `script` clause runs Painless per document under
 the administrator's identity, the passthrough forwarding their payload unmodified. And a `terms`
@@ -428,8 +431,8 @@ versions: it descends through `ecm:ancestorId`, which versions do not have, and 
 unit test asserting a version stays untrashed when its live document is trashed. But
 `ecm:isTrashed` is copied verbatim at check-in — neither `DBSSession.copy` nor `SQLInfo.getCopyHier`
 resets it — so **a version created while its document was already in the trash is born trashed**.
-On a real repository this is not marginal: 105 of 1909 versions on the test instance. The tile
-therefore keeps the figure, and only hides it when it really is zero.
+On a real repository this is not marginal: 105 such versions were counted on the test instance. The
+tile therefore keeps the figure, and only hides it when it really is zero.
 
 The same blind copy works in reverse: restoring a version overwrites the live document's
 `ecm:isTrashed` with the version's value.
@@ -517,7 +520,7 @@ Filters are declared alongside the widgets and rendered above the grid.
 ```
 
 Each of them also accepts the indices it constrains — `byIndex` for the period, `indices` for the
-other two. Absent means every index, which is what the five shipped files rely on; on a page
+other two. Absent means every index, which is what the six shipped files rely on; on a page
 reading two, saying nothing is refused rather than rendered. See
 [A shared filter is shared only with the half that can answer it](#a-shared-filter-is-shared-only-with-the-half-that-can-answer-it).
 
@@ -640,7 +643,7 @@ describes that container and its descendants.
 Only worth declaring where the documents counted *are* the business documents. A task lives under
 `/task-root` and a workflow instance under `/document-route-instances-root`, so scoping either by
 path would say something about the plumbing rather than about the content — which is why Content
-and Governance declare it and Tasks, Workflows and Users do not.
+and Governance declare it and Tasks, Workflows, Users and Downloads do not.
 
 The picker browses rather than asking for a path to be typed: a path is only obvious to whoever
 created it, and an administrator reading someone else's repository recognises a container by its
@@ -652,10 +655,12 @@ set.
 
 ### Taking the figures away
 
-Every widget carrying data offers a **CSV** of exactly what it shows, and an ECharts one a **PNG**
-besides. Both are discreet until the card is hovered: an export is a rare gesture, and a row of
-icons competing with the figures would make every widget look like a toolbar. Neither is offered
-while a widget is loading, failing or empty, a file describing nothing being worse than no file.
+Every widget with buckets or rows behind it — a chart, a ranked list, a table — offers a **CSV** of
+exactly what it shows, and an ECharts one a **PNG** besides. A KPI tile offers neither: its figure
+is already the whole of what it holds. Both are discreet until the card is hovered: an export is a
+rare gesture, and a row of icons competing with the figures would make every widget look like a
+toolbar. Neither is offered while a widget is loading, failing or empty, a file describing nothing
+being worse than no file.
 
 The CSV carries `key`, `label`, `value` and `documents`. The raw key sits beside the resolved label
 because the label is what a reader recognises and the key is what a query would use. Values are
@@ -695,7 +700,7 @@ days makes a band of unreadable dates.
 
 Three things that sheet has to say out loud, because a browser would otherwise get them wrong:
 
-- **The filter bar becomes words.** Seven period buttons and two empty `dd/mm/yyyy` fields
+- **The filter bar becomes words.** Five period buttons and two empty `dd/mm/yyyy` fields
   describe an application and never say which period is in force, so the bar is dropped and the
   constraints are written out — the same phrases the standalone file carries, from the same place,
   so the two cannot drift.
@@ -707,7 +712,7 @@ Three things that sheet has to say out loud, because a browser would otherwise g
   column.
 
 Nothing about a whole page PNG: the browser has no way to rasterise DOM, and half of these widgets
-are not charts — 27 of the 58 placed are KPI tiles. It would need a screenshotting dependency,
+are not charts — 30 of the 65 placed are KPI tiles. It would need a screenshotting dependency,
 and an approximate one.
 
 ### Persistence
@@ -767,7 +772,7 @@ start there rather than with this table.
 | `nuxeo.passthrough.elasticsearch.enabled=true` | The `nuxeo-search-client-opensearch1` package, through its `opensearch1-search-client` template | Nothing works |
 | `nuxeo.search.client.default.name=opensearch` | Same package | Nothing works |
 | Administrator session | — | Nothing works |
-| `nuxeo.passthrough.elasticsearch.audit.enabled=true` | The `nuxeo-audit-opensearch1` package, through its `opensearch1-audit` template | Users and Workflows dashboards reduced to a notice naming the prerequisite |
+| `nuxeo.passthrough.elasticsearch.audit.enabled=true` | The `nuxeo-audit-opensearch1` package, through its `opensearch1-audit` template | Users, Downloads and Workflows dashboards reduced to a notice naming the prerequisite |
 | `RetentionRule` document type | The `nuxeo-retention` package | Governance keeps its records, retention and legal hold figures, which read core fields, and carries a notice naming the package; only the rule breakdown stays empty |
 | Web UI | The `nuxeo-web-ui` package, declared as a dependency | No Administration menu entry; the dashboard stays reachable by URL |
 
@@ -869,20 +874,21 @@ an `Authorization` header, so the dev server never hits the login page. `.env` i
 never commit real credentials.
 
 ```bash
-npm run build        # production bundle
-npm test             # unit tests (vitest + jsdom)
-npm run format       # prettier
+npm run build                  # production bundle
+npm test -- --watch=false      # unit tests, vitest + jsdom. `ng test` watches by default in a TTY
+npm run format                 # prettier
 ```
 
 ## How it works
 
 ### Deployment
 
-Five resources, no Java:
+Six resources, no Java:
 
 | File | Role |
 | --- | --- |
-| `nuxeo/OSGI-INF/deployment-fragment.xml` | Unzips the app into `nuxeo.war/dashboard/`, maps `NuxeoAuthenticationFilter` onto `/dashboard/*`, and adds a rewrite rule so Angular deep links survive a refresh |
+| `nuxeo/META-INF/MANIFEST.MF` | Declares the bundle and names both components. It needs its trailing newline: without it the last `Nuxeo-Component` line is silently dropped |
+| `nuxeo/OSGI-INF/deployment-fragment.xml` | Unzips the app into `nuxeo.war/dashboard/`, maps `NuxeoAuthenticationFilter` onto `/dashboard/*`, adds a rewrite rule so Angular deep links survive a refresh, and appends the menu label to Web UI's own message bundles. It stages that append through `${bundle.fileName}.i18n-tmp` — **not** `.tmp`, which is where `mp-install` writes its own staging file, and where an interrupted deployment would leave a directory that blocks every later install |
 | `nuxeo/OSGI-INF/dashboard-auth-contrib.xml` | Declares `dashboard/` as a valid start URL, so a login redirect returns to the requested page |
 | `nuxeo/OSGI-INF/dashboard-webresources-contrib.xml` | Registers the Web UI menu entry with the `web-ui` resource bundle |
 | `nuxeo/web/nuxeo.war/ui/nuxeo-labs-repository-dashboard.html` | The `nuxeo-slot-content` itself, a plain HTML file needing no build step |
@@ -975,7 +981,7 @@ a composition. Inferring it from the first widget is right while there is only o
 order of the cells would decide which index the facet value lists are counted on, and moving a cell
 would empty a dialog with nothing on screen to explain it.
 
-None of this costs a single-index dashboard anything: every declaration is absent from the five
+None of this costs a single-index dashboard anything: every declaration is absent from the six
 files that ship, and every clause applies exactly as before.
 
 ### Labels
@@ -1260,8 +1266,9 @@ document and look at what comes back.
 
 ### Who an action is credited to
 
-Every per-user figure on the Users and Workflows dashboards counts `principalName`, which the audit
-fills with `getActingUser()` rather than `getName()`:
+Every per-user figure on the Users, Downloads and Workflows dashboards counts a principal the audit
+fills with `getActingUser()` rather than `getName()` — `principalName` everywhere except
+`top-workflow-initiators`, which reads `extended.workflowInitiator`, filled the same way:
 
 ```java
 public String getActingUser() {
@@ -1320,6 +1327,7 @@ still appear in an audit index, through `Framework.doPrivileged` with no argumen
 │       │   │   ├── registry.ts                  every widget a composition may name
 │       │   │   ├── content/                     13 definitions, repository
 │       │   │   ├── users/                       5, audit index
+│       │   │   ├── downloads/                   7, audit index
 │       │   │   ├── workflows/                   18, audit_wf view
 │       │   │   ├── tasks/                       9, repository
 │       │   │   └── governance/                  17, repository — records, horizon, holds, rules
@@ -1355,6 +1363,8 @@ still appear in an audit index, through `Framework.doPrivileged` with no argumen
 | 6d | The four remaining dashboards migrated onto the library | done |
 | 6d2 | Governance enriched: retention horizon over time, and the rules themselves | done |
 | 6e | Customisation guide: forking the plugin and changing it with an AI assistant, prompt by prompt, with a security checklist | done |
+| 6f | Sections and tabs, so a layout can group its widgets without a component | done |
+| 7 | Downloads dashboard, counting what a reader saved apart from what the interface fetched | done |
 
 ## Licence
 

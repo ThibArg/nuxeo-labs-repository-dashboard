@@ -1,9 +1,9 @@
 /**
  * The shapes the library is made of.
  *
- * Fifty-eight widgets are placed across the five screens and they are eleven ideas; two of them —
- * counting a population and ranking the top values of a field — account for forty-eight. So the
- * reuse worth having is here, in a handful of builders, while the *names* stay one per idea: a
+ * Sixty-five widgets are placed across the six screens and they are a handful of ideas; two of
+ * them — counting a population and ranking the top values of a field — account for fifty-four. So
+ * the reuse worth having is here, in a handful of builders, while the *names* stay one per idea: a
  * composition that said `topNChart('ecm:primaryType')` would be back to writing queries by hand.
  */
 import {

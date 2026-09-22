@@ -314,7 +314,7 @@ against an enforced record; and a document carrying a legal hold *and* a retenti
   nothing has put it on a real screen. `labels: "boolean"` does have one, `rules-by-flexibility`,
   which confirmed that a `terms` on a boolean answers the key `1`, not `"true"`.
 - **A re-theme touches six places, and five are not the token block.** `styles.css` `@theme` holds
-  26 tokens that most of the application follows, but `chart-options.ts:25-36` copies the ten
+  30 colour tokens that most of the application follows, but `chart-options.ts:25-36` copies the ten
   `--color-series-*` byte for byte as a fallback, `:57-58` freezes the axis and gridline greys as
   literals no CSS is ever read for, `chart-widget.component.ts:98` bakes `#ffffff` into every
   exported PNG, `styles.css:350,388` are the print sheet's own, and seven `text-white` / `bg-black/5`
@@ -397,7 +397,7 @@ Do not undo these without knowing what they were for.
 | No whole page PNG | The browser cannot rasterise DOM, and nearly half the placed widgets are KPI tiles, so `getDataURL` reaches half of nothing |
 | The print sheet names `[echarts]` and puts its canvas back in the flow | zrender positions its canvas absolutely, so the shell's `height: auto` reset leaves the card collapsed to its title while the drawing paints over the neighbouring column. Do not fold the exception back into the reset |
 | The span is written twice on a grid cell | A custom property cannot be matched by a selector, and the print sheet has to give a full width widget both paper columns |
-| The printed page states its filters instead of showing the bar | Seven period buttons and two empty date fields describe an application, never which period is in force. `DashboardSession.filterContext` feeds the sheet and the standalone file from one place |
+| The printed page states its filters instead of showing the bar | Five period buttons and two empty date fields describe an application, never which period is in force. `DashboardSession.filterContext` feeds the sheet and the standalone file from one place |
 | The configuration editor is a text area, not a form | The grammar is already a closed union in the model; a form would be a second description of it. Validation runs the real planner, so editor and dashboard cannot disagree |
 | The editor opens on the source, not on the compilation | Handing back the thirteen widgets a composition stands for turns the next edit into a fork of the shipped file rather than a change to it |
 | An override that stops compiling is ignored, not rendered | A configuration can break untouched, a field having gone away. Falling back to what ships is still correct; a column of errors with no way out is not |

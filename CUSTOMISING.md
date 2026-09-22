@@ -472,7 +472,7 @@ carries hand-placed colours for one page; the application needs 26 named ones.
 
 | Place | What it holds | If it is missed |
 | --- | --- | --- |
-| `src/styles.css`, `@theme` (9–52) | 26 tokens: canvas, surface, two borders, three inks, accent, six severity, five sidebar, ten series, `--font-sans` | Nothing. This is the one everybody edits, and most of the application follows it |
+| `src/styles.css`, `@theme` (9–52) | 30 colour tokens — canvas, surface, two borders, three inks, accent and its pale variant, six severity, five sidebar, ten series — plus `--font-sans` and `--radius-card` | Nothing. This is the one everybody edits, and most of the application follows it |
 | `src/app/widgets/chart-options.ts:25-36` | `FALLBACK_PALETTE`, a byte-for-byte copy of the ten `--color-series-*` | A stale palette waiting for any context where `getComputedStyle` is unavailable |
 | `src/app/widgets/chart-options.ts:57-58` | `INK_MUTED = '#667085'`, `BORDER = '#e4e8ef'` | **Every axis label, gridline and legend stays in the old grey.** These are never read from CSS |
 | `src/app/widgets/chart-widget.component.ts:98` | `backgroundColor: '#ffffff'` on the exported PNG | On a dark theme every exported chart, and every chart in the HTML export, is a white rectangle |
