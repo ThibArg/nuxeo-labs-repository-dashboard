@@ -313,6 +313,21 @@ against an enforced record; and a document carrying a legal hold *and* a retenti
 - **`link: "document"` ships with no example.** It is covered by `data-table.component.spec.ts`, but
   nothing has put it on a real screen. `labels: "boolean"` does have one, `rules-by-flexibility`,
   which confirmed that a `terms` on a boolean answers the key `1`, not `"true"`.
+- **A re-theme touches six places, and five are not the token block.** `styles.css` `@theme` holds
+  26 tokens that most of the application follows, but `chart-options.ts:25-36` copies the ten
+  `--color-series-*` byte for byte as a fallback, `:57-58` freezes the axis and gridline greys as
+  literals no CSS is ever read for, `chart-widget.component.ts:98` bakes `#ffffff` into every
+  exported PNG, `styles.css:350,388` are the print sheet's own, and seven `text-white` / `bg-black/5`
+  utilities sit in five components. `chart-options.spec.ts:14` declares `color` and never asserts on
+  it, so a wrong palette goes green; `buildLineOption` takes `palette[3]`, so every trend chart is
+  `--color-series-4`. `border-subtle`, `nxd-dialog` and `nxd-button` are used in three components and
+  defined nowhere.
+- **A Web UI slot content is disabled by name, and the name is not an API.** A later contribution
+  bearing the same `name` wins (`nuxeo-slots.js:46`, on `>=`), a `disabled` stub carrying no template
+  is explicitly supported (`:352`, honoured at `:239`), and addons load after the native bundle
+  (`index.js:91` then `:100`). But `defaultDocumentActions`, the example in Nuxeo's own training
+  material, has zero occurrences in the LTS 2025 tree: a name that moved registers as a new
+  contribution and the entry stays exactly where it was, silently.
 
 ## Roads already walked
 

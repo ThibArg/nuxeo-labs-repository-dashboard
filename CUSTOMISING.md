@@ -420,6 +420,139 @@ That first question is worth asking every time. Thirteen definitions already acc
 needs a definition is only what reads *your* fields — and those go through the same check as any
 other field: aggregatable, no `.keyword`, a dot rather than a slash inside a complex property.
 
+### 9. Re-theme it to your own colours
+
+**Not proven.** The file list below was measured by reading the code, not by performing a
+re-theme — unlike recipes 5 to 7, nobody has run this one end to end.
+
+Two sources, one discipline: make the assistant produce the mapping before it edits anything.
+
+```text
+In my-dashboard, re-theme the application to the colours of <https://example.com>.
+
+Do not edit yet. First give me a table: one row per token, the value you propose,
+and where it came from — lifted from the source, or derived and how. I approve that
+table before you touch a file.
+
+All of these have to be decided, not only the background:
+  - page background, card surface, two border greys
+  - text: main, muted, subtle
+  - one accent, used by links, the active tab and the selected chip
+  - warning, danger and success, each with the pale variant a KPI tile is filled with
+  - the five sidebar colours: background, hover, active, text, muted text
+  - ten categorical chart colours
+  - the body font, and whether it needs loading
+
+Then name which of the six places colour lives in you are going to edit, and why.
+If the answer is "src/styles.css", read the table in CUSTOMISING.md recipe 9 again.
+```
+
+For a local mockup, the first line becomes *"…to the colours of `<path>/index.html` and the
+stylesheet it loads. Read them, do not import them: map their values onto our tokens."* A mockup
+carries hand-placed colours for one page; the application needs 26 named ones.
+
+**What the prompt has to carry, and why each line is there.**
+
+- *"a table before you touch a file"* — a re-theme is thirty-odd values. An assistant that edits as
+  it goes leaves you diffing hex against hex to find out what it decided.
+- *"ten categorical chart colours"* — a brand site gives two or three. Those ten are what a pie, a
+  bar chart and a ranked list cycle through, and ten tints of one brand hue is an unreadable donut.
+  Ask which came from the source and which were derived.
+- *"whether it needs loading"* — `styles.css:51` heads `--font-sans` with `'Inter'` and **nothing
+  loads it**: no `@font-face`, no font link in `src/index.html`, nothing under `public/`. Every
+  reader sees their own fallback today, so a font change is two edits rather than one.
+- *"name which of the six places"* — the one below, which is the whole point of this recipe.
+
+**Colour lives in six places, and five of them are not the token block.**
+
+| Place | What it holds | If it is missed |
+| --- | --- | --- |
+| `src/styles.css`, `@theme` (9–52) | 26 tokens: canvas, surface, two borders, three inks, accent, six severity, five sidebar, ten series, `--font-sans` | Nothing. This is the one everybody edits, and most of the application follows it |
+| `src/app/widgets/chart-options.ts:25-36` | `FALLBACK_PALETTE`, a byte-for-byte copy of the ten `--color-series-*` | A stale palette waiting for any context where `getComputedStyle` is unavailable |
+| `src/app/widgets/chart-options.ts:57-58` | `INK_MUTED = '#667085'`, `BORDER = '#e4e8ef'` | **Every axis label, gridline and legend stays in the old grey.** These are never read from CSS |
+| `src/app/widgets/chart-widget.component.ts:98` | `backgroundColor: '#ffffff'` on the exported PNG | On a dark theme every exported chart, and every chart in the HTML export, is a white rectangle |
+| `src/styles.css:350` and `:388` | The print sheet's own `#fff` and `#d0d5dd` | The printed page keeps the old paper. Note `:345` forces `print-color-adjust: exact` on purpose, so severity backgrounds survive — keep it |
+| `sidebar:19,46,87`, `diagnostics-page:38`, `facet-group-dialog:39`, `kpi-card:23`, `widget-host:84` | Seven `text-white` / `bg-white/10` / `bg-black/5` utilities | `text-white` on an active nav item that is now pale is invisible, and the loading skeletons vanish |
+
+**Do not reorder the ten.** `buildLineOption` takes `palette[3]` (`chart-options.ts:193`), so every
+trend chart in the application is `--color-series-4` and nothing on screen says so.
+
+**Two more things that look like colour and are not.** `border-subtle`, `nxd-dialog` and
+`nxd-button` are written in `config-editor`, `path-scope-picker` and `dashboard-filters` and
+**defined nowhere**: Tailwind's preflight sets `border: 0 solid` with no colour, so those borders
+follow `currentColor` and both of those dialogs wear the browser's own chrome. Matching a mockup
+means defining them, not re-colouring them. And the ECharts tooltip has no colour set anywhere in
+this repository — it keeps the ECharts default whatever the theme says.
+
+**Verify.** Nothing in the suite sees any of this: `chart-options.spec.ts:14` declares
+`color?: string[]` in its reader and never asserts on it, and ECharts cannot render under jsdom at
+all. So `mvn clean install`, deploy, and look — in this order, because each item covers a different
+row of the table: a KPI tile carrying a severity, a donut, a trend, the sidebar's active entry, the
+Configure dialog, an exported PNG, a print preview.
+
+One last thing, about somebody else's brand: matching a customer's palette in their own deployment
+is ordinary work. Shipping a plugin dressed as a company's brand is not. The colours are theirs.
+
+### 10. Put your dashboards where Analytics was
+
+Web UI ships an **Analytics** entry in the Administration menu — four tabs of its own, reading the
+same OpenSearch passthrough this plugin reads. A customer who has both will ask why there are two.
+
+**Before the prompt: hiding is not replacing.** Those four tabs cover document distribution over
+the repository tree, search analytics and workflow analytics; this plugin covers content, users,
+downloads, tasks, workflows and governance. The overlap is partial **in both directions**, so
+hiding Analytics removes figures nothing here produces. That decision is the hard part. The
+mechanics are six lines.
+
+```text
+In my-dashboard, hide Web UI's own Analytics entry so ours takes its place in the
+Administration menu.
+
+Add two disabling stubs to the slot contribution file we already ship,
+nuxeo/web/nuxeo.war/ui/<name>.html, leave our own contribution as it is, and set its
+order to 10 so it lands where Analytics was.
+
+Two things to check rather than assume:
+  - that adminAnalyticsMenuItem and adminAnalyticsPage still exist under those names
+    in the Web UI version I deploy. Grep the bundle. A name that moved fails silently
+  - what /nuxeo/ui/#!/admin/analytics does afterwards, since nuxeo-admin defaults to
+    that tab
+
+Then `mvn clean install` and list the jar to prove the html is in it.
+```
+
+```html
+<nuxeo-slot-content name="adminAnalyticsMenuItem" slot="ADMINISTRATION_MENU" disabled>
+</nuxeo-slot-content>
+<nuxeo-slot-content name="adminAnalyticsPage" slot="ADMINISTRATION_PAGES" disabled>
+</nuxeo-slot-content>
+```
+
+**Why that works**, in Web UI's own code: `nuxeo-slots.js` keys contributions by `name` and lets a
+later one win on `node.priority >= registry.nodes[idx].priority` (`:46`) — equal priorities
+included; it honours a `disabled` flag when rendering (`:239`, declared `:352`); it explicitly
+supports a stub carrying no template, for exactly this; and addons load after the native bundle
+(`index.js:91`, then `:100`), so there is no race to win. Web UI disables two of its own
+contributions this way.
+
+**Three things to know before shipping it.**
+
+- **The names are not an API.** Nuxeo's own training material disables `defaultDocumentActions`,
+  and that name has **zero occurrences** in the LTS 2025 Web UI tree — those actions were split
+  into one contribution each. Nothing warns you: a name that matches nothing registers as a brand
+  new contribution, and the entry you meant to hide stays exactly where it was.
+- **Neither the failure nor the success is visible here.** Not one of the 932 tests touches
+  `nuxeo/`, `npm run build` compiles no Polymer, and no linter reads that file. The jar and the
+  screen are the whole verification.
+- **`/admin/analytics` becomes an empty panel.** The route still resolves, `iron-pages` hides
+  everything unselected, and `nuxeo-admin` dropped its `fallback-selection="error"`, so a bookmark
+  lands on a blank area with no 404 — and `nuxeo-admin` *defaults* to that tab, so entering
+  Administration without naming one goes there.
+
+**Verify:** `unzip -l my-dashboard-web/target/*.jar | grep ui/`, then deploy and check three things
+in a browser, after a hard reload because Web UI's service worker caches its bundles: Analytics
+gone from the menu, your entry sitting where it was, and the Administration section still usable.
+
 ---
 
 ## Requests that are not what they look like
@@ -430,6 +563,7 @@ spend. The full argument for each lives in `AGENTS.md`.
 | Request | Why it is not a recipe |
 | --- | --- |
 | **The dashboard emailed every week** | Needs a Java module — this plugin has none — a scheduler, and a way to render server-side. The HTML export clones the *live DOM*, which does not exist on a server. The three ways out are a headless browser, a second description of the dashboard in Java that will drift, or an email carrying a link. This is a design conversation, not a prompt |
+| **The dashboards embedded inside Web UI's Analytics page** | The iframe compiles in twelve lines and costs the deep link on both sides, six preflight round trips every time Administration is opened — `dom-if` destroys the iframe on the way out — two sidebars, two scrollbars, and an ECharts canvas sized inside a hidden iframe, which is the one failure this codebase already documents. Doing it properly means a Polymer element, `<link rel="import">` and a front-end build the plugin deliberately does without. [Recipe 10](#10-put-your-dashboards-where-analytics-was) is the cheap half of this wish |
 | **"Total size" / blob volumetry** | A plain sum answers a different question: a document versioned ten times is counted eleven. The community method breaks past `search.max_buckets`. The only sound route is the bulk `blobs/orphaned?dryRun=true` action, which ignores the date range and the type filter entirely |
 | **Group tasks by workflow model** | `nt:processName` holds the node's *notification template*, not the model. It needs a join the planner cannot express |
 | **"Documents entering a workflow"** | In `audit_wf`, `docType` and `docUUID` name the route or the task, never the business document |
