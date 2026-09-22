@@ -20,6 +20,11 @@ into a single OpenSearch aggregation request.
 > each kind of change, what to verify, how to ship your own renamed package, and the security
 > checklist to run on the diff.
 
+> **How this was made.** The plugin was written with an AI assistant — OpenCode driving Claude Opus
+> 5, in September 2026 — and it is meant to be maintained the same way. What that changes for
+> whoever picks it up, and what stands in for a line by line human reading, is set out in
+> [CUSTOMISING.md](CUSTOMISING.md#written-with-an-assistant-and-maintained-with-one).
+
 ## Screens
 
 | Screen | Data source |

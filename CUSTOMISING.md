@@ -26,6 +26,11 @@ The Configure dialog is the one to try first, and its limit is worth knowing: **
 lives in that browser only**, so a colleague opening the same page still sees what ships. It is
 ideal for working out what you want, and not a way to deliver it.
 
+And one thing to know before any of it: **this plugin was written with an AI assistant and is meant
+to be maintained with one.** That is both a disclosure and a warning —
+[Written with an assistant, and maintained with one](#written-with-an-assistant-and-maintained-with-one)
+says what it changes for whoever picks the plugin up.
+
 ### When it is code, the loop is
 
 1. **Copy or fork this repository.** It becomes your plugin. You own it.
@@ -731,6 +736,41 @@ Two more, about the deployment rather than the queries:
   non-administrator outright, and injects an ACL filter into every repository query. That stops
   being true the day a widget reads something other than the passthrough — which is the reason to
   say it here rather than to discover it then.
+
+---
+
+## Written with an assistant, and maintained with one
+
+**This plugin was written with an AI assistant, and it is meant to be maintained with one.** Built
+between 18 and 21 September 2026 under a single human name, with OpenCode driving Claude Opus 5 —
+the Angular application, the 932 tests and these three Markdown files, all of it.
+
+It is said here rather than left to be guessed, because it changes what you should check. Code
+written this way is fluent everywhere, including where it is merely plausible, and its failure mode
+is not a stack trace — it is a widget that renders perfectly while describing something else. Every
+guard rail in this repository exists for that specific risk:
+
+- the closed unions and the two compilers, because an assistant writes what you asked for;
+- 932 tests, under a rule that a test unable to observe what it claims is worse than none;
+- every newly shaped request run once against a real index, a fixture proving only that we built
+  what we meant to build;
+- the recipes whose cost is quoted having been performed rather than estimated, and the ones that
+  were not saying so;
+- `AGENTS.md`, so the next session does not re-derive the dialect and get it wrong.
+
+**What it means for you.** Budget for the same loop rather than for a one-off: a new Nuxeo LTS, an
+Angular major, a field that moves under you. That is not a weakness of the method, it *is* the
+method — and this guide together with `AGENTS.md` is what keeps each round cheap. Two consequences
+worth stating plainly:
+
+- **No human has read every line the way a hand-written codebase gets read.** The boundaries, the
+  tests and the live checks stand in for that. Removing them to move faster removes the review, not
+  the ceremony.
+- **[The security checklist](#the-security-checklist) is the review.** It is the one step no
+  assistant performs for you.
+
+And if you deliver this to a customer, tell them. They are entitled to know how what they run was
+made, and it is a better conversation to have before the first bug than after it.
 
 ---
 
