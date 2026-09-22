@@ -1,7 +1,8 @@
 # Nuxeo Labs Repository Dashboard
 
-> **This is WORK IN PROGRESS, using GitHub as backup for now.**
-> It will be forked into `nuxeo-sandbox` once it is ready, and this warning will go away then.
+> [!IMPORTANT]
+> This plugin is **WORK IN PROGRESS** — do not use it as is for now. It will be published in the
+> `nuxeo-sandbox` repository once ready. For now, we use GitHub mainly as a backup.
 
 An administrator facing analytics dashboard for a Nuxeo repository, served by the platform at
 `/nuxeo/dashboard/` and reachable from the Web UI Administration menu.
