@@ -96,7 +96,7 @@ precisely, then to check what came back.
 git clone https://github.com/ThibArg/nuxeo-labs-repository-dashboard my-dashboard
 cd my-dashboard
 git remote rename origin upstream        # so `origin` is free for your own remote
-git checkout -b main
+git checkout -b main                     # your own branch; upstream's is `master`
 ```
 
 Keeping `upstream` costs nothing and lets you pull later. If you never intend to, drop it — but
@@ -699,15 +699,15 @@ Run this on the diff, every time, before you build. It takes a minute and nothin
 you.
 
 ```bash
-git diff --stat upstream/main   # or whatever you are comparing against
+git diff --stat upstream/master   # or whatever you are comparing against
 
 # 1. Did the assistant touch the boundary?
-git diff upstream/main -- \
+git diff upstream/master -- \
   '*/engine/agg-compiler.ts' '*/engine/clause-compiler.ts' \
   '*/config/dashboard-config.model.ts' '*/core/nuxeo-http.service.ts'
 
 # 2. Did anything raw leak into a definition or a dashboard file?
-git diff upstream/main -- '*/library/*' '*/config/dashboards/*' \
+git diff upstream/master -- '*/library/*' '*/config/dashboards/*' \
   | grep -nE 'script|runtime_mappings|\.keyword|EsClause|terms.*index.*path'
 ```
 
