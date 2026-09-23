@@ -24,6 +24,7 @@ npm-debug.log*
 .settings/
 .vscode/*
 !.vscode/extensions.json
+dev_null
 
 # OS
 .DS_Store
