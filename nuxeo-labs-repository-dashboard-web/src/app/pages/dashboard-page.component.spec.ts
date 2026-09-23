@@ -34,6 +34,13 @@ function startOfDay(offset: number): string {
   return day.toISOString();
 }
 
+function startOfMonthsAgo(months: number): string {
+  const day = new Date();
+  day.setHours(0, 0, 0, 0);
+  day.setMonth(day.getMonth() - months);
+  return day.toISOString();
+}
+
 /** Aggregations response covering every widget declared in content.json. */
 function aggregationsResponse(): unknown {
   return {
@@ -391,9 +398,12 @@ describe('DashboardPageComponent', () => {
     const fixture = TestBed.createComponent(DashboardPageComponent);
     await settle(fixture);
 
+    // Content opens on the last twelve months.
     let text = (fixture.nativeElement as HTMLElement).textContent ?? '';
-    expect(text).toContain('Number of documents created per day (All time)');
-    expect(text).toContain('Number of documents modified per day (Based on All time creation)');
+    expect(text).toContain('Number of documents created per day (Last 12 months)');
+    expect(text).toContain(
+      'Number of documents modified per day (Based on Last 12 months creation)',
+    );
 
     const last30 = Array.from(
       (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>(
@@ -459,8 +469,12 @@ describe('DashboardPageComponent', () => {
     const bodies = stub.bodies.filter(isAggregationsRequest);
     expect(bodies).toHaveLength(2);
 
-    // "All time" carries no bound at all.
-    expect(JSON.stringify((bodies[0] as any).query)).not.toContain('dc:created');
+    // Content opens on the last twelve months, up to the start of tomorrow.
+    const opening = (bodies[0] as any).query.bool.filter.find((clause: any) => clause.range).range[
+      'dc:created'
+    ];
+    expect(opening.gte).toBe(startOfMonthsAgo(12));
+    expect(opening.lt).toBe(startOfDay(1));
 
     /*
      * The shortcut resolves to thirty calendar days ending today: from the start of the day
@@ -1130,7 +1144,7 @@ describe('DashboardPageComponent', () => {
     it('names the period the figures obeyed', async () => {
       const fixture = await render();
 
-      expect(context(fixture)).toContain('Period: All time on dc:created');
+      expect(context(fixture)).toContain('Period: Last 12 months on dc:created');
     });
 
     it('names a bucket picked on a chart, which no button would state on paper', async () => {

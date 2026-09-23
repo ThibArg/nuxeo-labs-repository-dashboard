@@ -5,7 +5,7 @@
     {
       "type": "dateRange",
       "field": "dc:created",
-      "default": "all"
+      "default": "12m"
     },
     {
       "type": "pathScope",

@@ -910,7 +910,9 @@ they do not yet say on screen: "All time" there means "since the last purge".
   Web UI fetches is audited as a `download`, which is why 524 of 539 such entries on the test
   instance were renditions.
 - **Prefer short periods.** The cost follows the period: a month of audit or of new documents is a
-  fraction of "All time", which is where Content and Governance open today.
+  fraction of "All time". Content opens on the last twelve months for that reason. Governance
+  still opens on "All time", because its figures describe what holds today — a record written
+  three years ago and still under retention — which a window on `dc:created` would hide.
 - **Measure on your own data.** Content, Users and Workflows show under their title how many
   requests the page sent and how long the slowest took — OpenSearch's own `took`. The three other
   dashboards replace that line with a subtitle of their own. Read it page by page, over the periods
