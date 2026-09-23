@@ -32,18 +32,20 @@ describe('the widget library', () => {
    * would not exist — and nothing would say so: every other test here iterates `WIDGET_LIBRARY`,
    * which by construction cannot notice an absentee. This walks the folder instead.
    */
+  /*
+   * Spec files are left out of the glob itself, not skipped once loaded: an eager glob is hoisted
+   * into static imports, so a spec it matched would already have registered its tests here a
+   * second time, as many as the worker had not cached yet.
+   */
   it('holds every definition the folder declares', () => {
     const modules = (
       import.meta as unknown as {
-        glob: (pattern: string, options: { eager: true }) => Record<string, object>;
+        glob: (patterns: string[], options: { eager: true }) => Record<string, object>;
       }
-    ).glob('./**/*.ts', { eager: true });
+    ).glob(['./**/*.ts', '!./**/*.spec.ts'], { eager: true });
 
     const declared: string[] = [];
-    for (const [path, module] of Object.entries(modules)) {
-      if (path.endsWith('.spec.ts')) {
-        continue;
-      }
+    for (const module of Object.values(modules)) {
       for (const value of Object.values(module)) {
         const candidate = value as Partial<WidgetDefinition>;
         if (candidate && typeof candidate === 'object' && candidate.id && candidate.build) {

@@ -24,7 +24,7 @@ for Angular 22:
 ```bash
 cd nuxeo-labs-repository-dashboard-web
 export PATH="$PWD/node:$PATH"
-npm test -- --watch=false                                                 # 51 files, 932 tests
+npm test -- --watch=false                                                 # 51 files, 931 tests
 npm test -- --watch=false --include src/app/engine/agg-compiler.spec.ts   # one file
 npm test -- --watch=false --filter 'never emits a .keyword'               # one behaviour
 npm run build     # this IS the typecheck: strict, noUnusedLocals, strictTemplates
@@ -431,7 +431,7 @@ Seven screens, six composed dashboards. 69 definitions over five builders — `c
 `live-documents` serves both Content and Governance, the only sharing so far. Governance carries 17
 definitions split four ways, five of which sit on no page, describing configuration rather than
 content. Exactly one widget still reads `hits.total`: Content's `total-documents`, which constrains
-nothing and is meant to. 932 tests over 51 files, build green.
+nothing and is meant to. 931 tests over 51 files, build green.
 
 Downloads is the newest screen and the worked example `CUSTOMISING.md` is written from: seven
 definitions naming `extended.downloadReason` beside `eventId: download`, and the second shipped use
