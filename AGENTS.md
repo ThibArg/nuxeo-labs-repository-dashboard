@@ -338,11 +338,11 @@ the argument.
   sum answers a different question: the store keeps one object per digest while every version holds
   its own copy, so a document versioned ten times is counted eleven — an order of magnitude, not an
   imprecision. The community method (group by `file:content.digest` with `"size": 1000000000`, add
-  with `sum_bucket`) dies past `search.max_buckets`, 65,536 by default and set nowhere in the LTS
+  with `sum_bucket`) dies past `search.max_buckets`, 65,535 by default and set nowhere in the LTS
   2025 tree. `composite` does not rescue it: several `sources` produce a cartesian product, not a
   union, so it needs one pagination per blob field, every page rescans without an index sorted on
   the digest, deduplicating across fields means holding every digest in browser memory, renditions
-  are `index: false`, and the passthrough has a 20 s socket timeout with no retry. **If it comes
+  are `index: false`, and the passthrough waits 121 s by default, never retrying. **If it comes
   back**, the route is `DELETE /api/v1/management/blobs/orphaned?dryRun=true` polled through
   `GET /api/v1/management/bulk/{commandId}` for `result.totalSize` — deduplicated by construction,
   exhaustive without knowing a schema, deleting nothing, needing the `queryBlobKeys` capability
