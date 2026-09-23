@@ -6,6 +6,10 @@
  * aggregation is folded into one request, each widget owning a named aggregation and, when it
  * carries its own predicate, a `filter` wrapper. Table widgets need `hits` and therefore keep a
  * request of their own.
+ *
+ * A `filter` wrapper narrows what a widget counts, not what the shard walks: every entry the query
+ * selects is still handed to every aggregation. So whatever all the widgets of a request restrict
+ * themselves to is also stated in its query — see `narrowingClauses`.
  */
 import { EsIndex, EsSearchBody } from '../core/nuxeo.types';
 import {
@@ -217,6 +221,62 @@ function groupByIndex(config: DashboardConfig): Map<EsIndex, string[]> {
   return groups;
 }
 
+/**
+ * What the widgets of one request all restrict themselves to, stated so the query can say it too.
+ *
+ * Tasks is the case that made this necessary: all eight widgets count open tasks, each inside its
+ * own `filter` wrapper, under a `match_all` query — so every entry of the repository index went
+ * past eight collectors to count a few thousand tasks. Narrowing the query by N changes no figure
+ * as long as every widget's own filter F already implies N, because Q ∧ N ∧ F is then Q ∧ F. Two
+ * things are implied by construction, and nothing else is lifted:
+ *
+ *  - the clauses present in every widget's filter, compared once compiled;
+ *  - what remains of those filters, OR'ed, which is what serves Users and Workflows: their widgets
+ *    share no clause, but each names one `eventId`, and the audit holds a great many others.
+ *
+ * A widget with no filter of its own counts the whole query — the Total tile reading `hits.total`,
+ * a metric KPI, a chart over the dashboard population — so a single one of them means lifting
+ * nothing. That is why Content is left as it was. Widget filters stay as they are: a clause stated
+ * twice costs a check per entry that already matched it, and each wrapper still describes its
+ * whole population on its own.
+ *
+ * @param populations one list per aggregation widget of the request: the compiled clauses it adds
+ *                    to the query, empty when it adds none.
+ */
+export function narrowingClauses(populations: EsClause[][]): EsClause[] {
+  if (!populations.length || populations.some((clauses) => !clauses.length)) {
+    return [];
+  }
+
+  const keyed = populations.map((clauses) =>
+    clauses.map((clause) => ({ key: JSON.stringify(clause), clause })),
+  );
+  const common = keyed[0].filter(
+    ({ key }, position) =>
+      keyed[0].findIndex((entry) => entry.key === key) === position &&
+      keyed.every((entries) => entries.some((entry) => entry.key === key)),
+  );
+  const lifted = new Set(common.map(({ key }) => key));
+
+  const remainders = new Map<string, EsClause[]>();
+  for (const entries of keyed) {
+    const rest = entries.filter(({ key }) => !lifted.has(key)).map(({ clause }) => clause);
+    if (!rest.length) {
+      // This widget counts everything the common clauses select, so no union can leave any out.
+      return common.map(({ clause }) => clause);
+    }
+    remainders.set(JSON.stringify(rest), rest);
+  }
+
+  const arms = [...remainders.values()].map((rest) =>
+    rest.length === 1 ? rest[0] : boolFilter(rest),
+  );
+  return [
+    ...common.map(({ clause }) => clause),
+    { bool: { should: arms, minimum_should_match: 1 } },
+  ];
+}
+
 function aggregationRequestId(config: DashboardConfig, index: EsIndex): string {
   return index === config.index
     ? `${config.id}:aggregations`
@@ -242,6 +302,7 @@ export function planDashboard(config: DashboardConfig, filters: FilterState): Da
     const bounds = histogramBounds(config, filters, index);
     const aggs: Record<string, EsClause> = {};
     const aggregationWidgetIds: string[] = [];
+    const populations: EsClause[][] = [];
     const requestId = aggregationRequestId(config, index);
 
     for (const widgetId of widgetIds) {
@@ -272,6 +333,7 @@ export function planDashboard(config: DashboardConfig, filters: FilterState): Da
           aggs[widgetId] = planned.agg;
         }
         aggregationWidgetIds.push(widgetId);
+        populations.push(planned.population);
         widgets.set(widgetId, {
           widgetId,
           requestId,
@@ -295,7 +357,7 @@ export function planDashboard(config: DashboardConfig, filters: FilterState): Da
         body: {
           size: 0,
           track_total_hits: true,
-          query: boolFilter(shared),
+          query: boolFilter([...shared, ...narrowingClauses(populations)]),
           ...(Object.keys(aggs).length ? { aggs } : {}),
         },
         widgetIds: aggregationWidgetIds,
@@ -309,6 +371,11 @@ export function planDashboard(config: DashboardConfig, filters: FilterState): Da
 interface AggregationWidgetPlan {
   /** Absent when the widget reads `hits.total` instead of an aggregation. */
   agg: EsClause | null;
+  /**
+   * Compiled clauses the widget adds to the query, empty when its figure is the whole query's.
+   * Whatever every widget of the request adds is what `narrowingClauses` may lift.
+   */
+  population: EsClause[];
   read: ReadStrategy;
   wrapped: boolean;
   hasMetric: boolean;
@@ -341,6 +408,7 @@ function planAggregationWidget(
     if (!ownFilter.length && !metric && !secondary) {
       return {
         agg: null,
+        population: [],
         read: 'total',
         wrapped: false,
         hasMetric: false,
@@ -353,6 +421,7 @@ function planAggregationWidget(
     if (!ownFilter.length && metric && !secondary) {
       return {
         agg: metric as EsClause,
+        population: [],
         read: 'aggregation',
         wrapped: false,
         hasMetric: true,
@@ -376,6 +445,7 @@ function planAggregationWidget(
 
     return {
       agg: wrapper,
+      population: ownFilter,
       read: 'aggregation',
       wrapped: true,
       hasMetric: metric !== null,
@@ -414,6 +484,7 @@ function planAggregationWidget(
     if (!ownFilter.length && !distinct) {
       return {
         agg: inner,
+        population: [],
         read: 'aggregation',
         wrapped: false,
         hasMetric,
@@ -427,6 +498,7 @@ function planAggregationWidget(
         filter: boolFilter(ownFilter),
         aggs: { [INNER_AGG]: inner, ...(distinct ? { [DISTINCT_AGG]: distinct } : {}) },
       },
+      population: ownFilter,
       read: 'aggregation',
       wrapped: true,
       hasMetric,

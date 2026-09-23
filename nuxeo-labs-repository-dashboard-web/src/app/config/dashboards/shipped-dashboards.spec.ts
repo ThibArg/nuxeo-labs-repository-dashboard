@@ -1,5 +1,5 @@
 import { DashboardConfig, FilterState, customRange, layoutCells } from '../dashboard-config.model';
-import { dateFieldFor, planDashboard } from '../../engine/query-planner';
+import { dateFieldFor, globalFilters, planDashboard } from '../../engine/query-planner';
 import { validateConfig } from '../../engine/dashboard-override.service';
 import { shippedConfig } from '../../../testing/shipped';
 
@@ -36,6 +36,31 @@ const BOUNDED: FilterState = {
   picks: [],
   path: null,
 };
+
+type Clause = Record<string, any>;
+
+/** The clauses of a query or of a `filter` wrapper; `match_all` and an unwrapped widget hold none. */
+function clausesOf(query: Clause | undefined): Clause[] {
+  return query?.['bool']?.filter ?? [];
+}
+
+/**
+ * True when a widget filter, read as a conjunction, cannot match an entry the clause refuses.
+ *
+ * Deliberately read off the request rather than off the planner's reasoning: a clause the widget
+ * states itself, or a union one of whose arms it states whole. Anything else fails, which is the
+ * safe way to be wrong.
+ */
+function implies(own: Clause[], clause: Clause): boolean {
+  const stated = new Set(own.map((entry) => JSON.stringify(entry)));
+  const holds = (entry: Clause) => stated.has(JSON.stringify(entry));
+  const arms: Clause[] | undefined = clause['bool']?.should;
+  return (
+    holds(clause) ||
+    (!!arms &&
+      arms.some((arm) => holds(arm) || (clausesOf(arm).length > 0 && clausesOf(arm).every(holds))))
+  );
+}
 
 function everyAggregation(config: DashboardConfig): unknown[] {
   const found: unknown[] = [];
@@ -155,5 +180,58 @@ describe.each(SHIPPED)('%s', (_name, source, config) => {
       (node) => (node as Record<string, unknown>)['distinct'] !== undefined,
     );
     expect(counted).toHaveLength(lists.length);
+  });
+
+  /*
+   * The planner narrows a query beyond the shared filters to spare the shards entries no widget
+   * counts. That is only exact while every widget's own filter implies what was added: a widget
+   * counting the whole query — the Total tile, a metric, a chart with no filter — must see the
+   * query left alone. And the narrowing is worth having, so it must happen whenever it can.
+   */
+  it('narrows a query only by what each of its widgets already counts, and whenever it can', () => {
+    for (const request of planDashboard(config, BOUNDED).requests) {
+      if (request.kind !== 'aggregations') {
+        continue;
+      }
+      const shared = globalFilters(config, BOUNDED, undefined, request.index);
+      const clauses = clausesOf(request.body.query as Clause);
+      const added = clauses.slice(shared.length);
+      const aggs = (request.body.aggs ?? {}) as Record<string, Clause>;
+      const owns = request.widgetIds.map((widgetId) => clausesOf(aggs[widgetId]?.['filter']));
+
+      expect(clauses.slice(0, shared.length)).toEqual(shared);
+      for (const own of owns) {
+        for (const clause of added) {
+          expect(implies(own, clause), `${request.id}: ${JSON.stringify(clause)}`).toBe(true);
+        }
+      }
+      expect(added.length > 0).toBe(owns.every((own) => own.length > 0));
+    }
+  });
+});
+
+describe('the queries the shipped dashboards send', () => {
+  const shipped = (name: string) => SHIPPED.find(([file]) => file === name)![2];
+
+  it('walk only the open tasks on Tasks, whose eight widgets count nothing else', () => {
+    const [aggregations] = planDashboard(shipped('tasks.json'), BOUNDED).requests;
+
+    expect(aggregations.kind).toBe('aggregations');
+    expect(aggregations.body.query).toEqual({
+      bool: {
+        filter: [
+          { term: { 'ecm:mixinType': 'Task' } },
+          { term: { 'ecm:currentLifeCycleState': 'opened' } },
+        ],
+      },
+    });
+  });
+
+  /** The Total tile reads `hits.total`, so on Content the query is a figure in its own right. */
+  it('leave Content on the shared filters alone', () => {
+    const content = shipped('content.json');
+    const [aggregations] = planDashboard(content, BOUNDED).requests;
+
+    expect(aggregations.body.query).toEqual({ bool: { filter: globalFilters(content, BOUNDED) } });
   });
 });

@@ -503,4 +503,203 @@ describe('planDashboard', () => {
       ]);
     });
   });
+
+  /**
+   * A `filter` wrapper decides what a widget counts, not what a shard walks: every entry the query
+   * selects goes past every aggregation. Tasks counted a few thousand open tasks under a
+   * `match_all`, so the whole repository index went past eight collectors.
+   */
+  describe('narrowing the query to what every widget counts', () => {
+    const TASK = { term: { 'ecm:mixinType': 'Task' } };
+    const OPENED = { term: { 'ecm:currentLifeCycleState': 'opened' } };
+    const OVERDUE = { range: { 'nt:dueDate': { lt: 'now' } } };
+
+    function queryOf(dashboard: DashboardConfig, filters = RANGE_ALL): unknown {
+      return planDashboard(dashboard, filters).requests[0].body.query;
+    }
+
+    const tasks = (extra: DashboardConfig['widgets'] = {}) =>
+      config({
+        layout: [{ cells: ['open', 'overdue', 'byType', ...Object.keys(extra)] }],
+        widgets: {
+          open: { type: 'kpi', label: 'Open', filter: [TASK, OPENED] },
+          overdue: { type: 'kpi', label: 'Overdue', filter: [TASK, OPENED, OVERDUE] },
+          byType: {
+            type: 'donut',
+            label: 'By type',
+            filter: [TASK, OPENED],
+            agg: { terms: { field: 'ecm:primaryType' } },
+          },
+          ...extra,
+        },
+      });
+
+    /*
+     * No union follows: `open` counts every open task, so none could leave anything out. That is
+     * Governance, whose Live tile carries the three clauses every other tile starts with.
+     */
+    it('states in the query the clauses every widget already restricts itself to', () => {
+      expect(queryOf(tasks())).toEqual({
+        bool: { filter: [{ term: { 'ecm:isVersion': false } }, TASK, OPENED] },
+      });
+    });
+
+    it('leaves every widget counting exactly what it counted', () => {
+      const aggs = planDashboard(tasks(), RANGE_ALL).requests[0].body.aggs as Record<string, any>;
+
+      expect(aggs['overdue'].filter).toEqual({ bool: { filter: [TASK, OPENED, OVERDUE] } });
+      expect(aggs['byType'].filter).toEqual({ bool: { filter: [TASK, OPENED] } });
+    });
+
+    it('keeps the shared filters ahead of what it lifts', () => {
+      const clauses = (queryOf(tasks(), RANGE_30D) as any).bool.filter;
+
+      expect(clauses).toEqual([
+        { term: { 'ecm:isVersion': false } },
+        { range: { 'dc:created': { gte: expect.any(String), lt: expect.any(String) } } },
+        TASK,
+        OPENED,
+      ]);
+    });
+
+    /**
+     * Content's Total tile reads `hits.total`, so its figure *is* the query. Narrowing it to the
+     * live documents every other tile counts would turn the total into a second Live tile.
+     */
+    it('narrows nothing while one widget reads hits.total', () => {
+      const withTotal = tasks({ total: { type: 'kpi', label: 'Total' } });
+
+      expect(planDashboard(withTotal, RANGE_ALL).widgets.get('total')?.read).toBe('total');
+      expect(queryOf(withTotal)).toEqual({
+        bool: { filter: [{ term: { 'ecm:isVersion': false } }] },
+      });
+    });
+
+    it('narrows nothing while one widget computes a metric over the whole query', () => {
+      const withMetric = tasks({
+        size: { type: 'kpi', label: 'Size', metric: { sum: 'file:content.length' } },
+      });
+
+      expect(planDashboard(withMetric, RANGE_ALL).widgets.get('size')?.wrapped).toBe(false);
+      expect(JSON.stringify(queryOf(withMetric))).not.toContain('Task');
+    });
+
+    it('narrows nothing while one chart has no filter of its own', () => {
+      const withChart = tasks({
+        trend: {
+          type: 'area',
+          label: 'Trend',
+          agg: { date_histogram: { field: 'dc:created', calendar_interval: 'day' } },
+        },
+      });
+
+      expect(JSON.stringify(queryOf(withChart))).not.toContain('Task');
+    });
+
+    /**
+     * Both of these get a `match_all` wrapper, one for its secondary figure, the other for the
+     * count of distinct values beside a top N. Being wrapped is not the same as having a filter.
+     */
+    it('narrows nothing for a widget wrapped only to carry a figure beside its own', () => {
+      const withSecondary = tasks({
+        all: {
+          type: 'kpi',
+          label: 'All',
+          secondary: { filter: [TASK], label: '{value} tasks' },
+        },
+      });
+      const withTopN = tasks({
+        creators: {
+          type: 'ranked-list',
+          label: 'Creators',
+          agg: { terms: { field: 'dc:creator', size: 10 } },
+        },
+      });
+
+      expect(JSON.stringify(queryOf(withSecondary))).not.toContain('Task');
+      expect(JSON.stringify(queryOf(withTopN))).not.toContain('Task');
+    });
+
+    /**
+     * Users and Workflows: no clause in common, each widget naming one event. The union of their
+     * filters is still implied by each of them, and the audit holds a great many other events.
+     */
+    it('unions what remains when the widgets share no clause, once per distinct filter', () => {
+      const event = (eventId: string) => [{ term: { eventId } }];
+      const audit = config({
+        baseFilter: undefined,
+        layout: [{ cells: ['logins', 'failures', 'topUsers'] }],
+        widgets: {
+          logins: { type: 'kpi', label: 'Logins', filter: event('loginSuccess') },
+          failures: { type: 'kpi', label: 'Failures', filter: event('loginFailed') },
+          topUsers: {
+            type: 'bar',
+            label: 'Top users',
+            filter: event('loginSuccess'),
+            agg: { terms: { field: 'principalName' } },
+          },
+        },
+      });
+
+      expect(queryOf(audit)).toEqual({
+        bool: {
+          filter: [
+            {
+              bool: {
+                should: [
+                  { term: { eventId: 'loginSuccess' } },
+                  { term: { eventId: 'loginFailed' } },
+                ],
+                minimum_should_match: 1,
+              },
+            },
+          ],
+        },
+      });
+    });
+
+    it('unions what remains beside the common clauses, keeping a filter of several clauses whole', () => {
+      const dueFrom = { range: { 'nt:dueDate': { gte: 'now' } } };
+      const dueBy = { range: { 'nt:dueDate': { lte: 'now+7d' } } };
+      const late = config({
+        layout: [{ cells: ['overdue', 'dueThisWeek'] }],
+        widgets: {
+          overdue: { type: 'kpi', label: 'Overdue', filter: [TASK, OPENED, OVERDUE] },
+          dueThisWeek: {
+            type: 'kpi',
+            label: 'Due this week',
+            filter: [TASK, OPENED, dueFrom, dueBy],
+          },
+        },
+      });
+
+      expect((queryOf(late) as any).bool.filter).toEqual([
+        { term: { 'ecm:isVersion': false } },
+        TASK,
+        OPENED,
+        {
+          bool: {
+            should: [OVERDUE, { bool: { filter: [dueFrom, dueBy] } }],
+            minimum_should_match: 1,
+          },
+        },
+      ]);
+    });
+
+    it('leaves a table request as it was, since its own filter already sits in its query', () => {
+      const withTable = tasks({
+        rows: {
+          type: 'table',
+          label: 'Rows',
+          filter: [OVERDUE],
+          columns: [{ field: 'dc:title', label: 'Title' }],
+        },
+      });
+
+      const table = planDashboard(withTable, RANGE_ALL).requests.find((r) => r.kind === 'hits')!;
+      expect(table.body.query).toEqual({
+        bool: { filter: [{ term: { 'ecm:isVersion': false } }, OVERDUE] },
+      });
+    });
+  });
 });

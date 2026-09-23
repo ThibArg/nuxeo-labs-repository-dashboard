@@ -461,4 +461,19 @@ describe('a composition mixing the repository and the audit', () => {
     expect(JSON.stringify(audit.body.aggs)).toContain('loginSuccess');
     expect(JSON.stringify(audit.body.aggs)).not.toContain('ecm:isVersion');
   });
+
+  /**
+   * What every widget of a request counts is lifted into that request's query, and a request is
+   * one index. Lifting across the page instead would hand the audit the live-document clauses of
+   * the repository half, and an audit request carrying `ecm:isVersion` answers zero, not everything.
+   */
+  it('narrows each half by what its own widgets count, never by the other half', () => {
+    const { config } = compileComposition(MIXED);
+    const [repository, audit] = planDashboard(config!, BOUNDED).requests;
+
+    expect(JSON.stringify(repository.body.query)).toContain('"ecm:isVersion":false');
+    expect(JSON.stringify(repository.body.query)).not.toContain('loginSuccess');
+    expect(JSON.stringify(audit.body.query)).toContain('loginSuccess');
+    expect(JSON.stringify(audit.body.query)).not.toContain('ecm:isVersion');
+  });
 });
