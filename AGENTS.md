@@ -420,7 +420,9 @@ Comments explain *why*, never *what*. Prefer no comment to one restating the cod
 whose justification is wrong — one claimed OpenSearch flattens blobs, which it does not.
 
 No emoji. Prettier owns formatting; the four-space rule of the global instructions does not apply to
-this project. Answer the user in French, using *vous*.
+this project. Reply in the language the user writes in, and in English when there is nothing to go
+by. Write every piece of documentation in English — the README, this file, `CUSTOMISING.md`, and
+any report or review produced about the project — whatever language the conversation is held in.
 
 ## Where things stand
 
