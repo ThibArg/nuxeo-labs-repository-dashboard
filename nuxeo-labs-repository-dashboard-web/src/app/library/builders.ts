@@ -7,10 +7,10 @@
  * composition that said `topNChart('ecm:primaryType')` would be back to writing queries by hand.
  */
 import {
-  CalendarInterval,
   ChartWidgetType,
   ColumnConfig,
   DateRangeBucket,
+  HistogramInterval,
   KpiSeverity,
   LabelStrategy,
   MetricConfig,
@@ -18,6 +18,7 @@ import {
   TermsOrder,
   ValueFormat,
 } from '../config/dashboard-config.model';
+import { keyFormat } from '../engine/agg-compiler';
 import { ParamSpecs, WidgetBody } from './definition';
 import { Predicate, anyOf, compilePredicates } from './predicates';
 
@@ -138,30 +139,21 @@ export function topNChart(options: {
 }
 
 /**
- * Bucket key pattern that says as much as the interval carries and no more.
+ * Widths a trend may be drawn at, `auto` first because it is every trend's default.
  *
- * A monthly histogram formatted `yyyy-MM-dd` would label every bar with a first of the month,
- * which reads as a day rather than as a month.
+ * `auto` follows the period: a day up to ninety-two days, a week up to two years, a month up to
+ * twenty, a year beyond, and a width OpenSearch picks when the period does not bound the field —
+ * "All time", or `dc:modified` under a filter on `dc:created`. A composition naming a width keeps
+ * it, and with it the risk `auto` exists to remove: a daily chart over "All time" spans whatever
+ * dates the index holds, and one document dated 1899 is 46,000 buckets.
  */
-function keyFormat(interval: CalendarInterval): string {
-  switch (interval) {
-    case 'hour':
-      return 'yyyy-MM-dd HH:mm';
-    case 'month':
-      return 'yyyy-MM';
-    case 'quarter':
-    case 'year':
-      return 'yyyy';
-    default:
-      return 'yyyy-MM-dd';
-  }
-}
+export const TREND_INTERVALS = ['auto', 'hour', 'day', 'week', 'month', 'quarter', 'year'] as const;
 
 /** How a volume, or a measure of it, moved over the period. */
 export function trendChart(options: {
   of: Predicate[];
   field: string;
-  interval: CalendarInterval;
+  interval: HistogramInterval;
   chart: ChartWidgetType;
   /** Computed per bucket instead of counting documents, e.g. how many distinct people logged in. */
   metric?: MetricConfig;
@@ -187,7 +179,7 @@ export function trendChart(options: {
       date_histogram: {
         field: options.field,
         calendar_interval: options.interval,
-        format: keyFormat(options.interval),
+        ...(options.interval === 'auto' ? {} : { format: keyFormat(options.interval) }),
         ...(options.minDocCount !== undefined ? { min_doc_count: options.minDocCount } : {}),
       },
     },

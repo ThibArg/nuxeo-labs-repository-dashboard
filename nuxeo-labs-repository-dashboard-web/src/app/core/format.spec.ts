@@ -1,5 +1,6 @@
 import {
   daysUntil,
+  describeInterval,
   formatBytes,
   formatCell,
   formatDuration,
@@ -77,6 +78,25 @@ describe('format', () => {
       expect(formatCell(undefined, 'text')).toBe('—');
       expect(formatCell(null, 'date')).toBe('—');
       expect(formatCell('not a number', 'bytes')).toBe('—');
+    });
+  });
+
+  describe('describeInterval', () => {
+    it('reads a calendar unit the planner chose as it is', () => {
+      expect(describeInterval('week')).toBe('week');
+    });
+
+    it('puts a width OpenSearch chose into words', () => {
+      expect(describeInterval('1d')).toBe('day');
+      expect(describeInterval('7d')).toBe('7 days');
+      expect(describeInterval('1M')).toBe('month');
+      expect(describeInterval('3M')).toBe('3 months');
+      expect(describeInterval('10y')).toBe('10 years');
+    });
+
+    it('tells a minute from a month, which differ only by case', () => {
+      expect(describeInterval('30m')).toBe('30 minutes');
+      expect(describeInterval('1M')).toBe('month');
     });
   });
 

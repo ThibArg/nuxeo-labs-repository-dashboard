@@ -68,11 +68,13 @@ function aggregationsResponse(): unknown {
           { key: 2, key_as_string: '2026-09-16', doc_count: 30 },
         ],
       },
+      // `dc:modified` is not bounded by the period, so OpenSearch chose the width and says which.
       modifiedTrend: {
         buckets: [
           { key: 1, key_as_string: '2026-09-15', doc_count: 40 },
-          { key: 2, key_as_string: '2026-09-16', doc_count: 55 },
+          { key: 2, key_as_string: '2026-09-22', doc_count: 55 },
         ],
+        interval: '7d',
       },
       topContributors: { buckets: [{ key: 'jdoe', doc_count: 900 }] },
     },
@@ -108,14 +110,17 @@ describe('content.json', () => {
     expect(plan.requests[0].kind).toBe('aggregations');
   });
 
+  /*
+   * The period bounds `dc:created`, so the width of that chart is chosen from its days. It says
+   * nothing about `dc:modified`, whose span is whatever the index holds, so there OpenSearch
+   * chooses a width that fits.
+   */
   it('charts creations and modifications on their own date field', () => {
-    const aggs = planDashboard(CONTENT, defaultFilterState()).requests[0].body.aggs as Record<
-      string,
-      any
-    >;
+    const aggs = planDashboard(CONTENT, defaultFilterState(CONTENT)).requests[0].body
+      .aggs as Record<string, any>;
 
     expect(aggs['createdTrend'].aggs.inner.date_histogram.field).toBe('dc:created');
-    expect(aggs['modifiedTrend'].aggs.inner.date_histogram.field).toBe('dc:modified');
+    expect(aggs['modifiedTrend'].aggs.inner.auto_date_histogram.field).toBe('dc:modified');
   });
 
   it('never emits a .keyword suffix', () => {
@@ -385,7 +390,7 @@ describe('DashboardPageComponent', () => {
     expect(searches).toHaveLength(1);
   });
 
-  it('reminds the reader which range the trends cover', async () => {
+  it('reminds the reader which range the trends cover, and how wide their bars are', async () => {
     stub = installFetchStub([
       {
         match: '/site/es/nuxeo/_search',
@@ -398,11 +403,11 @@ describe('DashboardPageComponent', () => {
     const fixture = TestBed.createComponent(DashboardPageComponent);
     await settle(fixture);
 
-    // Content opens on the last twelve months.
+    // Content opens on the last twelve months, drawn by the week; OpenSearch chose seven days.
     let text = (fixture.nativeElement as HTMLElement).textContent ?? '';
-    expect(text).toContain('Number of documents created per day (Last 12 months)');
+    expect(text).toContain('Number of documents created per week (Last 12 months)');
     expect(text).toContain(
-      'Number of documents modified per day (Based on Last 12 months creation)',
+      'Number of documents modified per 7 days (Based on Last 12 months creation)',
     );
 
     const last30 = Array.from(

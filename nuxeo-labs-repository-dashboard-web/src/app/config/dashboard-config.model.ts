@@ -19,6 +19,15 @@ export type TermsOrder =
 
 export type CalendarInterval = 'hour' | 'day' | 'week' | 'month' | 'quarter' | 'year';
 
+/**
+ * Width of a histogram bucket, or `auto` to leave it to the planner.
+ *
+ * `auto` is derived from the period when the period bounds the very field the histogram groups
+ * by, and is otherwise left to OpenSearch's `auto_date_histogram`, which keeps the bucket count
+ * under a ceiling whatever dates the index holds. See `resolveHistogram`.
+ */
+export type HistogramInterval = CalendarInterval | 'auto';
+
 export interface NumericRange {
   key: string;
   from?: number;
@@ -37,9 +46,13 @@ export type AggConfig =
   | {
       date_histogram: {
         field: string;
-        calendar_interval: CalendarInterval;
-        /** Java date pattern used for the bucket key, e.g. `yyyy-MM-dd`. */
+        calendar_interval: HistogramInterval;
+        /**
+         * Java date pattern used for the bucket key, e.g. `yyyy-MM-dd`. Chosen by the planner
+         * when absent and the interval is `auto`.
+         */
         format?: string;
+        /** Refused beside `auto`, which may compile to an aggregation that has no such key. */
         min_doc_count?: number;
         /**
          * IANA zone the buckets are cut in, e.g. `Europe/Paris`. Defaults to the reader's own

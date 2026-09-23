@@ -1,7 +1,7 @@
 import { EsResponse } from '../core/nuxeo.types';
 import { DISTINCT_AGG, INNER_AGG, METRIC_AGG } from './agg-compiler';
 import { WidgetPlan } from './query-planner';
-import { isEmptyData, readAggregationWidget, readHitsWidget } from './result-mapper';
+import { WidgetData, isEmptyData, readAggregationWidget, readHitsWidget } from './result-mapper';
 
 function plan(overrides: Partial<WidgetPlan> = {}): WidgetPlan {
   return {
@@ -338,6 +338,80 @@ describe('result-mapper', () => {
       ) as { buckets: { key: string }[] };
 
       expect(data.buckets[0].key).toBe('user:Josh');
+    });
+  });
+
+  /**
+   * A trend's hint says how wide its bars are, and that width is known at two different moments:
+   * when the planner chose it, before the request; when OpenSearch did, only in the response.
+   */
+  describe('the width of a date histogram', () => {
+    const days = [
+      { key: 1, key_as_string: '2026-09-14', doc_count: 3 },
+      { key: 2, key_as_string: '2026-09-21', doc_count: 0 },
+    ];
+
+    it('names the width the planner chose', () => {
+      const data = readAggregationWidget(
+        response({ w: { buckets: days } }),
+        plan({ interval: 'week' }),
+      ) as Extract<WidgetData, { kind: 'buckets' }>;
+
+      expect(data.interval).toBe('week');
+      expect(data.buckets.map((bucket) => bucket.key)).toEqual(['2026-09-14', '2026-09-21']);
+    });
+
+    it('names the width OpenSearch chose, read off the response', () => {
+      const data = readAggregationWidget(
+        response({ w: { buckets: days, interval: '7d' } }),
+        plan({ interval: 'auto' }),
+      ) as Extract<WidgetData, { kind: 'buckets' }>;
+
+      expect(data.interval).toBe('7d');
+    });
+
+    it('reads the width under a filter wrapper, where the buckets are', () => {
+      const data = readAggregationWidget(
+        response({ w: { doc_count: 3, [INNER_AGG]: { buckets: days, interval: '1d' } } }),
+        plan({ interval: 'auto', wrapped: true }),
+      ) as Extract<WidgetData, { kind: 'buckets' }>;
+
+      expect(data.interval).toBe('1d');
+    });
+
+    /** A month labelled `2024-03-01` reads as a day; a decade labelled with a day, worse. */
+    it('shortens the keys of buckets OpenSearch sized by the month or by the year', () => {
+      const read = (interval: string) =>
+        (
+          readAggregationWidget(
+            response({
+              w: { buckets: [{ key: 1, key_as_string: '2024-03-01', doc_count: 3 }], interval },
+            }),
+            plan({ interval: 'auto' }),
+          ) as Extract<WidgetData, { kind: 'buckets' }>
+        ).buckets[0].key;
+
+      expect(read('3M')).toBe('2024-03');
+      expect(read('10y')).toBe('2024');
+      expect(read('7d')).toBe('2024-03-01');
+    });
+
+    it('leaves alone the keys of a width chosen in advance, already formatted for it', () => {
+      const data = readAggregationWidget(
+        response({ w: { buckets: [{ key: 1, key_as_string: '2024-03-01', doc_count: 3 }] } }),
+        plan({ interval: 'month' }),
+      ) as Extract<WidgetData, { kind: 'buckets' }>;
+
+      expect(data.buckets[0].key).toBe('2024-03-01');
+    });
+
+    it('says nothing of a width on a list that is not a histogram', () => {
+      const data = readAggregationWidget(
+        response({ w: { buckets: [{ key: 'File', doc_count: 3 }] } }),
+        plan(),
+      ) as Extract<WidgetData, { kind: 'buckets' }>;
+
+      expect(data.interval).toBeUndefined();
     });
   });
 

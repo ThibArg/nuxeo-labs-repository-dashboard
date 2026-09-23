@@ -1,13 +1,17 @@
 import { AggConfig } from '../config/dashboard-config.model';
 import {
+  AUTO_BUCKETS,
   METRIC_AGG,
   UnsupportedAggregationError,
   browserTimeZone,
   compileAgg,
   compileMetric,
+  intervalForPeriod,
+  keyFormat,
   metricUndefinedWhenEmpty,
   shardSizeFor,
 } from './agg-compiler';
+import { startOfLocalDayMillis } from './es-query';
 
 describe('agg-compiler', () => {
   describe('field validation', () => {
@@ -164,6 +168,118 @@ describe('agg-compiler', () => {
           },
         }),
       ).toThrow(UnsupportedAggregationError);
+    });
+  });
+
+  /**
+   * `search.max_buckets` is 65,535 over the whole response, and a daily histogram spans whatever it
+   * is given: one document dated 1899 on "All time", or a range typed from 1899, is 46,000 bars a
+   * chart. Two such charts, or a date a century older, and the request fails for every widget on
+   * the page.
+   */
+  describe('an automatic interval', () => {
+    const AUTO: AggConfig = { date_histogram: { field: 'dc:created', calendar_interval: 'auto' } };
+
+    function period(from: string, to: string, field = 'dc:created') {
+      return { field, min: startOfLocalDayMillis(from), max: startOfLocalDayMillis(to) };
+    }
+
+    function widthOver(from: string, to: string): unknown {
+      const agg = compileAgg(AUTO, undefined, period(from, to)) as {
+        date_histogram: Record<string, unknown>;
+      };
+      return agg.date_histogram['calendar_interval'];
+    }
+
+    it('draws a period of known days by the day, the week, the month or the year', () => {
+      expect(widthOver('2026-06-20', '2026-09-19')).toBe('day'); // 92 days
+      expect(widthOver('2026-06-19', '2026-09-19')).toBe('week'); // 93 days
+      expect(widthOver('2025-09-24', '2026-09-23')).toBe('week'); // Last 12 months
+      expect(widthOver('2024-09-23', '2026-09-23')).toBe('week'); // two years, a day included
+      expect(widthOver('2024-01-01', '2026-09-23')).toBe('month');
+      expect(widthOver('2006-09-24', '2026-09-23')).toBe('month'); // twenty years
+      expect(widthOver('1899-12-30', '2026-09-23')).toBe('year');
+    });
+
+    /*
+     * Where the zone has one, the last Sunday of March is 23 hours long: ninety-three calendar days
+     * across it are an hour short of ninety-three times twenty-four. Truncating would count
+     * ninety-two and draw them by the day.
+     */
+    it('counts calendar days, so a daylight saving change cannot tip a period over', () => {
+      const { min, max } = period('2026-01-01', '2026-04-03');
+
+      expect(intervalForPeriod(min, max)).toBe('week');
+      expect(widthOver('2026-08-01', '2026-10-31')).toBe('day'); // 92 days across October's
+    });
+
+    it('keys each width the way it reads, and pads the period as a daily chart would', () => {
+      const bounds = period('2024-01-01', '2026-09-23');
+      const agg = compileAgg(AUTO, undefined, bounds) as {
+        date_histogram: Record<string, unknown>;
+      };
+
+      expect(agg.date_histogram['format']).toBe(keyFormat('month'));
+      expect(agg.date_histogram['min_doc_count']).toBe(0);
+      expect(agg.date_histogram['extended_bounds']).toEqual({ min: bounds.min, max: bounds.max });
+    });
+
+    it('leaves the width to OpenSearch on All time, where only the index knows the span', () => {
+      const agg = compileAgg(AUTO) as { auto_date_histogram: Record<string, unknown> };
+
+      expect(agg).toEqual({
+        auto_date_histogram: {
+          field: 'dc:created',
+          buckets: AUTO_BUCKETS,
+          minimum_interval: 'day',
+          format: 'yyyy-MM-dd',
+          time_zone: browserTimeZone(),
+        },
+      });
+    });
+
+    it('leaves it to OpenSearch too on a field the period does not bound', () => {
+      const agg = compileAgg(
+        { date_histogram: { field: 'dc:modified', calendar_interval: 'auto' } },
+        undefined,
+        period('2026-08-20', '2026-09-18'),
+      );
+
+      expect(Object.keys(agg)).toEqual(['auto_date_histogram']);
+    });
+
+    it('leaves it to OpenSearch on a period open at one end', () => {
+      const agg = compileAgg(AUTO, undefined, {
+        field: 'dc:created',
+        min: startOfLocalDayMillis('1899-12-30'),
+      });
+
+      expect(Object.keys(agg)).toEqual(['auto_date_histogram']);
+    });
+
+    it('keeps the metric computed per bucket, whoever chose the width', () => {
+      const agg = compileAgg(AUTO, { cardinality: 'principalName' }) as Record<string, any>;
+
+      expect(agg['aggs'][METRIC_AGG]).toEqual({ cardinality: { field: 'principalName' } });
+    });
+
+    it('keeps a width a configuration names, whatever the period', () => {
+      const agg = compileAgg(
+        { date_histogram: { field: 'dc:created', calendar_interval: 'day' } },
+        undefined,
+        period('1899-12-30', '2026-09-23'),
+      ) as { date_histogram: Record<string, unknown> };
+
+      expect(agg.date_histogram['calendar_interval']).toBe('day');
+      expect(agg.date_histogram['format']).toBeUndefined();
+    });
+
+    it('refuses min_doc_count beside it, which one of its two forms has no place for', () => {
+      expect(() =>
+        compileAgg({
+          date_histogram: { field: 'dc:created', calendar_interval: 'auto', min_doc_count: 1 },
+        }),
+      ).toThrow(/min_doc_count/);
     });
   });
 

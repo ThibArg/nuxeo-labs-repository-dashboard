@@ -287,8 +287,8 @@ describe('Governance dashboard', () => {
       .aggs as Record<string, any>;
 
     expect(aggs['retentionHorizon'].aggs.inner.date_histogram.min_doc_count).toBe(1);
-    // Zero rather than absent: the compiler always sends it, so a quiet day stays a bar.
-    expect(aggs['recordsByDate'].aggs.inner.date_histogram.min_doc_count).toBe(0);
+    // Governance opens on "All time", so OpenSearch sizes the timeline, empty buckets and all.
+    expect(aggs['recordsByDate'].aggs.inner.auto_date_histogram.field).toBe('dc:created');
   });
 
   /*

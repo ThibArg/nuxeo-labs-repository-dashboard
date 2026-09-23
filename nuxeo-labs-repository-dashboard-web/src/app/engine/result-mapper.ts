@@ -33,6 +33,11 @@ export type WidgetData =
       others?: number;
       /** Documents those omitted values account for, read from `sum_other_doc_count`. */
       otherDocs?: number;
+      /**
+       * Width of a date histogram's buckets: a calendar unit (`week`), or the code OpenSearch
+       * answers for a width it chose (`3M`). `describeInterval` puts either into words.
+       */
+      interval?: string;
     }
   | { kind: 'rows'; rows: TableRow[]; total: number };
 
@@ -131,6 +136,24 @@ function mergePrincipalBuckets(buckets: DataBucket[]): DataBucket[] {
 }
 
 /**
+ * Shortens the key of a bucket OpenSearch sized itself to what the bucket covers.
+ *
+ * An `auto_date_histogram` is sent before anyone knows whether it will answer days or decades, so
+ * its keys carry a whole date; a month labelled `2024-03-01` reads as a day, which is what
+ * `keyFormat` exists to prevent for a width chosen in advance. Only a key in that very pattern is
+ * touched, so a format a configuration chose itself comes back as it was written.
+ */
+function autoBucketKey(key: string, interval: string | undefined): string {
+  if (!interval || !/^\d{4}-\d{2}-\d{2}$/.test(key)) {
+    return key;
+  }
+  if (interval.endsWith('M')) {
+    return key.slice(0, 7);
+  }
+  return interval.endsWith('y') ? key.slice(0, 4) : key;
+}
+
+/**
  * Extracts one widget's data from an aggregations response.
  *
  * @param response the shared aggregations response
@@ -153,7 +176,13 @@ export function readAggregationWidget(
   const node = (plan.wrapped && (root[INNER_AGG] as EsAggregation | undefined)) || root;
 
   if (node.buckets) {
-    const returned = normaliseBuckets(node.buckets, plan.metricUndefinedWhenEmpty);
+    const answered = typeof node['interval'] === 'string' ? node['interval'] : undefined;
+    const interval = plan.interval === 'auto' ? answered : plan.interval;
+    const normalised = normaliseBuckets(node.buckets, plan.metricUndefinedWhenEmpty);
+    const returned =
+      plan.interval === 'auto'
+        ? normalised.map((bucket) => ({ ...bucket, key: autoBucketKey(bucket.key, interval) }))
+        : normalised;
     const buckets = plan.mergePrincipals ? mergePrincipalBuckets(returned) : returned;
     /*
      * The count of distinct values hangs off the wrapper, never off the bucket list itself, so it
@@ -170,6 +199,7 @@ export function readAggregationWidget(
       buckets,
       ...(distinct === null ? {} : { others: Math.max(0, distinct - returned.length) }),
       ...(typeof otherDocs === 'number' ? { otherDocs } : {}),
+      ...(interval ? { interval } : {}),
     };
   }
 

@@ -14,6 +14,7 @@
 import { EsIndex, EsSearchBody } from '../core/nuxeo.types';
 import {
   AggConfig,
+  CalendarInterval,
   DashboardConfig,
   FilterState,
   WidgetConfig,
@@ -35,6 +36,7 @@ import {
   compileAgg,
   compileMetric,
   metricUndefinedWhenEmpty,
+  resolveHistogram,
 } from './agg-compiler';
 import { compileClauses } from './clause-compiler';
 import { compilePicks, compileTermsGroup } from './facet-clause';
@@ -85,6 +87,11 @@ export interface WidgetPlan {
    * node created the task. See `core/principal.ts`.
    */
   mergePrincipals: boolean;
+  /**
+   * Width of a date histogram's buckets: the one it was given or derived, or `auto` when the width
+   * is OpenSearch's to choose and only the response can say it. Absent on anything else.
+   */
+  interval?: CalendarInterval | 'auto';
 }
 
 export interface DashboardPlan {
@@ -343,6 +350,7 @@ export function planDashboard(config: DashboardConfig, filters: FilterState): Da
           metricUndefinedWhenEmpty: planned.metricUndefinedWhenEmpty,
           hasSecondary: planned.hasSecondary,
           mergePrincipals: planned.mergePrincipals,
+          ...(planned.interval ? { interval: planned.interval } : {}),
         });
       } catch (error) {
         errors.set(widgetId, error instanceof Error ? error.message : String(error));
@@ -382,6 +390,7 @@ interface AggregationWidgetPlan {
   metricUndefinedWhenEmpty: boolean;
   hasSecondary: boolean;
   mergePrincipals: boolean;
+  interval?: CalendarInterval | 'auto';
 }
 
 function planAggregationWidget(
@@ -457,6 +466,9 @@ function planAggregationWidget(
 
   if (isChartWidget(widget)) {
     const inner = compileAgg(widget.agg, widget.metric, bounds);
+    const histogram =
+      'date_histogram' in widget.agg ? resolveHistogram(widget.agg.date_histogram, bounds) : null;
+    const interval = histogram && (histogram.kind === 'auto' ? 'auto' : histogram.interval);
     const hasMetric = compileMetric(widget.metric) !== null;
     const undefinedWhenEmpty = hasMetric && metricUndefinedWhenEmpty(widget.metric);
     const distinct = distinctAgg(widget.agg);
@@ -491,6 +503,7 @@ function planAggregationWidget(
         metricUndefinedWhenEmpty: undefinedWhenEmpty,
         hasSecondary: false,
         mergePrincipals,
+        ...(interval ? { interval } : {}),
       };
     }
     return {
@@ -505,6 +518,7 @@ function planAggregationWidget(
       metricUndefinedWhenEmpty: undefinedWhenEmpty,
       hasSecondary: false,
       mergePrincipals,
+      ...(interval ? { interval } : {}),
     };
   }
 

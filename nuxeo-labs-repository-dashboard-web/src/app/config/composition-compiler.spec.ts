@@ -129,18 +129,22 @@ describe('compiling a composition', () => {
       expect(config!.widgets['created'].hint).toBe('Since Monday');
     });
 
+    /*
+     * The width is left as a placeholder: it follows the period by default, and when OpenSearch
+     * picks it only the response can say which, so the page fills it in once the data is back.
+     */
     it('keeps the definition\u2019s own hint when the page has nothing to say', () => {
       const { config } = compile([{ use: 'documents-created', as: 'created' }]);
 
-      expect(config!.widgets['created'].hint).toContain('created per day');
+      expect(config!.widgets['created'].hint).toContain('created per {interval}');
+      expect(JSON.stringify(config!.widgets['created'])).toContain('"calendar_interval":"auto"');
     });
 
-    it('follows the interval a composition asks for, hint included', () => {
+    it('follows the interval a composition asks for', () => {
       const { config } = compile([
         { use: 'documents-created', as: 'created', with: { interval: 'month' } },
       ]);
 
-      expect(config!.widgets['created'].hint).toContain('created per month');
       expect(JSON.stringify(config!.widgets['created'])).toContain('"calendar_interval":"month"');
     });
   });

@@ -171,7 +171,7 @@ describe('Downloads dashboard', () => {
     expect(text).toContain('Downloads Dashboard');
     expect(text).toContain('Renditions Served');
     expect(text).toContain('Documents Downloaded');
-    expect(text).toContain('Downloads per Day');
+    expect(text).toContain('Downloads Over Time');
     expect(text).toContain('Downloads by Type');
     expect(text).toContain('Most Active Downloaders');
     expect(text).toContain('Most Downloaded Documents');

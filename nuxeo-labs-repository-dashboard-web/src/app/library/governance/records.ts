@@ -6,14 +6,13 @@
  * figures describe a commitment rather than a state somebody can undo.
  */
 import { KpiSeverity } from '../../config/dashboard-config.model';
-import { countTile, topNChart, trendChart } from '../builders';
+import { TREND_INTERVALS, countTile, topNChart, trendChart } from '../builders';
 import { ParamSpecs, defineWidget } from '../definition';
 import { equals } from '../predicates';
 import { GOVERNED_BY_A_RULE, RECORDS, UNDER_RETENTION } from './populations';
 
 const BUCKET_CHARTS = ['donut', 'pie', 'bar', 'hbar', 'ranked-list'] as const;
 const TREND_CHARTS = ['area', 'line', 'bar'] as const;
-const INTERVALS = ['hour', 'day', 'week', 'month', 'quarter', 'year'] as const;
 const SEVERITIES = ['neutral', 'accent', 'warning', 'danger', 'success'] as const;
 
 const TREND_PARAMS = {
@@ -25,9 +24,10 @@ const TREND_PARAMS = {
   },
   interval: {
     type: 'enum' as const,
-    values: INTERVALS,
-    default: 'day',
-    describe: 'Width of one bucket. Buckets are cut in the reader\u2019s own time zone.',
+    values: TREND_INTERVALS,
+    default: 'auto',
+    describe:
+      'Width of one bucket; `auto` follows the period. Buckets are cut in the reader\u2019s own time zone.',
   },
 } satisfies ParamSpecs;
 
@@ -178,6 +178,6 @@ export const recordsByCreationDate = defineWidget({
       field: 'dc:created',
       interval: params.interval,
       chart: params.chart,
-      hint: `Documents created per ${params.interval} ({range}) that are records today`,
+      hint: 'Documents created per {interval} ({range}) that are records today',
     }),
 });

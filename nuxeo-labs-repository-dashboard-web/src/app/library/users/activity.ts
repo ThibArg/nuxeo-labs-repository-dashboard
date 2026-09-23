@@ -6,13 +6,12 @@
  * for the person who triggered it instead of piling onto `system`. It is not a protection against
  * impersonation, and the widgets that need to say so do.
  */
-import { topNChart, trendChart } from '../builders';
+import { TREND_INTERVALS, topNChart, trendChart } from '../builders';
 import { ParamSpecs, defineWidget } from '../definition';
 import { DOCUMENT_CREATED, DOCUMENT_MODIFIED, LOGIN_FAILED, LOGIN_SUCCEEDED } from './populations';
 
 const BUCKET_CHARTS = ['donut', 'pie', 'bar', 'hbar', 'ranked-list'] as const;
 const TREND_CHARTS = ['area', 'line', 'bar'] as const;
-const INTERVALS = ['hour', 'day', 'week', 'month', 'quarter', 'year'] as const;
 
 function peopleParams(chart: (typeof BUCKET_CHARTS)[number]) {
   return {
@@ -41,9 +40,10 @@ const ACTIVITY_PARAMS = {
   },
   interval: {
     type: 'enum' as const,
-    values: INTERVALS,
-    default: 'day',
-    describe: 'Width of one bucket. Buckets are cut in the reader\u2019s own time zone.',
+    values: TREND_INTERVALS,
+    default: 'auto',
+    describe:
+      'Width of one bucket; `auto` follows the period. Buckets are cut in the reader\u2019s own time zone.',
   },
 } satisfies ParamSpecs;
 
@@ -66,7 +66,7 @@ export const distinctUsersPerDay = defineWidget({
       interval: params.interval,
       chart: params.chart,
       metric: { cardinality: 'principalName' },
-      hint: 'Distinct users with a successful login ({range})',
+      hint: 'Distinct users with a successful login, per {interval} ({range})',
     }),
 });
 

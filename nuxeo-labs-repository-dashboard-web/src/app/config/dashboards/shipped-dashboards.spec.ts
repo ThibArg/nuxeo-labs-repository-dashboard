@@ -1,4 +1,11 @@
-import { DashboardConfig, FilterState, customRange, layoutCells } from '../dashboard-config.model';
+import {
+  DATE_RANGE_SHORTCUTS,
+  DashboardConfig,
+  FilterState,
+  customRange,
+  layoutCells,
+  resolveShortcut,
+} from '../dashboard-config.model';
 import { dateFieldFor, globalFilters, planDashboard } from '../../engine/query-planner';
 import { validateConfig } from '../../engine/dashboard-override.service';
 import { shippedConfig } from '../../../testing/shipped';
@@ -61,6 +68,28 @@ function implies(own: Clause[], clause: Clause): boolean {
       arms.some((arm) => holds(arm) || (clausesOf(arm).length > 0 && clausesOf(arm).every(holds))))
   );
 }
+
+const ALL_TIME: FilterState = {
+  ...BOUNDED,
+  range: resolveShortcut(DATE_RANGE_SHORTCUTS.find((s) => s.id === 'all')!),
+};
+
+/** Every node of every aggregation body a plan sends, request by request. */
+function nodesByRequest(config: DashboardConfig, filters: FilterState): Clause[][] {
+  return planDashboard(config, filters).requests.map((request) => {
+    const found: Clause[] = [];
+    const walk = (node: unknown): void => {
+      if (node && typeof node === 'object') {
+        found.push(node as Clause);
+        Object.values(node).forEach(walk);
+      }
+    };
+    walk(request.body.aggs);
+    return found;
+  });
+}
+
+const DAYS_PER_BUCKET: Record<string, number> = { day: 1, week: 7, month: 28, year: 365 };
 
 function everyAggregation(config: DashboardConfig): unknown[] {
   const found: unknown[] = [];
@@ -188,6 +217,43 @@ describe.each(SHIPPED)('%s', (_name, source, config) => {
    * counting the whole query — the Total tile, a metric, a chart with no filter — must see the
    * query left alone. And the narrowing is worth having, so it must happen whenever it can.
    */
+  /*
+   * `search.max_buckets` is 65,535 over a whole response, and a histogram keeping its empty
+   * buckets spans whatever it is given. On "All time" nobody has measured that span: one document
+   * dated 1899 makes a daily chart 46,000 bars, two such charts fail the request, and every widget
+   * on the page with it. So there a histogram is either sized by OpenSearch or keeps only the
+   * buckets holding something.
+   */
+  it('pads no histogram over a span nobody measured', () => {
+    const padded = nodesByRequest(config, ALL_TIME)
+      .flat()
+      .filter((node) => node['date_histogram'] && !(node['date_histogram']['min_doc_count'] >= 1));
+
+    expect(padded).toEqual([]);
+  });
+
+  /*
+   * The date fields accept any day from year 1, and a typed period pads its histogram through
+   * `extended_bounds` exactly as a stray document pads "All time". The widest one must still fit.
+   */
+  it('keeps the widest period the date fields accept under the bucket ceiling', () => {
+    const widest: FilterState = { ...BOUNDED, range: customRange('0001-01-01', '9999-12-30') };
+
+    for (const nodes of nodesByRequest(config, widest)) {
+      let buckets = 0;
+      for (const node of nodes) {
+        const fixed = node['date_histogram'];
+        if (fixed && !(fixed['min_doc_count'] >= 1)) {
+          const { min, max } = fixed['extended_bounds'] ?? {};
+          expect(typeof min === 'number' && typeof max === 'number').toBe(true);
+          buckets += (max - min) / 86_400_000 / DAYS_PER_BUCKET[fixed['calendar_interval']] + 1;
+        }
+        buckets += node['auto_date_histogram']?.['buckets'] ?? 0;
+      }
+      expect(buckets).toBeLessThan(65_535);
+    }
+  });
+
   it('narrows a query only by what each of its widgets already counts, and whenever it can', () => {
     for (const request of planDashboard(config, BOUNDED).requests) {
       if (request.kind !== 'aggregations') {

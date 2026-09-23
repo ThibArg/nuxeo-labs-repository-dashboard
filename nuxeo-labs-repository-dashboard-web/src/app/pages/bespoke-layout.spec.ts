@@ -126,7 +126,8 @@ describe('a dashboard laid out by hand', () => {
     const fixture = await render();
     const aggs = (searches()[0] as { aggs: Record<string, any> }).aggs;
 
-    expect(JSON.stringify(aggs['created'])).toContain('"calendar_interval":"day"');
+    // One follows the period, "All time" here, so OpenSearch sizes it; the other names its width.
+    expect(JSON.stringify(aggs['created'])).toContain('"auto_date_histogram"');
     expect(JSON.stringify(aggs['createdAgain'])).toContain('"calendar_interval":"week"');
     expect((fixture.nativeElement as HTMLElement).textContent).toContain('created per week');
   });

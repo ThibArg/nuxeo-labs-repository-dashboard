@@ -1,10 +1,9 @@
 /** How the volume of documents moved over the period. */
-import { RESTRICTION_PARAMS, restrict, trendChart } from '../builders';
+import { RESTRICTION_PARAMS, TREND_INTERVALS, restrict, trendChart } from '../builders';
 import { ParamSpecs, defineWidget } from '../definition';
 import { LIVE_NOT_TRASHED } from '../populations';
 
 const TREND_CHARTS = ['area', 'line', 'bar'] as const;
-const INTERVALS = ['hour', 'day', 'week', 'month', 'quarter', 'year'] as const;
 
 const TREND_PARAMS = {
   ...RESTRICTION_PARAMS,
@@ -16,9 +15,10 @@ const TREND_PARAMS = {
   },
   interval: {
     type: 'enum' as const,
-    values: INTERVALS,
-    default: 'day',
-    describe: 'Width of one bucket. Buckets are cut in the reader\u2019s own time zone.',
+    values: TREND_INTERVALS,
+    default: 'auto',
+    describe:
+      'Width of one bucket; `auto` follows the period. Buckets are cut in the reader\u2019s own time zone.',
   },
 } satisfies ParamSpecs;
 
@@ -34,7 +34,7 @@ export const documentsCreated = defineWidget({
       field: 'dc:created',
       interval: params.interval,
       chart: params.chart,
-      hint: `Number of documents created per ${params.interval} ({range})`,
+      hint: 'Number of documents created per {interval} ({range})',
     }),
 });
 
@@ -58,6 +58,6 @@ export const documentsModified = defineWidget({
       field: 'dc:modified',
       interval: params.interval,
       chart: params.chart,
-      hint: `Number of documents modified per ${params.interval} (Based on {range} creation)`,
+      hint: 'Number of documents modified per {interval} (Based on {range} creation)',
     }),
 });

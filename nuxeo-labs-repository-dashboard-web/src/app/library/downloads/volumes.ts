@@ -1,12 +1,11 @@
 /** How much left the server, and when. */
 import { KpiSeverity } from '../../config/dashboard-config.model';
-import { countTile, trendChart } from '../builders';
+import { TREND_INTERVALS, countTile, trendChart } from '../builders';
 import { ParamSpecs, defineWidget } from '../definition';
 import { FILE_DOWNLOADS, RENDITIONS_SERVED } from './populations';
 
 const SEVERITIES = ['neutral', 'accent', 'warning', 'danger', 'success'] as const;
 const TREND_CHARTS = ['area', 'line', 'bar'] as const;
-const INTERVALS = ['hour', 'day', 'week', 'month', 'quarter', 'year'] as const;
 
 function severity(fallback: KpiSeverity) {
   return {
@@ -28,9 +27,10 @@ const TREND_PARAMS = {
   },
   interval: {
     type: 'enum' as const,
-    values: INTERVALS,
-    default: 'day',
-    describe: 'Width of one bucket. Buckets are cut in the reader\u2019s own time zone.',
+    values: TREND_INTERVALS,
+    default: 'auto',
+    describe:
+      'Width of one bucket; `auto` follows the period. Buckets are cut in the reader\u2019s own time zone.',
   },
 } satisfies ParamSpecs;
 
@@ -91,7 +91,7 @@ export const documentsDownloaded = defineWidget({
 export const downloadsPerDay = defineWidget({
   id: 'downloads-per-day',
   index: 'audit',
-  title: 'Downloads per Day',
+  title: 'Downloads Over Time',
   summary: 'How the number of files saved by readers moved over the period.',
   params: TREND_PARAMS,
   build: (params) =>
@@ -100,6 +100,6 @@ export const downloadsPerDay = defineWidget({
       field: 'eventDate',
       interval: params.interval,
       chart: params.chart,
-      hint: `Files saved per ${params.interval}, renditions excluded ({range})`,
+      hint: 'Files saved per {interval}, renditions excluded ({range})',
     }),
 });

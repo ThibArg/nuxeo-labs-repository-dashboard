@@ -65,6 +65,32 @@ function formatDaysUntil(value: unknown): string {
   return days === 0 ? 'today' : `${days} days`;
 }
 
+const INTERVAL_UNITS: Record<string, string> = {
+  s: 'second',
+  m: 'minute',
+  h: 'hour',
+  d: 'day',
+  w: 'week',
+  M: 'month',
+  q: 'quarter',
+  y: 'year',
+};
+
+/**
+ * A histogram bucket width in words: `day`, `7 days`, `3 months`.
+ *
+ * Takes both forms a width arrives in — a calendar unit the planner chose, and the code OpenSearch
+ * answers for one it chose itself, where `m` is a minute and `M` a month.
+ */
+export function describeInterval(interval: string): string {
+  const match = /^(\d+)([smhdwMqy])$/.exec(interval);
+  if (!match) {
+    return interval;
+  }
+  const [, count, unit] = match;
+  return count === '1' ? INTERVAL_UNITS[unit] : `${count} ${INTERVAL_UNITS[unit]}s`;
+}
+
 /** Applies a declared format to a numeric widget value. */
 export function formatNumber(value: number, format: ValueFormat | undefined): string {
   if (!Number.isFinite(value)) {

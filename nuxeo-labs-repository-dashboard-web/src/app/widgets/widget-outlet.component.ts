@@ -5,6 +5,7 @@ import {
   TableWidgetConfig,
   WidgetConfig,
 } from '../config/dashboard-config.model';
+import { describeInterval } from '../core/format';
 import { WidgetData } from '../engine/result-mapper';
 import { BucketClick, ChartWidgetComponent } from './chart-widget.component';
 import { DataTableComponent } from './data-table.component';
@@ -81,13 +82,24 @@ export class WidgetOutletComponent {
    * Resolving here, once, spares every widget from knowing about date ranges. The original object
    * is returned untouched when there is nothing to interpolate, so a widget without a placeholder
    * never sees a new reference and never re-renders for nothing.
+   *
+   * `{interval}` is read off the data rather than the configuration: a trend's width follows the
+   * period, and when OpenSearch chose it only the response knows it. Until one has arrived the
+   * hint says "interval", which is true of any of them.
    */
   private readonly resolved = computed<WidgetConfig>(() => {
     const config = this.config();
-    if (!config.hint?.includes('{range}')) {
+    const hint = config.hint;
+    if (!hint || (!hint.includes('{range}') && !hint.includes('{interval}'))) {
       return config;
     }
-    return { ...config, hint: config.hint.replaceAll('{range}', this.rangeLabel()) };
+    const data = this.data();
+    const interval =
+      data?.kind === 'buckets' && data.interval ? describeInterval(data.interval) : 'interval';
+    return {
+      ...config,
+      hint: hint.replaceAll('{range}', this.rangeLabel()).replaceAll('{interval}', interval),
+    };
   });
 
   readonly asKpi = computed<KpiWidgetConfig | null>(() => {

@@ -1,11 +1,10 @@
 /** Who runs the workflows, which models they use, and when. */
-import { topNChart, trendChart } from '../builders';
+import { TREND_INTERVALS, topNChart, trendChart } from '../builders';
 import { ParamSpecs, defineWidget } from '../definition';
 import { COMPLETED, STARTED, TASK_CREATED, TASK_ENDED } from './populations';
 
 const BUCKET_CHARTS = ['donut', 'pie', 'bar', 'hbar', 'ranked-list'] as const;
 const TREND_CHARTS = ['area', 'line', 'bar'] as const;
-const INTERVALS = ['hour', 'day', 'week', 'month', 'quarter', 'year'] as const;
 
 function rankedParams(chart: (typeof BUCKET_CHARTS)[number]) {
   return {
@@ -34,16 +33,17 @@ const TREND_PARAMS = {
   },
   interval: {
     type: 'enum' as const,
-    values: INTERVALS,
-    default: 'day',
-    describe: 'Width of one bucket. Buckets are cut in the reader\u2019s own time zone.',
+    values: TREND_INTERVALS,
+    default: 'auto',
+    describe:
+      'Width of one bucket; `auto` follows the period. Buckets are cut in the reader\u2019s own time zone.',
   },
 } satisfies ParamSpecs;
 
 export const workflowsStartedPerDay = defineWidget({
   id: 'workflows-started-per-day',
   index: 'audit_wf',
-  title: 'Workflows Started per Day',
+  title: 'Workflows Started',
   summary: 'How many workflow instances were started, over time.',
   params: TREND_PARAMS,
   build: (params) =>
@@ -52,14 +52,14 @@ export const workflowsStartedPerDay = defineWidget({
       field: 'eventDate',
       interval: params.interval,
       chart: params.chart,
-      hint: `Instances started per ${params.interval} ({range})`,
+      hint: 'Instances started per {interval} ({range})',
     }),
 });
 
 export const workflowsCompletedPerDay = defineWidget({
   id: 'workflows-completed-per-day',
   index: 'audit_wf',
-  title: 'Workflows Completed per Day',
+  title: 'Workflows Completed',
   summary: 'How many workflow instances finished, over time.',
   params: TREND_PARAMS,
   build: (params) =>
@@ -68,7 +68,7 @@ export const workflowsCompletedPerDay = defineWidget({
       field: 'eventDate',
       interval: params.interval,
       chart: params.chart,
-      hint: `Instances finished per ${params.interval} ({range})`,
+      hint: 'Instances finished per {interval} ({range})',
     }),
 });
 

@@ -5,7 +5,13 @@
  * `AggConfig` is rejected, which keeps `script`, `runtime_mappings` and friends out of the
  * payload even though the passthrough would happily forward them for an administrator.
  */
-import { AggConfig, MetricConfig, TermsOrder } from '../config/dashboard-config.model';
+import {
+  AggConfig,
+  CalendarInterval,
+  HistogramInterval,
+  MetricConfig,
+  TermsOrder,
+} from '../config/dashboard-config.model';
 import { EsClause } from './es-query';
 import { compileClause } from './clause-compiler';
 
@@ -46,6 +52,85 @@ export interface HistogramBounds {
   field: string;
   min?: number;
   max?: number;
+}
+
+/**
+ * Most buckets an `auto_date_histogram` may answer.
+ *
+ * OpenSearch widens the buckets until the dates fit, so a stray `1601-01-01` in `dc:created` costs
+ * the chart its resolution rather than costing the page its request: `search.max_buckets` is
+ * 65,535 across the whole response, and one daily chart spanning four centuries is 150,000.
+ */
+export const AUTO_BUCKETS = 100;
+
+/** What an `auto` interval becomes: a width chosen here, or a ceiling OpenSearch honours. */
+export type ResolvedHistogram = { kind: 'calendar'; interval: CalendarInterval } | { kind: 'auto' };
+
+const DAY_MILLIS = 86_400_000;
+
+/**
+ * Width a period of known days is drawn at.
+ *
+ * A day up to ninety-two, so the longest shortcut but one still shows its quiet days; a week up to
+ * two years, which puts Last 12 months at about fifty-three bars rather than three hundred and
+ * sixty-six; a month up to twenty years; a year beyond. The last step is not decoration: the date
+ * fields accept any day from year 1, and a range typed from there drawn by the month is 24,000
+ * buckets a chart, two such charts being most of the ceiling.
+ */
+export function intervalForPeriod(min: number, max: number): CalendarInterval {
+  // Rounded, since a day around a daylight saving change is 23 or 25 hours long.
+  const days = Math.round((max - min) / DAY_MILLIS) + 1;
+  if (days <= 92) {
+    return 'day';
+  }
+  if (days <= 2 * 366) {
+    return 'week';
+  }
+  if (days <= 20 * 366) {
+    return 'month';
+  }
+  return 'year';
+}
+
+/**
+ * How one histogram is drawn for the active period.
+ *
+ * Only a histogram on the very field the period constrains, with both ends of the period known,
+ * has a span the planner can measure: the query guarantees no entry lies outside it. Everywhere
+ * else — "All time", an open ended range, `dc:modified` under a filter on `dc:created` — the span
+ * is whatever the index holds, and only OpenSearch can see it.
+ */
+export function resolveHistogram(
+  histogram: { field: string; calendar_interval: HistogramInterval },
+  bounds: HistogramBounds | null | undefined,
+): ResolvedHistogram {
+  if (histogram.calendar_interval !== 'auto') {
+    return { kind: 'calendar', interval: histogram.calendar_interval };
+  }
+  if (bounds?.field === histogram.field && bounds.min !== undefined && bounds.max !== undefined) {
+    return { kind: 'calendar', interval: intervalForPeriod(bounds.min, bounds.max) };
+  }
+  return { kind: 'auto' };
+}
+
+/**
+ * Bucket key pattern that says as much as the interval carries and no more.
+ *
+ * A monthly histogram formatted `yyyy-MM-dd` would label every bar with a first of the month,
+ * which reads as a day rather than as a month.
+ */
+export function keyFormat(interval: CalendarInterval): string {
+  switch (interval) {
+    case 'hour':
+      return 'yyyy-MM-dd HH:mm';
+    case 'month':
+      return 'yyyy-MM';
+    case 'quarter':
+    case 'year':
+      return 'yyyy';
+    default:
+      return 'yyyy-MM-dd';
+  }
 }
 
 export class UnsupportedAggregationError extends Error {
@@ -209,7 +294,8 @@ function compileTermsOrder(
  *               something happened, so a quiet start of period silently shortens the chart;
  *               `extended_bounds` fixes that. It is applied only when the histogram groups by the
  *               very field the date filter constrains, since for any other field the selected
- *               period says nothing about where the buckets should be.
+ *               period says nothing about where the buckets should be. The same test decides what
+ *               an `auto` interval becomes; see `resolveHistogram`.
  * @returns the aggregation body, ready to be placed under an `aggs` key.
  */
 export function compileAgg(
@@ -240,15 +326,42 @@ export function compileAgg(
 
   if ('date_histogram' in agg) {
     const { field, calendar_interval, format, min_doc_count, time_zone } = agg.date_histogram;
-    const histogram: EsClause = {
-      field: assertAggregatableField(field),
-      calendar_interval,
-      min_doc_count: min_doc_count ?? 0,
-    };
-    if (format) {
-      histogram['format'] = format;
+    assertAggregatableField(field);
+    if (calendar_interval === 'auto' && min_doc_count !== undefined) {
+      throw new UnsupportedAggregationError(
+        `"${field}" cannot combine min_doc_count with an automatic interval, ` +
+          'which OpenSearch may answer with an aggregation that has no such setting',
+      );
     }
     const zone = time_zone ? assertTimeZone(time_zone) : browserTimeZone();
+    const resolved = resolveHistogram(agg.date_histogram, bounds);
+
+    /*
+     * Every bucket it answers is kept, empty ones included, as a `date_histogram` with
+     * `min_doc_count: 0` would. That matters on a category axis, where a missing bucket does not
+     * leave a gap: it moves the next bar up against the previous one.
+     */
+    if (resolved.kind === 'auto') {
+      return withMetric({
+        auto_date_histogram: {
+          field,
+          buckets: AUTO_BUCKETS,
+          minimum_interval: 'day',
+          format: format ?? keyFormat('day'),
+          ...(zone ? { time_zone: zone } : {}),
+        },
+      });
+    }
+
+    const histogram: EsClause = {
+      field,
+      calendar_interval: resolved.interval,
+      min_doc_count: min_doc_count ?? 0,
+    };
+    const pattern = format ?? (calendar_interval === 'auto' ? keyFormat(resolved.interval) : null);
+    if (pattern) {
+      histogram['format'] = pattern;
+    }
     if (zone) {
       histogram['time_zone'] = zone;
     }
