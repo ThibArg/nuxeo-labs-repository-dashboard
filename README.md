@@ -828,15 +828,17 @@ cluster sized for one.
 
 A page sends one request per index it reads. OpenSearch searches **each shard of that index with
 one thread** of its `search` pool, on the node holding the shard, all shards at once, and the
-request answers when the slowest shard has. On each shard, every entry the shared filters select is
-handed to every widget of the page in a single pass, so the time a shard takes grows with two
-things:
+request answers when the slowest shard has. On each shard, every entry the query selects is handed
+to every widget of the page in a single pass, so the time a shard takes grows with two things:
 
-- **the entries of that shard the period selects, versions and proxies included.** "All time" on
-  Content or Governance selects every entry of the repository index, and a repository commonly
-  holds several versions per live document;
+- **the entries of that shard the query selects.** That is the period and the shared filters,
+  narrowed to what every widget of the page counts ([Querying](#querying)): Tasks goes through the
+  open tasks only, Governance through live documents only, Users, Downloads and Workflows through
+  the events they read only. Content cannot be narrowed, its Total tile counting everything the
+  shared filters select, so "All time" there selects every entry of the repository index, versions
+  and proxies included — and a repository commonly holds several versions per live document;
 - **the widgets on the page**: thirteen on Content and on Governance, eighteen on Workflows. A
-  widget narrowing to its own population still sees every selected entry go past.
+  widget narrowing to its own population still sees every entry the query selects go past.
 
 Three consequences for sizing:
 
@@ -878,9 +880,9 @@ depend on the size of the repository and on the cluster, whatever is done to the
 before starting again from an empty index or purging the older entries. There the cost depends on
 two things, and a purge only acts on the second:
 
-- **the volume of a day.** Thirty days of audit is thirty days of events however often the audit is
-  purged, so a busy installation still has tens of millions of entries to go through on the default
-  period;
+- **the volume of a day.** A screen goes through the events it reads only, but thirty days of them
+  is thirty days however often the audit is purged, so a busy installation may still have tens of
+  millions of entries to go through on the default period;
 - **what the index has held since the last purge.** That bounds "All time" and the longer periods,
   and also the number of distinct values some widgets rank: the most downloaded documents rank
   `docUUID`, which takes as many values as documents touched since the purge. An audit purged every
@@ -1016,7 +1018,7 @@ POST /nuxeo/site/es/nuxeo/_search        // Content-Type: application/json is ma
 {
   "size": 0,
   "track_total_hits": true,
-  "query": { "bool": { "filter": [] } },
+  "query": { "match_all": {} },           // "All time"; a period becomes a range on dc:created
   "aggs": {
     "expiringWeek":    { "filter": { "bool": { "filter": [ /* live */, { "range": { "dc:expired": { "gte": "now", "lte": "now+7d" } } } ] } } },
     "expired":         { "filter": { "bool": { "filter": [ /* live */, { "range": { "dc:expired": { "lt": "now" } } } ] } } },
@@ -1028,6 +1030,25 @@ POST /nuxeo/site/es/nuxeo/_search        // Content-Type: application/json is ma
 
 A widget with neither predicate nor metric emits no aggregation at all: it reads `hits.total`.
 That is why the Total tile is absent from the twelve aggregations Content sends.
+
+A `filter` aggregation narrows what a widget counts, not what OpenSearch goes through: every entry
+the query selects is handed to every aggregation. So the query also states what every widget of the
+request restricts itself to — the clauses all their filters carry, then the union of what remains
+of them. Each widget filter implies both, so no figure changes. Tasks, whose eight widgets all
+count open tasks, sends:
+
+```jsonc
+"query": { "bool": { "filter": [
+  { "term": { "ecm:mixinType": "Task" } },
+  { "term": { "ecm:currentLifeCycleState": "opened" } }
+] } }
+```
+
+Users, whose widgets share no clause, sends the period and the union of the four `eventId` they
+read. A single widget with no filter of its own counts the whole query — the Total tile, a metric
+tile, a chart over the dashboard population — and stops this for its whole request, which is why
+Content's query is the shared filters alone. Placing such a widget on Tasks would send the whole
+repository index past every widget again, to count a few thousand tasks.
 
 ### One request per index, not per dashboard
 
