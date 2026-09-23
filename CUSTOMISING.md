@@ -187,7 +187,7 @@ Six parameters, and nothing else. Measured over the 69 definitions:
 | `size` | 28 | How many values a top N lists, 1 to 100 |
 | `severity` | 19 | The colour a KPI tile carries |
 | `types`, `facets` | 13 | Narrow a repository widget to document types or facets. An empty list means **no constraint**, never "no value" |
-| `interval` | 8 | The bucket width of a trend |
+| `interval` | 8 | The bucket width of a trend. `auto`, the default on seven of them, follows the period and stays under OpenSearch's bucket ceiling whatever the dates; naming a width keeps it, risk included |
 
 Plus four keys the composition owns outright: `title`, `hint`, `span`, `spanByRange`.
 

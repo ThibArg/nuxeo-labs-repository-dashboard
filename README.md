@@ -64,7 +64,7 @@ more, not writing a query.
 | `use` | Id of a widget in the library, `src/app/library/` |
 | `as` | Name it takes on the page, defaulting to `use`. Must be unique |
 | `title` | Card title, overriding the widget's own |
-| `hint` | Secondary line under the title; `{range}` is replaced by the active date range |
+| `hint` | Secondary line under the title; `{range}` is replaced by the active date range, `{interval}` by the width of a trend's bars |
 | `span` | Width in the 12 column grid; omitted spans share the row evenly |
 | `spanByRange` | Overrides `span` for a given date range id |
 | `with` | Parameters the widget declares, see below |
@@ -351,7 +351,7 @@ entry holds strings, and `section` and `tabs` nest rows of them exactly as a com
 | `agg.date_histogram.min_doc_count` | `0` by default, so a quiet day stays a bar. `1` drops the empty buckets, which only suits a field whose values are scattered rather than a trend |
 | `span` | Width in the 12 column grid; omitted spans share the row evenly |
 | `spanByRange` | Overrides `span` for a given date range id |
-| `hint` | Secondary line under the title; `{range}` is replaced by the active date range |
+| `hint` | Secondary line under the title; `{range}` is replaced by the active date range, `{interval}` by the width of a trend's bars |
 | `subtitle` | On the dashboard, not the widget: a sentence under the page title |
 
 Aggregations are a **closed whitelist**, not raw OpenSearch DSL. The passthrough forwards an
@@ -452,19 +452,54 @@ for every reader can pin it:
 "agg": { "date_histogram": { "field": "dc:created", "calendar_interval": "day", "time_zone": "UTC" } }
 ```
 
+### The width of a bar follows the period
+
+A trend's `interval` defaults to `auto`. OpenSearch refuses a response holding more than 65,535
+buckets in all (`search.max_buckets`), and a histogram keeping its empty buckets spans whatever it
+is given: one migrated document dated 1899-12-30 makes a daily chart over "All time" 46,000 bars.
+Two such charts, or a date a century older, and the whole request fails, every widget on the page
+with it. So the planner decides the width:
+
+| Where | Width |
+| --- | --- |
+| The period bounds the very field the chart groups by, at both ends | Chosen from its days: a day up to 92, a week up to two years, a month up to twenty, a year beyond |
+| Anywhere else — "All time", a range open at one end, `dc:modified` under a filter on `dc:created` | Left to OpenSearch: an `auto_date_histogram` of at most 100 buckets, never narrower than a day |
+
+The first case is the only one whose span the planner can know, since the query keeps every entry
+inside the period; `extended_bounds` still pads it, derived from the period and never configured.
+In the second, OpenSearch widens the bars until the dates fit, so a stray 1601 costs the chart its
+resolution rather than costing the page its request. Its empty buckets are kept too, which matters
+here: the x axis lists buckets rather than scaling time, so a missing bucket would not leave a gap,
+it would move the next bar up against the previous one. That is also why `min_doc_count: 1`, which
+would bound the count just as well, is not the answer on a trend — an 1899 bar would sit right
+beside 2024.
+
+Measured on the test instance, with each trend pinned to `day` as it used to be: a range typed from
+1800 failed on every dashboard drawing a trend, and one from 1899 on Workflows, its two charts
+padding to 2 × 46,289 buckets. With `auto`, all of them answer — 128 yearly bars from 1899, and
+fifty-three weekly bars over Last 12 months where there were 365 daily ones.
+
+A composition naming a width keeps it: `"with": { "interval": "day" }` draws by the day whatever the
+period, and takes back the risk above on "All time". `min_doc_count` cannot be written beside `auto`,
+`auto_date_histogram` having no such setting.
+
 ### Reminding the reader of the active range
 
 A chart sitting below the fold loses sight of the date range picker, so its hint can carry the
 range itself:
 
 ```jsonc
-"createdTrend":  { "hint": "Number of documents created per day ({range})" },
-"modifiedTrend": { "hint": "Number of documents modified per day (Based on {range} creation)" }
+"createdTrend":  { "hint": "Number of documents created per {interval} ({range})" },
+"modifiedTrend": { "hint": "Number of documents modified per {interval} (Based on {range} creation)" }
 ```
 
 The second wording is not cosmetic. The global range filters `dc:created`, while that chart
 buckets on `dc:modified`: it shows modifications made to the documents *created* in the window,
 not modifications made during the window.
+
+`{interval}` names the width of the bars — `week`, `7 days`, `3 months` — which follows the period
+(below) and is sometimes only known once OpenSearch has answered, so it is read off the data rather
+than the configuration. Until the first answer arrives it reads "interval".
 
 Interpolation happens once, in `WidgetOutletComponent`, which returns the original configuration
 untouched when there is no placeholder, so a widget without one never re-renders for nothing.
@@ -478,7 +513,7 @@ untouched when there is no placeholder, so a widget without one never re-renders
 ```
 
 Two widgets declared in the same layout row both spanning 12 wrap onto separate lines; both
-spanning 6 sit side by side. The trend pair therefore stacks over a long period, where daily bars
+spanning 6 sit side by side. The trend pair therefore stacks over a long period, where the bars
 need the full width, and pairs up over a short one, where comparing them matters more. No grid
 code is involved: CSS auto placement does it.
 

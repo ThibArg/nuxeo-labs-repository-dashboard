@@ -24,7 +24,7 @@ for Angular 22:
 ```bash
 cd nuxeo-labs-repository-dashboard-web
 export PATH="$PWD/node:$PATH"
-npm test -- --watch=false                                                 # 51 files, 931 tests
+npm test -- --watch=false                                                 # 51 files, 961 tests
 npm test -- --watch=false --include src/app/engine/agg-compiler.spec.ts   # one file
 npm test -- --watch=false --filter 'never emits a .keyword'               # one behaviour
 npm run build     # this IS the typecheck: strict, noUnusedLocals, strictTemplates
@@ -189,6 +189,15 @@ made to render hints, and a broken `LabelStrategy` passed until it rendered buck
   clauses against synthetic documents rather than trusting a reading of them.
 - **The expiry tiles partition too** — `expired`, `expiringWeek`, `expiring60`, never two. The sixty
   day window starts at `gt: now+7d`, so J+7 belongs to the week alone. A reader adds the three up.
+- **No histogram pads itself over a span nobody measured.** `search.max_buckets` is 65,535 over the
+  whole response and one document dated 1899 makes a daily chart 46,000 bars; two such charts fail
+  every widget of the request. A trend's `interval` defaults to `auto`: `resolveHistogram` derives a
+  width from the period only when the period bounds that very field at both ends, and sends an
+  `auto_date_histogram` of `AUTO_BUCKETS` everywhere else. `shipped-dashboards.spec.ts` refuses a
+  padded `date_histogram` on "All time" and holds the widest range the date fields accept, year 1
+  to 9999, under the ceiling. Mind an asymmetry that is easy to miss: a typed range pads only the
+  chart on the filtered field, through `extended_bounds`, while a stray document stretches every
+  chart grouping by its field.
 - **Workflows populations are mutually exclusive but *not* exhaustive**: three reachable events fall
   outside them, so that spec asserts exclusivity only. Downloads is the same shape, `cmis` and
   `cmisRendition` being counted by neither tile.
@@ -249,8 +258,16 @@ but for the bounds of Tasks' lateness `date_range`, computed from `now`, which d
 milliseconds between two requests — compare such pairs without them. `hits.total` showed the
 narrowing reach the server: 4031 to 10 on Tasks, 17951 to 886 on Downloads, 17951 to 10333 on Users,
 4031 to 793 on Governance, Content unchanged. The repository index has one shard there, the audit
-five. Three assertions ever failed, the drifting `now` being the third, and all were the harness's
-fault, so a red live check is not proof that the application is wrong.
+five. `auto_date_histogram` is accepted with `buckets`, `minimum_interval`, `format` and
+`time_zone`, answers the width it chose under `interval` (`1d`), and keeps its empty buckets,
+contiguous — which a category axis needs. With every trend pinned to `day`, a range typed from 1800
+failed on every dashboard carrying a trend and one from 1899 on Workflows alone, whose two charts
+padded to 2 × 46,289 buckets while one chart of 46,289 answered; the passthrough reported each as a
+Nuxeo 500 wrapping the OpenSearch `ResponseException`. With `auto`, all of them answered. Auto
+buckets wider than a day never occurred on that data, so the shortening of month and year keys in
+`result-mapper.ts` is exercised by specs only. Three assertions ever failed, the drifting `now`
+being the third, and all were the harness's fault, so a red live check is not proof that the
+application is wrong.
 
 **The sandbox's audit indices are partly fabricated and prove nothing about the platform.** In
 `audit`, login events were generated and `principalName` / `eventDate` copied from target
@@ -396,6 +413,9 @@ Do not undo these without knowing what they were for.
 | An IANA zone name rather than a fixed offset for `time_zone` | Correct on both sides of a daylight saving change, which `+02:00` is not. Web UI's own element uses the offset |
 | A period is two inclusive calendar days, not date math | Only concrete days can be shown in, and edited through, the two date fields |
 | `extended_bounds` derived from the filter, never configured | A histogram otherwise spans only the days holding a document, so a quiet start of period silently shortens the chart. It also keeps `AggConfig` closed |
+| A trend's width follows the period, and OpenSearch picks it where the span is unknown | A fixed daily width is 46,000 buckets from one document dated 1899, and the ceiling is per response. `auto` is the one widening of `AggConfig` this took, and `auto_date_histogram` the one new aggregation reaching the passthrough |
+| Not `min_doc_count: 1` on a trend | It bounds the bucket count just as well, but the x axis lists buckets rather than scaling time: empty years vanish and an 1899 bar sits beside 2024. The retention horizon keeps it, where a month with no expiry is a gap, not information |
+| Content opens on the last twelve months, Governance on All time | Content on All time is the one full scan of the repository index the planner cannot narrow, its Total tile reading `hits.total`. Governance describes what holds today, and a window on `dc:created` would hide a record written three years ago and still under retention |
 | No implicit exclusion of technical documents | An explicit user decision: the type filter is the tool, and it is persisted |
 | No Nuxeo JS client | CommonJS, not tree-shakable; it would pull batch upload, directories and OAuth2 for three call shapes |
 | A page names its missing prerequisite instead of being greyed out | A disabled menu entry cannot tell the reader which package to install |
@@ -448,7 +468,7 @@ Seven screens, six composed dashboards. 69 definitions over five builders — `c
 `live-documents` serves both Content and Governance, the only sharing so far. Governance carries 17
 definitions split four ways, five of which sit on no page, describing configuration rather than
 content. Exactly one widget still reads `hits.total`: Content's `total-documents`, which constrains
-nothing and is meant to — and which is why Content alone keeps its query unnarrowed. 931 tests over
+nothing and is meant to — and which is why Content alone keeps its query unnarrowed. 961 tests over
 51 files, build green.
 
 Downloads is the newest screen and the worked example `CUSTOMISING.md` is written from: seven
