@@ -761,6 +761,8 @@ The editor is where the reason is shown.
 - JDK 21 or later, Maven 3.8 or later, to build
 - A Nuxeo server using **OpenSearch as its search client**
 - An **administrator** session
+- On a large repository, an OpenSearch cluster **sized for it**: see
+  [Performance depends on the cluster](#performance-depends-on-the-cluster)
 
 On a standard LTS 2025 server running OpenSearch there is usually **nothing to configure**: the
 required properties are already set by the packages listed below. The dashboard checks everything
@@ -812,6 +814,105 @@ nuxeo.opensearch1.client.server=http://opensearch:9200
 
 The legacy `elasticsearch.addressList` is still honoured as a fallback. On a single node cluster,
 also consider `elasticsearch.indexNumberOfReplicas=0` to keep indices green.
+
+## Performance depends on the cluster
+
+Every figure is computed when the page opens, by OpenSearch, over the documents the period
+selects. Nothing is precomputed and, in practice, nothing is cached: OpenSearch does not cache a
+request that uses `now`, which Content, Governance and Tasks do, and an index being written to
+drops its cache at every refresh. How fast a page answers is therefore decided less by this plugin
+than by the cluster behind it, and a repository of hundreds of millions of documents needs a
+cluster sized for one.
+
+### What one request costs
+
+A page sends one request per index it reads. OpenSearch searches **each shard of that index with
+one thread** of its `search` pool, on the node holding the shard, all shards at once, and the
+request answers when the slowest shard has. On each shard, every entry the shared filters select is
+handed to every widget of the page in a single pass, so the time a shard takes grows with two
+things:
+
+- **the entries of that shard the period selects, versions and proxies included.** "All time" on
+  Content or Governance selects every entry of the repository index, and a repository commonly
+  holds several versions per live document;
+- **the widgets on the page**: thirteen on Content and on Governance, eighteen on Workflows. A
+  widget narrowing to its own population still sees every selected entry go past.
+
+Three consequences for sizing:
+
+- **Shards are the unit of parallelism.** A request takes as many search threads as the index has
+  shards and holds them until it answers. Five shards over five hundred million entries is a
+  hundred million entries per thread.
+- **Cores decide whether those threads really run side by side.** Shards piled onto a small node
+  queue behind one another, and behind the Web UI searches reaching the same node.
+- **Replicas add capacity, not speed.** A request reads one copy of each shard: a replica lets the
+  dashboard and Web UI work at the same time, it does not shorten a single request.
+
+Aggregations also take heap on the data nodes, counted against the request and field data circuit
+breakers — 60 % and 40 % of the heap by default. A breaker that trips fails the shard concerned
+rather than the whole request, and **the dashboard does not yet detect a response some shards
+failed to contribute to**: on an undersized cluster, a figure can come back short instead of
+failing.
+
+### What it costs Nuxeo
+
+The passthrough is synchronous. For as long as OpenSearch works on a request, Nuxeo holds:
+
+| Resource | Default | Set with |
+| --- | --- | --- |
+| A Tomcat request thread | 20 in all | `nuxeo.server.http.maxThreads` |
+| A connection to OpenSearch | 10 per OpenSearch node, 30 in all, shared with indexing and every Web UI search | nothing: the client library's defaults |
+| The wait before giving up | 121 s | `nuxeo.opensearch1.client.socketTimeout` (`180s`, for instance), or the legacy `elasticsearch.restClient.socketTimeoutMs` |
+
+Nuxeo does no heavy computing here, the work being OpenSearch's, but an administrator changing
+periods on a large repository holds threads and connections that Web UI users need too. And a
+search the browser gave up on carries on: neither the passthrough nor OpenSearch cancels it.
+
+### Two indices that do not grow alike
+
+**Content, Governance and Tasks read the repository index**, which holds every document the
+repository keeps — live documents, versions and proxies — and is never purged. Those three screens
+depend on the size of the repository and on the cluster, whatever is done to the audit.
+
+**Users, Downloads and Workflows read the audit**, which many installations archive regularly
+before starting again from an empty index or purging the older entries. There the cost depends on
+two things, and a purge only acts on the second:
+
+- **the volume of a day.** Thirty days of audit is thirty days of events however often the audit is
+  purged, so a busy installation still has tens of millions of entries to go through on the default
+  period;
+- **what the index has held since the last purge.** That bounds "All time" and the longer periods,
+  and also the number of distinct values some widgets rank: the most downloaded documents rank
+  `docUUID`, which takes as many values as documents touched since the purge. An audit purged every
+  month keeps that affordable; one purged every year may not.
+
+How the audit is purged matters as much as how often. An index recreated after a snapshot is small
+at once. Entries removed with `delete_by_query` stay in their segments until OpenSearch merges
+them, and their values still weigh on a ranking like the one above until then.
+
+A purged audit also means the audit screens describe only what happened since the purge, which
+they do not yet say on screen: "All time" there means "since the last purge".
+
+### Before opening it on a large repository
+
+- **Choose the shard count before the data arrives.** It is fixed when an index is created, and
+  changing it afterwards means reindexing. Both indices default to five through
+  `elasticsearch.indexNumberOfShards`, which sets the repository *and* the audit at once; set them
+  apart with `nuxeo.search.client.default.opensearch1.settings.numberOfShards` and
+  `nuxeo.audit.backend.default.opensearch1.settings.numberOfShards`. OpenSearch's own guidance
+  keeps a shard between 10 and 50 GB.
+- **Give the data nodes cores and heap**: enough cores to search every shard of an index at once
+  while Web UI keeps working, and enough heap that the breakers stay quiet.
+- **Plan for the audit.** In LTS 2025 it is a single index with no retention and no rollover, so it
+  grows until somebody archives and purges it, and renditions weigh heavily in it: every thumbnail
+  Web UI fetches is audited as a `download`, which is why 524 of 539 such entries on the test
+  instance were renditions.
+- **Prefer short periods.** The cost follows the period: a month of audit or of new documents is a
+  fraction of "All time", which is where Content and Governance open today.
+- **Measure on your own data.** Content, Users and Workflows show under their title how many
+  requests the page sent and how long the slowest took — OpenSearch's own `took`. The three other
+  dashboards replace that line with a subtitle of their own. Read it page by page, over the periods
+  people will actually choose, before rolling the dashboard out.
 
 ## Build
 
