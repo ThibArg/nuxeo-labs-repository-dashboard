@@ -155,6 +155,16 @@ made to render hints, and a broken `LabelStrategy` passed until it rendered buck
   exception, needing `hits`. The cost is not the round trips: a partition read from four requests
   adds up by luck, and `now` — evaluated per request by OpenSearch — stops being one instant across
   the tiles bounded by it.
+- **A query is narrowed only by what every widget of its request already counts.** A `filter`
+  wrapper narrows what a widget counts, not what a shard walks, so `narrowingClauses` lifts into the
+  query the clauses every widget filter carries, then the union of what remains of them. One widget
+  with no filter of its own — `read: 'total'`, an unwrapped metric or chart, a `match_all` wrapper
+  holding only a secondary figure or a distinct count — lifts nothing, which is what keeps Content's
+  Total tile a total. Widget filters stay whole. `shipped-dashboards.spec.ts` holds both directions
+  over every shipped file: nothing added that some widget does not state, and something added
+  whenever every widget has a filter. What it prevents is a walk, not a wrong figure: under
+  `match_all`, Tasks sent every entry of the repository index past eight collectors to count ten
+  tasks.
 - **A shared clause is attributed to the indices it constrains, and a mixed page must say so.**
   `dateRange.byIndex`, `termsGroup.indices`, `pathScope.indices`, and the `index` a pick carries
   from the chart it was clicked on; `baseFilter` is refused outright, having no index it could
@@ -232,8 +242,15 @@ rather than letting it default, and publish results in a variable instead of thr
 the table's `_source`, `percentiles` keyed `"50.0"`, and a mixed page planning two requests that
 both answer. The same audit request carrying `ecm:primaryType` and `ecm:path.children` — what a
 shared filter did before it was attributed to an index — answered **status 200, no error, zero
-hits**: that is the whole argument for `byIndex`, in one number. Two assertions ever failed and
-both were the harness's fault, so a red live check is not proof that the application is wrong.
+hits**: that is the whole argument for `byIndex`, in one number. Narrowing a query changes no
+figure: the six shipped dashboards over All time, thirty days and twelve months, each aggregation
+request sent with and without its lifted clauses, answered the same `aggregations`, byte for byte
+but for the bounds of Tasks' lateness `date_range`, computed from `now`, which drift by a few
+milliseconds between two requests — compare such pairs without them. `hits.total` showed the
+narrowing reach the server: 4031 to 10 on Tasks, 17951 to 886 on Downloads, 17951 to 10333 on Users,
+4031 to 793 on Governance, Content unchanged. The repository index has one shard there, the audit
+five. Three assertions ever failed, the drifting `now` being the third, and all were the harness's
+fault, so a red live check is not proof that the application is wrong.
 
 **The sandbox's audit indices are partly fabricated and prove nothing about the platform.** In
 `audit`, login events were generated and `principalName` / `eventDate` copied from target
@@ -431,7 +448,8 @@ Seven screens, six composed dashboards. 69 definitions over five builders — `c
 `live-documents` serves both Content and Governance, the only sharing so far. Governance carries 17
 definitions split four ways, five of which sit on no page, describing configuration rather than
 content. Exactly one widget still reads `hits.total`: Content's `total-documents`, which constrains
-nothing and is meant to. 931 tests over 51 files, build green.
+nothing and is meant to — and which is why Content alone keeps its query unnarrowed. 931 tests over
+51 files, build green.
 
 Downloads is the newest screen and the worked example `CUSTOMISING.md` is written from: seven
 definitions naming `extended.downloadReason` beside `eventId: download`, and the second shipped use
