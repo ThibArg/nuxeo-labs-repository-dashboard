@@ -475,6 +475,50 @@ describe('DashboardPageComponent', () => {
     expect(text).not.toContain((5941).toLocaleString());
   });
 
+  /*
+   * The partition is where a short answer would show least: five tiles, each plausible on its
+   * own, no longer adding up, and nothing on the page saying why.
+   */
+  it('refuses an answer some shards left out, rather than showing short figures', async () => {
+    stub = installFetchStub([
+      {
+        match: '/site/es/nuxeo/_search',
+        matchBody: isAggregationsRequest,
+        json: {
+          ...(aggregationsResponse() as object),
+          _shards: {
+            total: 5,
+            successful: 4,
+            skipped: 0,
+            failed: 1,
+            failures: [
+              {
+                shard: 3,
+                index: 'nuxeo',
+                node: 'n1',
+                reason: {
+                  type: 'circuit_breaking_exception',
+                  reason: '[fielddata] Data too large',
+                },
+              },
+            ],
+          },
+        },
+      },
+      ...supportRoutes(),
+    ]);
+
+    const fixture = TestBed.createComponent(DashboardPageComponent);
+    await settle(fixture);
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('The index could not be queried.');
+    expect(text).toContain('1 of 5 shards of the nuxeo index did not answer');
+    expect(text).toContain('circuit_breaking_exception');
+    expect(text).not.toContain((5941).toLocaleString());
+    expect(text).not.toContain((4821).toLocaleString());
+  });
+
   it('reports a missing configuration clearly', async () => {
     stub = installFetchStub([
       { match: 'assets/dashboards/content.json', status: 404, text: 'not found' },

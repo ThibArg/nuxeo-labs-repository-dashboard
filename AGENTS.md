@@ -24,7 +24,7 @@ for Angular 22:
 ```bash
 cd nuxeo-labs-repository-dashboard-web
 export PATH="$PWD/node:$PATH"
-npm test -- --watch=false                                                 # 52 files, 996 tests
+npm test -- --watch=false                                                 # 52 files, 1001 tests
 npm test -- --watch=false --include src/app/engine/agg-compiler.spec.ts   # one file
 npm test -- --watch=false --filter 'never emits a .keyword'               # one behaviour
 npm run build     # this IS the typecheck: strict, noUnusedLocals, strictTemplates
@@ -218,6 +218,12 @@ made to render hints, and a broken `LabelStrategy` passed until it rendered buck
   called belong to the page; `WidgetBody` omits them. `hint` is the exception.
 - **The compiler compiles everything or nothing.** A page built from the cells that happened to
   resolve is a page whose figures nobody can account for.
+- **So does the mapper, with an answer.** OpenSearch answers 200 when shards fail, with what the
+  others counted; `mapResponse` refuses a response whose `_shards.failed` is above zero, or whose
+  `timed_out` is true, and the runner fails the page as for a request that failed outright. Count
+  from `failed`, never from `failures`, which OpenSearch groups by reason. An absent `_shards`
+  header is accepted, which is what every fixture in `src/testing/` sends. The facet value lists
+  and the container picker read their answers without this check.
 - **Every declared widget is planned, on screen or not.** That is what makes opening a tab free and
   keeps the figures of two tabs comparable. A widget discovered when its tab opens would arrive in
   a request of its own, at its own instant.
@@ -290,7 +296,12 @@ each once an `exists` query is added. Its `took` was 823 ms on the first call of
 Downloads and Workflows planned with and without that horizon, over a period starting five years
 before it, answered identical aggregations but for each trend's leading empty buckets, 64 monthly
 buckets becoming 4; a period wholly before the horizon, sent without `extended_bounds`, answered
-zero, and one starting on it the very same body. Three assertions
+zero, and one starting on it the very same body. The six shipped dashboards over the five
+shortcuts, 35 requests, all answered `_shards.failed: 0` and `timed_out: false` (one shard on the
+repository, five on the audit), so refusing an incomplete answer refuses nothing there. No partial
+answer could be provoked for the other direction: a search `timeout` as short as `1nanos` never
+fires on that data, OpenSearch reading the clock it caches every 200 ms, and no clause shy of a
+script fails one shard and not the others; that direction is held by a spec only. Three assertions
 ever failed, the drifting `now` being the third, and all were the harness's fault, so a red live
 check is not proof that the application is wrong.
 
@@ -495,8 +506,8 @@ Seven screens, six composed dashboards. 69 definitions over five builders — `c
 `live-documents` serves both Content and Governance, the only sharing so far. Governance carries 17
 definitions split four ways, five of which sit on no page, describing configuration rather than
 content. Exactly one widget still reads `hits.total`: Content's `total-documents`, which constrains
-nothing and is meant to — and which is why Content alone keeps its query unnarrowed. 996 tests over
-52 files, build green.
+nothing and is meant to — and which is why Content alone keeps its query unnarrowed. 1001 tests
+over 52 files, build green.
 
 Every page reading the audit says where it starts, measured once by the preflight as the earliest
 `eventDate` (`engine/audit-horizon.ts`): a line under the filter bar, each widget's period restated

@@ -1,7 +1,14 @@
 import { EsResponse } from '../core/nuxeo.types';
 import { DISTINCT_AGG, INNER_AGG, METRIC_AGG } from './agg-compiler';
-import { WidgetPlan } from './query-planner';
-import { WidgetData, isEmptyData, readAggregationWidget, readHitsWidget } from './result-mapper';
+import { PlannedRequest, WidgetPlan } from './query-planner';
+import {
+  WidgetData,
+  incompleteAnswer,
+  isEmptyData,
+  mapResponse,
+  readAggregationWidget,
+  readHitsWidget,
+} from './result-mapper';
 
 function plan(overrides: Partial<WidgetPlan> = {}): WidgetPlan {
   return {
@@ -443,5 +450,69 @@ describe('result-mapper', () => {
       expect(isEmptyData({ kind: 'rows', rows: [], total: 0 })).toBe(true);
       expect(isEmptyData(undefined)).toBe(true);
     });
+  });
+});
+
+/*
+ * OpenSearch answers 200 when some shards fail, with what the others counted. Mapped as it stands,
+ * that answer would put figures short by an unknown amount on screen, under no warning at all.
+ */
+describe('an answer some shards did not contribute to', () => {
+  const REQUEST: PlannedRequest = {
+    id: 'content:aggregations',
+    kind: 'aggregations',
+    index: 'nuxeo',
+    body: { size: 0 },
+    widgetIds: ['w'],
+  };
+  const PLANS = new Map([['w', plan({ wrapped: true })]]);
+
+  function partial(shards: EsResponse['_shards'], timedOut = false): EsResponse {
+    return { ...response({ w: { doc_count: 42 } }), timed_out: timedOut, _shards: shards };
+  }
+
+  it('is refused whole, naming how many shards failed and why', () => {
+    const answer = partial({
+      total: 5,
+      successful: 3,
+      failed: 2,
+      failures: [
+        {
+          shard: 1,
+          index: 'nuxeo',
+          node: 'n1',
+          reason: { type: 'circuit_breaking_exception', reason: '[parent] Data too large' },
+        },
+      ],
+    });
+
+    expect(() => mapResponse(REQUEST, answer, PLANS)).toThrow(
+      '2 of 5 shards of the nuxeo index did not answer ' +
+        '(circuit_breaking_exception: [parent] Data too large)',
+    );
+  });
+
+  it('counts the failed shards rather than the failures listed, which OpenSearch groups', () => {
+    const answer = partial({
+      total: 5,
+      successful: 0,
+      failed: 5,
+      failures: [{ shard: 0, reason: { type: 'es_rejected_execution_exception' } }],
+    });
+
+    expect(incompleteAnswer('audit', answer)).toContain('5 of 5 shards of the audit index');
+  });
+
+  it('is refused when the search timed out, every shard having answered or not', () => {
+    const answer = partial({ total: 5, successful: 5, failed: 0 }, true);
+
+    expect(() => mapResponse(REQUEST, answer, PLANS)).toThrow('timed out');
+  });
+
+  it('leaves alone an answer whose skipped shards held nothing the query could match', () => {
+    const answer = partial({ total: 5, successful: 5, skipped: 3, failed: 0 });
+
+    expect(incompleteAnswer('nuxeo', answer)).toBeNull();
+    expect(mapResponse(REQUEST, answer, PLANS).get('w')).toEqual({ kind: 'scalar', value: 42 });
   });
 });

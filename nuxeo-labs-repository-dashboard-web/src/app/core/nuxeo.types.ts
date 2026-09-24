@@ -80,9 +80,30 @@ export interface EsHit<T = Record<string, unknown>> {
   sort?: unknown[];
 }
 
+/** A shard that did not answer, as OpenSearch reports it. Identical failures are listed once. */
+export interface EsShardFailure {
+  shard?: number;
+  index?: string;
+  node?: string;
+  /** `type` is the exception, e.g. `circuit_breaking_exception`; `reason` its message. */
+  reason?: { type?: string; reason?: string };
+}
+
 export interface EsResponse<T = Record<string, unknown>> {
   took: number;
+  /** True when the search ran out of time and answered with what its shards had so far. */
   timed_out: boolean;
+  /**
+   * How many shards answered. A shard failing does not fail the search: OpenSearch answers 200
+   * with what the others counted, and says so only here.
+   */
+  _shards?: {
+    total: number;
+    successful: number;
+    skipped?: number;
+    failed: number;
+    failures?: EsShardFailure[];
+  };
   hits: {
     total: { value: number; relation: 'eq' | 'gte' } | number;
     max_score?: number | null;

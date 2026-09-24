@@ -904,9 +904,15 @@ Three consequences for sizing:
 
 Aggregations also take heap on the data nodes, counted against the request and field data circuit
 breakers — 60 % and 40 % of the heap by default. A breaker that trips fails the shard concerned
-rather than the whole request, and **the dashboard does not yet detect a response some shards
-failed to contribute to**: on an undersized cluster, a figure can come back short instead of
-failing.
+rather than the whole request: OpenSearch answers 200 with what the other shards counted, and says
+so only in the response's `_shards` header. **The dashboard refuses such an answer.** A response
+with `_shards.failed` above zero, or `timed_out`, fails the page the way a request that failed
+outright does, with a message naming how many shards did not answer and the first reason given —
+`1 of 5 shards of the nuxeo index did not answer (circuit_breaking_exception: …)`. On an
+undersized cluster a page therefore fails where it would otherwise have shown figures short by an
+amount nobody could see, a partition no longer adding up to its total. The count comes from
+`failed`, OpenSearch listing identical failures once. The filter dialog's value lists and the
+container picker do not check it: they show what the answer held.
 
 ### What it costs Nuxeo
 

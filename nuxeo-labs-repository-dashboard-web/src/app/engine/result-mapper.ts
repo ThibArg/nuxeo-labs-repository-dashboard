@@ -6,7 +6,7 @@
  * value. The checks below are ordered accordingly, because a filter wrapper carrying a metric
  * exposes both `doc_count` and `metric`.
  */
-import { EsAggregation, EsBucket, EsResponse, totalHits } from '../core/nuxeo.types';
+import { EsAggregation, EsBucket, EsIndex, EsResponse, totalHits } from '../core/nuxeo.types';
 import { canonicalPrincipal } from '../core/principal';
 import { DISTINCT_AGG, INNER_AGG, METRIC_AGG } from './agg-compiler';
 import { PlannedRequest, SECONDARY_AGG, WidgetPlan } from './query-planner';
@@ -246,12 +246,57 @@ export function readHitsWidget(response: EsResponse): WidgetData {
   };
 }
 
-/** Dispatches a response over the widgets it serves. */
+/**
+ * Why a response describes less than the index holds, or null when every shard answered in time.
+ *
+ * OpenSearch does not fail a search because one of its shards did. A tripped circuit breaker, a
+ * full search queue or a shard being relocated leaves the other shards' answer standing, sent with
+ * a 200 and a count of the missing ones. Every figure is then short by what those shards held, and
+ * nothing on screen could tell: the four populations stop adding up to the total, a trend dips on
+ * no day in particular. A search that timed out is the same answer, seen from the clock.
+ *
+ * The count is read from `failed` rather than from the list, which OpenSearch groups: five shards
+ * tripping the same breaker are listed once.
+ */
+export function incompleteAnswer(index: EsIndex, response: EsResponse): string | null {
+  const shards = response._shards;
+  if (shards && shards.failed > 0) {
+    const reason = shards.failures?.[0]?.reason;
+    const cause = reason?.type
+      ? ` (${reason.type}${reason.reason ? `: ${reason.reason}` : ''})`
+      : '';
+    return (
+      `${shards.failed} of ${shards.total} shards of the ${index} index did not answer${cause}. ` +
+      'The figures would be short by what they hold, so none is shown.'
+    );
+  }
+  if (response.timed_out) {
+    return (
+      `The search on the ${index} index timed out before every shard had answered. ` +
+      'The figures would be short by what the shards had yet to count, so none is shown.'
+    );
+  }
+  return null;
+}
+
+/**
+ * Dispatches a response over the widgets it serves.
+ *
+ * Refuses an incomplete answer whole rather than widget by widget: the widgets of a request share
+ * one walk of the index, so a missing shard is missing from every one of them. The runner then
+ * fails the page as it does for a request that failed outright, a page whose figures come partly
+ * from every shard and partly from some being one nobody can account for.
+ */
 export function mapResponse(
   request: PlannedRequest,
   response: EsResponse,
   plans: Map<string, WidgetPlan>,
 ): Map<string, WidgetData> {
+  const incomplete = incompleteAnswer(request.index, response);
+  if (incomplete) {
+    throw new Error(incomplete);
+  }
+
   const result = new Map<string, WidgetData>();
 
   for (const widgetId of request.widgetIds) {
