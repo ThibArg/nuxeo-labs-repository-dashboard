@@ -3,9 +3,12 @@ import { provideRouter } from '@angular/router';
 import usersConfig from '../config/dashboards/users.json';
 import {
   defaultFilterState,
+  formatDay,
+  formatDayRange,
   layoutCells,
   layoutRows,
   resolveSpan,
+  toLocalDay,
 } from '../config/dashboard-config.model';
 import { planDashboard } from '../engine/query-planner';
 import { PreflightService } from '../core/preflight.service';
@@ -18,6 +21,7 @@ import { shippedConfig } from '../../testing/shipped';
 import {
   FetchStub,
   StubRoute,
+  auditHorizonRoute,
   healthyServerRoutes,
   installFetchStub,
   isAggregationsRequest,
@@ -189,6 +193,42 @@ describe('Users dashboard', () => {
 
     const lookups = stub.calls.filter((call) => call.url.includes('/api/v1/user/'));
     expect(lookups.map((call) => call.url.split('/user/')[1])).toEqual(['jdoe']);
+  });
+
+  /*
+   * An audit purged ten days ago holds a third of the default thirty days. Said nowhere, the chart
+   * would open on twenty empty days and every tile would claim a month it does not have.
+   */
+  it('says where the audit starts, and what each widget really covers', async () => {
+    const today = new Date();
+    const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 10, 9, 30);
+    const horizon = toLocalDay(start);
+    stub = installFetchStub([
+      auditHorizonRoute(start.getTime()),
+      { match: '/site/es/audit/_search', matchBody: isAggregationsRequest, json: auditResponse() },
+      ...supportRoutes(),
+      ...healthyServerRoutes(),
+    ]);
+    await TestBed.inject(PreflightService).run();
+
+    const root = (await render()).nativeElement as HTMLElement;
+
+    const notice = root.querySelector('[data-testid="audit-horizon"]')?.textContent?.trim() ?? '';
+    expect(notice).toContain(`nothing earlier than ${formatDay(horizon)} is kept`);
+
+    const periods = [
+      ...root.querySelectorAll('[data-testid="widget-period"], [data-testid="chart-period"]'),
+    ].map((node) => (node.textContent ?? '').replace('Period:', '').trim());
+    expect(periods).toHaveLength(layoutCells(USERS.layout).length);
+    expect(new Set(periods)).toEqual(new Set([formatDayRange(horizon, toLocalDay(today))]));
+
+    // Paper and the standalone file lose the notice with the bar, so their context carries it.
+    expect(root.querySelector('.nxd-print-context')?.textContent).toContain(notice);
+
+    const body = stub.bodies.find(isAggregationsRequest) as any;
+    expect(body.aggs.uniqueLoginsPerDay.aggs.inner.date_histogram.extended_bounds.min).toBe(
+      new Date(`${horizon}T00:00:00`).getTime(),
+    );
   });
 
   it('names the missing prerequisite instead of showing an empty page', async () => {

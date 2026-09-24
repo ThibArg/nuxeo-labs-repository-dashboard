@@ -52,6 +52,15 @@ export interface HistogramBounds {
   field: string;
   min?: number;
   max?: number;
+  /**
+   * First instant the index still holds, when the period starts before it.
+   *
+   * Padding stops there, since a day the index kept nothing of would be drawn as a day nothing
+   * happened. The width is still chosen from `min`: the query bounds the data by the period, not
+   * by the horizon, and an entry older than the horizon — one restored after it was measured —
+   * must not turn a weekly chart into a daily one reaching back to that entry.
+   */
+  floor?: number;
 }
 
 /**
@@ -234,6 +243,9 @@ export function metricUndefinedWhenEmpty(metric: MetricConfig | undefined): bool
  * `max` is the start of the last selected day, never the exclusive upper bound of the query: the
  * latter is the start of the following day, and would make the chart grow an empty bucket for a
  * day the reader did not ask about.
+ *
+ * A period lying wholly before the floor pads nothing: OpenSearch refuses a `min` above `max`, and
+ * there is no day of it the index could hold.
  */
 function extendedBounds(
   field: string,
@@ -242,8 +254,15 @@ function extendedBounds(
   if (!bounds || bounds.field !== field || (bounds.min === undefined && bounds.max === undefined)) {
     return undefined;
   }
+  const min =
+    bounds.min !== undefined && bounds.floor !== undefined
+      ? Math.max(bounds.min, bounds.floor)
+      : bounds.min;
+  if (min !== undefined && bounds.max !== undefined && min > bounds.max) {
+    return undefined;
+  }
   return {
-    ...(bounds.min !== undefined ? { min: bounds.min } : {}),
+    ...(min !== undefined ? { min } : {}),
     ...(bounds.max !== undefined ? { max: bounds.max } : {}),
   };
 }

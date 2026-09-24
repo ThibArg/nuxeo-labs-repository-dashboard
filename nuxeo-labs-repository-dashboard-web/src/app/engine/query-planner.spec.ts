@@ -194,6 +194,107 @@ describe('planDashboard', () => {
     });
   });
 
+  /*
+   * An audit purged in March holds nothing earlier, so a chart padded back to the start of the
+   * period would draw those months as months nothing happened.
+   */
+  describe('charts over an audit that starts after the period does', () => {
+    const LOGINS = [{ term: { eventId: 'loginSuccess' } }];
+
+    function audit(): DashboardConfig {
+      return {
+        id: 'logins',
+        label: 'Logins',
+        index: 'audit',
+        filters: [{ type: 'dateRange', field: 'eventDate' }],
+        layout: [{ cells: ['logins', 'perDay'] }],
+        widgets: {
+          logins: { type: 'kpi', label: 'Logins', filter: LOGINS },
+          perDay: {
+            type: 'bar',
+            label: 'Per day',
+            filter: LOGINS,
+            agg: { date_histogram: { field: 'eventDate', calendar_interval: 'auto' } },
+          },
+        },
+      };
+    }
+
+    const LAST_12_MONTHS: FilterState = {
+      ...RANGE_ALL,
+      range: { id: '12m', label: 'Last 12 months', from: '2025-09-18', to: '2026-09-18' },
+    };
+
+    function histogram(filters: FilterState, horizons = {}, dashboard = audit()) {
+      const plan = planDashboard(dashboard, filters, horizons);
+      const aggs = plan.requests[0].body.aggs as Record<string, any>;
+      return aggs['perDay'].aggs[INNER_AGG].date_histogram;
+    }
+
+    it('starts the padding on the first day the audit holds', () => {
+      expect(histogram(RANGE_30D, { audit: '2026-09-01' }).extended_bounds).toEqual({
+        min: new Date('2026-09-01T00:00:00').getTime(),
+        max: new Date('2026-09-18T00:00:00').getTime(),
+      });
+    });
+
+    it('pads to the period as before when the audit holds all of it', () => {
+      expect(histogram(RANGE_30D, { audit: '2026-08-20' }).extended_bounds.min).toBe(
+        new Date('2026-08-20T00:00:00').getTime(),
+      );
+    });
+
+    /*
+     * The query still bounds the data by the period, so that is what the width must fit. An entry
+     * older than the horizon, restored after it was measured, would otherwise stretch a daily
+     * chart chosen for three weeks across the whole year.
+     */
+    it('draws the bars as wide as the period asks, not as the audit holds', () => {
+      const horizons = { audit: '2026-09-01' };
+
+      expect(histogram(LAST_12_MONTHS, horizons).calendar_interval).toBe('week');
+      expect(planDashboard(audit(), LAST_12_MONTHS, horizons).widgets.get('perDay')?.interval).toBe(
+        'week',
+      );
+    });
+
+    it('pads nothing over a period the audit holds none of', () => {
+      // OpenSearch refuses a lower bound above the upper one.
+      expect(histogram(RANGE_30D, { audit: '2026-10-01' }).extended_bounds).toBeUndefined();
+    });
+
+    it('adds no clause, so no figure changes', () => {
+      const without = planDashboard(audit(), LAST_12_MONTHS).requests[0].body;
+      const withHorizon = planDashboard(audit(), LAST_12_MONTHS, { audit: '2026-09-01' })
+        .requests[0].body;
+
+      expect(withHorizon.query).toEqual(without.query);
+    });
+
+    it('leaves the repository half of a mixed page padded to the period', () => {
+      const mixed: DashboardConfig = {
+        ...audit(),
+        index: 'nuxeo',
+        filters: [{ type: 'dateRange', field: 'dc:created', byIndex: { audit: 'eventDate' } }],
+        layout: [{ cells: ['created', 'perDay'] }],
+        widgets: {
+          created: {
+            type: 'area',
+            label: 'Created',
+            agg: { date_histogram: { field: 'dc:created', calendar_interval: 'day' } },
+          },
+          perDay: { ...audit().widgets['perDay'], index: 'audit' },
+        },
+      };
+      const [repository] = planDashboard(mixed, RANGE_30D, { audit: '2026-09-01' }).requests;
+
+      expect(repository.index).toBe('nuxeo');
+      expect((repository.body.aggs as any)['created'].date_histogram.extended_bounds.min).toBe(
+        new Date('2026-08-20T00:00:00').getTime(),
+      );
+    });
+  });
+
   it('gives each table its own request, since tables need hits', () => {
     const withTable = config({
       layout: [{ cells: ['total', 'expired'] }],

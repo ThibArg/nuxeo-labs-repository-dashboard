@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { formatDay } from '../config/dashboard-config.model';
 import { PreflightCheck, PreflightService } from './preflight.service';
 import { FetchStub, healthyServerRoutes, installFetchStub } from '../../testing/fetch-stub';
 
@@ -88,6 +89,65 @@ describe('PreflightService', () => {
     expect(result.features.retention).toBe(false);
     // Optional checks must never prevent the dashboard from rendering.
     expect(service.isReady()).toBe(true);
+  });
+
+  it('reads where the audit starts, from the earliest entry it holds', async () => {
+    const earliest = new Date('2026-03-12T09:14:00').getTime();
+    stub = installFetchStub(
+      healthyServerRoutes([
+        {
+          match: '/site/es/audit/_search',
+          json: {
+            took: 4,
+            timed_out: false,
+            hits: { total: { value: 1000, relation: 'gte' }, hits: [] },
+            aggregations: { horizon: { value: earliest, value_as_string: '2026-03-12T09:14:00Z' } },
+          },
+        },
+      ]),
+    );
+
+    const result = await TestBed.inject(PreflightService).run();
+
+    expect(result.auditHorizon).toBe(earliest);
+    expect(find(result.checks, 'index-audit').detail).toContain(formatDay('2026-03-12'));
+  });
+
+  /*
+   * OpenSearch takes a segment's minimum from its point index, without visiting a single entry,
+   * only when the query is a `match_all` and the `min` has no parent. A filter wrapper, or any
+   * query at all, and the probe walks the whole audit at every start.
+   */
+  it('asks for that start with no query and no wrapper, through the compiler', async () => {
+    stub = installFetchStub(healthyServerRoutes());
+
+    await TestBed.inject(PreflightService).run();
+
+    const index = stub.calls.findIndex((call) => call.url.includes('/site/es/audit/_search'));
+    const body = JSON.parse(stub.calls[index].init?.body as string);
+    expect(body).toEqual({ size: 0, aggs: { horizon: { min: { field: 'eventDate' } } } });
+  });
+
+  it('knows no start for an audit holding nothing, and still reaches it', async () => {
+    stub = installFetchStub(
+      healthyServerRoutes([
+        {
+          match: '/site/es/audit/_search',
+          json: {
+            took: 1,
+            timed_out: false,
+            hits: { total: { value: 0, relation: 'eq' }, hits: [] },
+            aggregations: { horizon: { value: null } },
+          },
+        },
+      ]),
+    );
+
+    const result = await TestBed.inject(PreflightService).run();
+
+    expect(result.auditHorizon).toBeNull();
+    expect(result.features.audit).toBe(true);
+    expect(find(result.checks, 'index-audit').detail).toContain('holds no event yet');
   });
 
   it('treats an HTML login page as an expired session', async () => {

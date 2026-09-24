@@ -8,6 +8,7 @@ import {
   resolveSpan,
 } from '../config/dashboard-config.model';
 import { planDashboard } from '../engine/query-planner';
+import { PreflightService } from '../core/preflight.service';
 import { DashboardPageComponent } from './dashboard-page.component';
 import { provideDashboardCharts } from '../widgets/echarts.setup';
 import { ChartWidgetComponent } from '../widgets/chart-widget.component';
@@ -17,6 +18,8 @@ import { shippedConfig } from '../../testing/shipped';
 import {
   FetchStub,
   StubRoute,
+  auditHorizonRoute,
+  healthyServerRoutes,
   installFetchStub,
   isAggregationsRequest,
   isFacetValuesRequest,
@@ -434,6 +437,28 @@ describe('DashboardPageComponent', () => {
     text = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(text).toContain('Number of documents created per day');
     expect(new Set(periods(fixture))).toEqual(new Set(['Last 30 days']));
+  });
+
+  it('says nothing of where the audit starts on a page reading only the repository', async () => {
+    stub = installFetchStub([
+      auditHorizonRoute(new Date(startOfMonthsAgo(6)).getTime()),
+      {
+        match: '/site/es/nuxeo/_search',
+        matchBody: isAggregationsRequest,
+        json: aggregationsResponse(),
+      },
+      ...supportRoutes(),
+      ...healthyServerRoutes(),
+    ]);
+    await TestBed.inject(PreflightService).run();
+
+    const fixture = TestBed.createComponent(DashboardPageComponent);
+    await settle(fixture);
+
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('[data-testid="audit-horizon"]')).toBeNull();
+    // The audit started six months ago; the repository kept its twelve.
+    expect(new Set(periods(fixture))).toEqual(new Set(['Last 12 months']));
   });
 
   it('surfaces a failing search instead of rendering zeros', async () => {

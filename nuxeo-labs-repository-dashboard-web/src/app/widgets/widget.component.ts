@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { DashboardSession } from '../engine/dashboard-session.service';
 import { resolveSpan } from '../config/dashboard-config.model';
+import { coveredRange } from '../engine/audit-horizon';
 import { dateFieldFor } from '../engine/query-planner';
 import { WidgetOutletComponent } from './widget-outlet.component';
 
@@ -31,7 +32,7 @@ import { WidgetOutletComponent } from './widget-outlet.component';
         [data]="session.runner.data().get(for())"
         [loading]="session.runner.loading()"
         [error]="error()"
-        [rangeLabel]="session.filters().range.label"
+        [rangeLabel]="rangeLabel()"
         [period]="period()"
         [bucketLabels]="session.runner.bucketLabels().get(for()) ?? emptyBucketLabels"
         [columnLabels]="session.runner.columnLabels().get(for()) ?? emptyColumnLabels"
@@ -61,6 +62,21 @@ export class WidgetComponent {
   protected readonly widget = computed(() => this.session.config()?.widgets[this.for()] ?? null);
 
   /**
+   * The period this widget's figures cover: the one chosen, begun no earlier than the index it
+   * reads. On an audit purged in March, "All time" there is "Since Mar 12, 2026", and a tile
+   * pasted into a slide has nothing else to say so.
+   */
+  protected readonly rangeLabel = computed(() => {
+    const config = this.session.config();
+    const widget = this.widget();
+    const range = this.session.filters().range;
+    if (!config || !widget) {
+      return range.label;
+    }
+    return coveredRange(range, this.session.horizons()[widget.index ?? config.index]).label;
+  });
+
+  /**
    * The period this widget's figures obey, or null when the page's period does not constrain the
    * index it reads — Tasks declares none, and on a page mixing two indices a `byIndex` of `""`
    * leaves one half unfiltered. Saying "Last 12 months" over a figure no period touched would be
@@ -72,7 +88,7 @@ export class WidgetComponent {
     if (!config || !widget || !dateFieldFor(config, widget.index ?? config.index)) {
       return null;
     }
-    return this.session.filters().range.label;
+    return this.rangeLabel();
   });
 
   /** Width in the twelve column grid, for a caller laying widgets out with `.nxd-grid`. */

@@ -13,8 +13,9 @@ import { PathScopePickerComponent } from './path-scope-picker.component';
  * page gets a working period, facet groups and container picker from one tag rather than from
  * sixty lines it would have to keep in step with this one.
  *
- * Renders nothing when the dashboard declares no filter, which is what keeps it droppable into a
- * page without knowing whether that dashboard has any.
+ * Renders nothing when the dashboard declares no filter and reads no audit, which is what keeps it
+ * droppable into a page without knowing whether that dashboard has any. The audit's start is said
+ * even without a filter: a page with no period reads all of the audit, which is "All time".
  */
 @Component({
   selector: 'nxd-dashboard-filters',
@@ -80,22 +81,6 @@ import { PathScopePickerComponent } from './path-scope-picker.component';
         />
       </div>
 
-      <!--
-        The bar itself is dropped on paper: a row of seven period buttons and two empty date fields
-        describes an application rather than its figures, and never says which period is in force.
-        What a reader needs out of context is the constraints, in words.
-
-        It lives here rather than on the page because this component owns the bar: a bespoke screen
-        dropping this tag in would otherwise get the bar without the thing that replaces it.
-      -->
-      @if (session.filterContext().length) {
-        <ul class="nxd-print-context">
-          @for (line of session.filterContext(); track line) {
-            <li>{{ line }}</li>
-          }
-        </ul>
-      }
-
       @for (group of session.groups(); track group.id) {
         <nxd-facet-group-dialog
           [group]="group"
@@ -107,6 +92,41 @@ import { PathScopePickerComponent } from './path-scope-picker.component';
           (closed)="session.closeGroup()"
         />
       }
+    }
+
+    <!--
+      Under the bar rather than in it, and not sticky: it describes the index, not a choice the
+      reader made, and it asks for attention only when the period reaches before the audit.
+    -->
+    @if (session.horizonNotice(); as notice) {
+      <p
+        class="nxd-horizon-notice mb-5"
+        [class]="
+          notice.warn
+            ? 'nxd-card border-warning-soft bg-warning-soft px-4 py-3 text-sm text-warning'
+            : 'text-xs text-ink-subtle'
+        "
+        role="note"
+        data-testid="audit-horizon"
+      >
+        {{ notice.text }}
+      </p>
+    }
+
+    <!--
+      The bar itself is dropped on paper: a row of seven period buttons and two empty date fields
+      describes an application rather than its figures, and never says which period is in force.
+      What a reader needs out of context is the constraints, in words, and where the audit starts.
+
+      It lives here rather than on the page because this component owns the bar: a bespoke screen
+      dropping this tag in would otherwise get the bar without the thing that replaces it.
+    -->
+    @if (session.filterContext().length) {
+      <ul class="nxd-print-context">
+        @for (line of session.filterContext(); track line) {
+          <li>{{ line }}</li>
+        }
+      </ul>
     }
   `,
 })

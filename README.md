@@ -466,7 +466,9 @@ with it. So the planner decides the width:
 | Anywhere else — "All time", a range open at one end, `dc:modified` under a filter on `dc:created` | Left to OpenSearch: an `auto_date_histogram` of at most 100 buckets, never narrower than a day |
 
 The first case is the only one whose span the planner can know, since the query keeps every entry
-inside the period; `extended_bounds` still pads it, derived from the period and never configured.
+inside the period; `extended_bounds` still pads it, derived from the period and never configured,
+and never reaching before the first day the audit holds (see [The audit only goes back to its last
+reset](#the-audit-only-goes-back-to-its-last-reset)).
 In the second, OpenSearch widens the bars until the dates fit, so a stray 1601 costs the chart its
 resolution rather than costing the page its request. Its empty buckets are kept too, which matters
 here: the x axis lists buckets rather than scaling time, so a missing bucket would not leave a gap,
@@ -490,6 +492,11 @@ slide loses the page altogether. So every widget the period constrains states it
 under the title and the hint — "Last 12 months", "All time", or the two days of a typed range — and
 follows it when it changes. On Content that is what tells the Total tile's reader they are looking
 at a year of the repository rather than all of it.
+
+On the audit the line states what the figures cover rather than what was asked. Over an audit
+whose first entry is from 24 June, "All time" reads "Since Jun 24, 2026" and "Last 12 months" reads
+"Jun 24, 2026 – Sep 24, 2026", while the picker keeps the shortcut pressed, that being what the
+reader chose.
 
 A widget whose index the period does not constrain states nothing: Tasks declares no period, and
 on a page mixing two indices a `byIndex` of `""` leaves one half out of it. A period written over
@@ -945,8 +952,9 @@ How the audit is purged matters as much as how often. An index recreated after a
 at once. Entries removed with `delete_by_query` stay in their segments until OpenSearch merges
 them, so the index shrinks later than its count does.
 
-A purged audit also means the audit screens describe only what happened since the purge, which
-they do not yet say on screen: "All time" there means "since the last purge".
+A purged audit also means the audit screens describe only what happened since the purge. They say
+so, and where that is: see [The audit only goes back to its last
+reset](#the-audit-only-goes-back-to-its-last-reset).
 
 ### Before opening it on a large repository
 
@@ -1298,6 +1306,69 @@ One more trap, unrelated to the cleanup: a workflow node with no due date expres
 task whose `nt:dueDate` is *the moment it was created*, so it counts as overdue a second later. The
 two shipped models set the expression; a Studio model need not.
 
+### The audit only goes back to its last reset
+
+**The repository keeps its documents; the audit does not.** Many installations back it up
+regularly and then start again from an empty index, or purge its older entries with a
+`delete_by_query`. LTS 2025 has neither retention nor rollover for the audit, so this is done by
+hand, and nothing in the index records that it was. Left unsaid, it misleads four ways: "All time"
+means since the repository was created on Content and since the last reset on Users, Downloads and
+Workflows; a period straddling the reset draws the days before it as days nobody logged in; the
+rankings start at the reset; and the workflow durations lean towards the short ones for months.
+
+**What the dashboard measures** is the earliest `eventDate` the audit holds, read by the preflight
+in the request that already checks the audit is reachable, and built by the compiler like every
+other aggregation:
+
+```json
+{ "size": 0, "aggs": { "horizon": { "min": { "field": "eventDate" } } } }
+```
+
+It costs next to nothing only as long as it carries no query: OpenSearch then takes each segment's
+minimum from its point index instead of visiting its entries (`AggregatorBase.pointReaderIfAvailable`
+wants a `match_all` and no parent aggregation). Profiled on the test instance, every shard reports
+`MinAggregator` with `collect_count: 0`; the same `min` under an `exists` query visits about 3,600
+entries per shard. A segment still holding entries a `delete_by_query` removed may need a walk until
+a merge rewrites it. `audit_wf` being the same index narrowed to workflow events, it shares the
+horizon. The day is read in the reader's zone, as the period is: the test instance's first entry,
+`2026-06-23T22:31Z`, belongs to 24 June in Paris.
+
+**What the screens do with it**, on every page reading the audit:
+
+- **A line under the filter bar** says where the audit starts. It turns into a warning when the
+  period asks for days before it — "All time", or "Last 12 months" over an audit three months old —
+  and says so when a period lies wholly before it and counts nothing.
+- **Each widget states the period its figures cover** (see [Reminding the reader of the active
+  range](#reminding-the-reader-of-the-active-range)).
+- **No chart is padded before it.** `extended_bounds.min` starts there instead of at the start of
+  the period, so nine months nobody kept are not drawn as nine months nobody logged in. The width of
+  the bars is still chosen from the period, which is what the query bounds: an entry older than the
+  horizon, restored after it was measured, must not stretch a chart chosen daily across a year. No
+  clause is added and no figure changes. Measured on Users, Downloads and Workflows over a period
+  starting five years before the horizon, every aggregation answered identically but for the empty
+  buckets dropped at the head of each trend: 64 monthly buckets became 4.
+- **Workflows adds that durations lean short.** Nuxeo computes `timeSinceWfStarted` and
+  `timeSinceTaskStarted` when the event happens, by reading the start back from the audit, and
+  leaves the field out when it finds none (`RoutingAuditHelper.computeElapsedTime`,
+  `DocumentRouteImpl.fireWorkflowCompletionEvent`). A workflow started before the reset and finished
+  after it counts as completed but carries no duration, so mean, median, distribution and per model
+  ranking describe only the workflows short enough to fit, for as long as the longest one runs.
+- **The printed page and the standalone HTML file** carry the same sentence beside the filters.
+- **Diagnostics** names the day on the audit check.
+
+Content has no such horizon, and a page mixing the repository and the audit says that its two halves
+do not go back to the same day.
+
+Three limits:
+
+- **The horizon is the earliest entry, not the date of a reset.** On an audit never purged it is
+  the installation's first event, and the line says no more than that the audit starts there.
+- **An event never audited still reads as no activity.** The `perf` template switches `loginSuccess`
+  and `logout` off, which empties most of Users while the horizon says nothing. Taking the horizon
+  per page, from the first of the events a page reads, would reveal it; it is not built.
+- **A backup restored into another index cannot be read.** The passthrough accepts only `audit` and
+  `audit_wf`, and rewrites both to the backend's own index.
+
 ### A record cannot be unmade
 
 **Putting a document under retention is close to irreversible, and it matters before anyone builds
@@ -1479,8 +1550,10 @@ caller survives.
 Two further facts. The admin centre's **"Login as" no longer exists** in LTS 2025: the mechanism
 survives in `NuxeoAuthenticationFilter.switchUser()`, but it triggers on a request *attribute*
 named `deputy` that nothing in the tree sets, and Web UI offers no equivalent. And `system` does
-still appear in an audit index, through `Framework.doPrivileged` with no argument and through the
-`documentCreated` entries `syncLogCreationEntries` rebuilds.
+still appear in an audit index, through `Framework.doPrivileged` with no argument. It no longer
+comes from `syncLogCreationEntries`, which rebuilt `documentCreated` entries: the OpenSearch audit
+backend inherits an implementation that throws "not supported", and nothing in the LTS 2025 tree
+calls it.
 
 ## Project layout
 

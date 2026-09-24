@@ -9,6 +9,7 @@ import {
 import { LabelService } from '../core/label.service';
 import { NuxeoHttpService } from '../core/nuxeo-http.service';
 import { readSource } from '../core/format';
+import { IndexHorizons } from './audit-horizon';
 import { DashboardPlan, planDashboard } from './query-planner';
 import { WidgetData, mapResponse } from './result-mapper';
 
@@ -68,13 +69,17 @@ export class DashboardRunner {
     return took === null ? requests : `${requests}, slowest answered in ${took} ms`;
   });
 
-  async run(config: DashboardConfig, filters: FilterState): Promise<void> {
+  async run(
+    config: DashboardConfig,
+    filters: FilterState,
+    horizons: IndexHorizons = {},
+  ): Promise<void> {
     this.loadingState.set(true);
     this.errorState.set(null);
 
     let plan: DashboardPlan;
     try {
-      plan = planDashboard(config, filters);
+      plan = planDashboard(config, filters, horizons);
     } catch (error) {
       this.errorState.set(describe(error));
       this.state.set(emptyState());

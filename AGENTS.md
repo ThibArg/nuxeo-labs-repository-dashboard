@@ -24,7 +24,7 @@ for Angular 22:
 ```bash
 cd nuxeo-labs-repository-dashboard-web
 export PATH="$PWD/node:$PATH"
-npm test -- --watch=false                                                 # 51 files, 968 tests
+npm test -- --watch=false                                                 # 52 files, 996 tests
 npm test -- --watch=false --include src/app/engine/agg-compiler.spec.ts   # one file
 npm test -- --watch=false --filter 'never emits a .keyword'               # one behaviour
 npm run build     # this IS the typecheck: strict, noUnusedLocals, strictTemplates
@@ -133,7 +133,9 @@ Helpers live in `src/testing/`; use them rather than inventing equivalents.
   when needed, on the parsed body: a dashboard issues its aggregation batch, its facet values query
   and its table query against the very same `_search` URL, so use the `isAggregationsRequest`,
   `isFacetValuesRequest` and `isHitsRequest` predicates. `healthyServerRoutes()` and
-  `emptySearchResponse()` cover the preflight calls a page makes before any of that.
+  `emptySearchResponse()` cover the preflight calls a page makes before any of that; their audit
+  answers no `horizon`, so a page knows no audit start and shows no notice until a test puts
+  `auditHorizonRoute(instant)` first and runs `PreflightService.run()` itself.
 - **`settle(fixture)`** drains the asynchronous work a page starts. The application is zoneless and
   uses plain `fetch`, so `whenStable()` alone knows nothing of those promises.
 - **`ChartWidgetStubComponent`**, installed with `TestBed.overrideComponent(WidgetOutletComponent, …)`,
@@ -141,7 +143,7 @@ Helpers live in `src/testing/`; use them rather than inventing equivalents.
   the hint, the period **and** the resolved bucket labels, so all four stay observable.
   `buildChartOption` being pure, option building is tested directly.
 - **`stubSession()`** hands a component a `DashboardSession` standing still, which is what lets the
-  grid and any bespoke layout be tested for what they do — placing widgets — without eight injected
+  grid and any bespoke layout be tested for what they do — placing widgets — without ten injected
   services. **`captureDownloads()`** intercepts what an export hands the browser.
 - **`setup.ts`** polyfills `ResizeObserver` and the modal behaviour of `<dialog>`.
 
@@ -201,6 +203,14 @@ made to render hints, and a broken `LabelStrategy` passed until it rendered buck
   to 9999, under the ceiling. Mind an asymmetry that is easy to miss: a typed range pads only the
   chart on the filtered field, through `extended_bounds`, while a stray document stretches every
   chart grouping by its field.
+- **The audit's start moves a chart's padding, never a clause nor a width.** `histogramBounds`
+  raises `extended_bounds.min` to the first day the audit holds (`HistogramBounds.floor`), so months
+  nobody kept are not drawn as months nothing happened; the interval is still chosen from the
+  period, which is what the query bounds, and a period wholly before the horizon pads nothing,
+  OpenSearch refusing a `min` above `max`. `query-planner.spec.ts` holds all three and that the
+  query is unchanged. The horizon itself is read by the preflight with **no query at all**: a
+  `min` under a `match_all` is read from each segment's point index, and anything else walks the
+  audit at every start. `preflight.service.spec.ts` holds the body whole.
 - **Workflows populations are mutually exclusive but *not* exhaustive**: three reachable events fall
   outside them, so that spec asserts exclusivity only. Downloads is the same shape, `cmis` and
   `cmisRendition` being counted by neither tile.
@@ -272,7 +282,15 @@ buckets wider than a day never occurred on that data, so the shortening of month
 documents is honoured, not merely accepted: with `profile: true` every shard reports
 `MapStringTermsAggregator` where it reported `GlobalOrdinalsStringTermsAggregator` (or its
 `.LowCardinality` variant), over identical aggregations. At the sandbox's 69 downloads it is no
-faster; the gain is for an audit naming far more documents than a period downloads. Three assertions
+faster; the gain is for an audit naming far more documents than a period downloads. The audit
+horizon probe answers `2026-06-23T22:31Z` there, 24 June in Paris, and is read without visiting an
+entry: profiled, all five shards report `MinAggregator` with `collect_count: 0`, against about 3,600
+each once an `exists` query is added. Its `took` was 823 ms on the first call of a session and 0 to
+2 ms on every later one, 40 s of idleness included; the first figure was not explained. Users,
+Downloads and Workflows planned with and without that horizon, over a period starting five years
+before it, answered identical aggregations but for each trend's leading empty buckets, 64 monthly
+buckets becoming 4; a period wholly before the horizon, sent without `extended_bounds`, answered
+zero, and one starting on it the very same body. Three assertions
 ever failed, the drifting `now` being the third, and all were the harness's fault, so a red live
 check is not proof that the application is wrong.
 
@@ -477,8 +495,15 @@ Seven screens, six composed dashboards. 69 definitions over five builders — `c
 `live-documents` serves both Content and Governance, the only sharing so far. Governance carries 17
 definitions split four ways, five of which sit on no page, describing configuration rather than
 content. Exactly one widget still reads `hits.total`: Content's `total-documents`, which constrains
-nothing and is meant to — and which is why Content alone keeps its query unnarrowed. 968 tests over
-51 files, build green.
+nothing and is meant to — and which is why Content alone keeps its query unnarrowed. 996 tests over
+52 files, build green.
+
+Every page reading the audit says where it starts, measured once by the preflight as the earliest
+`eventDate` (`engine/audit-horizon.ts`): a line under the filter bar, each widget's period restated
+from that day, no padding before it, a sentence on Workflows about durations, the same sentence in
+the printed and exported context. Not built: a start per page, from the first of the events a page
+reads, which is what would reveal an event never audited, such as `loginSuccess` under the `perf`
+template.
 
 Downloads is the newest screen and the worked example `CUSTOMISING.md` is written from: seven
 definitions naming `extended.downloadReason` beside `eventId: download`, and the second shipped use

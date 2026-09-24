@@ -20,6 +20,8 @@ import { DashboardConfigService } from '../config/dashboard-config.service';
 import { AppStylesService } from '../core/app-styles.service';
 import { downloadFile, safeFilename } from '../core/export';
 import { LabelService } from '../core/label.service';
+import { PreflightService } from '../core/preflight.service';
+import { auditHorizons, horizonNotice } from './audit-horizon';
 import { DashboardRunner } from './dashboard-runner.service';
 import { FacetStorageService } from './facet-storage.service';
 import { FacetValuesService, GroupValues } from './facet-values.service';
@@ -56,6 +58,7 @@ export class DashboardSession {
   private readonly appStyles = inject(AppStylesService);
   private readonly storage = inject(FacetStorageService);
   private readonly labelService = inject(LabelService);
+  private readonly preflight = inject(PreflightService);
 
   readonly runner = inject(DashboardRunner);
 
@@ -110,15 +113,34 @@ export class DashboardSession {
   );
 
   /**
-   * What the figures were filtered by, one phrase per constraint.
+   * First day each index still holds, for those that do not keep everything.
+   *
+   * Measured once, by the preflight: the audit moves its start only when it is purged, which a
+   * reader looking at a page does not do.
+   */
+  readonly horizons = computed(() => auditHorizons(this.preflight.result()?.auditHorizon));
+
+  /** Where the audit this page reads starts, told whatever the period; null on Content. */
+  readonly horizonNotice = computed(() => {
+    const config = this.config();
+    return config ? horizonNotice(config, this.filters().range, this.horizons()) : null;
+  });
+
+  /**
+   * What the figures were filtered by, one phrase per constraint, and where the audit starts.
    *
    * Read in two places: by the standalone HTML file, and by the page itself when it is printed,
    * the filter bar being dropped on paper. The two must not drift — a reader has no way of telling
-   * which of them describes the other — so both take it from here.
+   * which of them describes the other — so both take it from here. The audit's start is not a
+   * constraint anybody set, but a sheet read without it claims a history the figures do not have.
    */
   readonly filterContext = computed(() => {
     const config = this.config();
-    return config ? describeFilters(config, this.filters()) : [];
+    if (!config) {
+      return [];
+    }
+    const notice = this.horizonNotice();
+    return [...describeFilters(config, this.filters()), ...(notice ? [notice.text] : [])];
   });
 
   /** Anything at all narrowing the figures, which is what makes "Clear filters" worth offering. */
@@ -449,7 +471,7 @@ export class DashboardSession {
   private async runCurrent(): Promise<void> {
     const config = this.config();
     if (config) {
-      await this.runner.run(config, this.filters());
+      await this.runner.run(config, this.filters(), this.horizons());
     }
   }
 }

@@ -1,4 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
+import { formatDay, toLocalDay } from '../config/dashboard-config.model';
+import { compileMetric } from '../engine/agg-compiler';
 import { NuxeoHttpService } from './nuxeo-http.service';
 import { NxCapabilities, NxCurrentUser } from './nuxeo.types';
 
@@ -27,7 +29,15 @@ export interface PreflightResult {
     workflow: boolean;
     retention: boolean;
   };
+  /**
+   * Earliest instant the audit holds, in epoch milliseconds, or null when it holds nothing or was
+   * not reached. Where every figure read from the audit starts, whatever the period says.
+   */
+  auditHorizon: number | null;
 }
+
+/** Name of the aggregation reading where the audit starts. */
+const HORIZON_AGG = 'horizon';
 
 /**
  * Verifies, before rendering anything, that the server actually offers what the dashboard needs,
@@ -68,7 +78,8 @@ export class PreflightService {
         checks,
         user: user ?? undefined,
         capabilities: capabilities ?? undefined,
-        features: { repository, audit, workflow, retention },
+        features: { repository, audit: audit.reachable, workflow, retention },
+        auditHorizon: audit.horizon,
       };
       this.state.set(result);
       return result;
@@ -216,10 +227,12 @@ export class PreflightService {
     checks: PreflightCheck[],
     capabilities: NxCapabilities | null,
     canCall: boolean,
-  ): Promise<boolean> {
+  ): Promise<{ reachable: boolean; horizon: number | null }> {
+    const unreachable = { reachable: false, horizon: null };
+
     if (!canCall) {
       checks.push(skipped('index-audit', 'Audit index reachable', false));
-      return false;
+      return unreachable;
     }
 
     if (capabilities && capabilities.passthrough?.['elasticsearch-audit'] !== true) {
@@ -233,18 +246,34 @@ export class PreflightService {
           'Activate the opensearch1-audit template and set ' +
           'nuxeo.passthrough.elasticsearch.audit.enabled=true. Audit based widgets stay hidden.',
       });
-      return false;
+      return unreachable;
     }
 
+    /*
+     * The reachability probe also reads where the audit starts, which costs next to nothing only
+     * as long as the request carries no query: OpenSearch then takes each segment's minimum from
+     * its point index instead of visiting its entries (`AggregatorBase.pointReaderIfAvailable`
+     * requires a `MatchAllDocsQuery` and no parent aggregation). A segment still holding entries a
+     * `delete_by_query` removed may need a walk, until a merge rewrites it.
+     */
     try {
-      await this.http.search('audit', { size: 0 });
+      const response = await this.http.search('audit', {
+        size: 0,
+        aggs: { [HORIZON_AGG]: compileMetric({ min: 'eventDate' })! },
+      });
+      const earliest = response.aggregations?.[HORIZON_AGG]?.value ?? null;
       checks.push({
         id: 'index-audit',
         label: 'Audit index reachable',
         status: 'ok',
         blocking: false,
+        detail:
+          earliest === null
+            ? `holds no event yet, responded in ${response.took} ms`
+            : `holds events since ${formatDay(toLocalDay(new Date(earliest)))}, ` +
+              `responded in ${response.took} ms`,
       });
-      return true;
+      return { reachable: true, horizon: earliest };
     } catch (error) {
       checks.push({
         id: 'index-audit',
@@ -254,7 +283,7 @@ export class PreflightService {
         detail: describeError(error),
         remedy: 'Audit based widgets stay hidden.',
       });
-      return false;
+      return unreachable;
     }
   }
 

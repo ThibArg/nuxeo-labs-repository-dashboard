@@ -96,6 +96,26 @@ export function isHitsRequest(body: unknown): boolean {
   return candidate?._source !== undefined;
 }
 
+/** True for the preflight probe reading where the audit starts. */
+export function isHorizonRequest(body: unknown): boolean {
+  const candidate = body as { aggs?: Record<string, unknown> } | undefined;
+  return candidate?.aggs?.['horizon'] !== undefined;
+}
+
+/** The audit answering, to the preflight, that its earliest entry is this instant. */
+export function auditHorizonRoute(earliest: number): StubRoute {
+  return {
+    match: '/site/es/audit/_search',
+    matchBody: isHorizonRequest,
+    json: {
+      took: 2,
+      timed_out: false,
+      hits: { total: { value: 1, relation: 'gte' }, hits: [] },
+      aggregations: { horizon: { value: earliest } },
+    },
+  };
+}
+
 /** A healthy server: administrator session, passthrough on, every index answering. */
 export function healthyServerRoutes(overrides: StubRoute[] = []): StubRoute[] {
   return [

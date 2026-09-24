@@ -512,23 +512,25 @@ export function resolveShortcut(shortcut: DateRangeShortcut, today = new Date())
   return { id: shortcut.id, label: shortcut.label, from: toLocalDay(start), to: toLocalDay(today) };
 }
 
+/** A `YYYY-MM-DD` day as the reader's locale writes it, e.g. `Mar 12, 2026`. */
+export function formatDay(value: string): string {
+  return new Date(`${value}T00:00:00`).toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
 /** Human readable rendering of a typed period, used wherever `{range}` is interpolated. */
 export function formatDayRange(from: string | null, to: string | null): string {
-  const day = (value: string) =>
-    new Date(`${value}T00:00:00`).toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-
   if (from && to) {
-    return from === to ? day(from) : `${day(from)} – ${day(to)}`;
+    return from === to ? formatDay(from) : `${formatDay(from)} – ${formatDay(to)}`;
   }
   if (from) {
-    return `Since ${day(from)}`;
+    return `Since ${formatDay(from)}`;
   }
   if (to) {
-    return `Until ${day(to)}`;
+    return `Until ${formatDay(to)}`;
   }
   return 'All time';
 }

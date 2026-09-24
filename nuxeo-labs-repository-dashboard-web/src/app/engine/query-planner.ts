@@ -38,6 +38,7 @@ import {
   metricUndefinedWhenEmpty,
   resolveHistogram,
 } from './agg-compiler';
+import { IndexHorizons } from './audit-horizon';
 import { compileClauses } from './clause-compiler';
 import { compilePicks, compileTermsGroup } from './facet-clause';
 import { EsClause, boolFilter, dayRangeFilter, startOfLocalDayMillis } from './es-query';
@@ -190,21 +191,28 @@ export function globalFilters(
  * Only the field the date filter constrains is padded. Padding a histogram on another field would
  * be guesswork: documents created within the period may well have been modified outside it, so the
  * selected days say nothing about where those buckets belong.
+ *
+ * Nor is it padded before the first day the index holds. Over an audit purged in March, "Last 12
+ * months" would otherwise open on nine months of empty bars, which read as nine months of nobody
+ * logging in rather than as nine months nobody kept.
  */
 export function histogramBounds(
   config: DashboardConfig,
   filters: FilterState,
   index: EsIndex = config.index,
+  horizons: IndexHorizons = {},
 ): HistogramBounds | null {
   const field = dateFieldFor(config, index);
   const { from, to } = filters.range;
   if (!field || (!from && !to)) {
     return null;
   }
+  const horizon = horizons[index];
   return {
     field,
     ...(from ? { min: startOfLocalDayMillis(from) } : {}),
     ...(to ? { max: startOfLocalDayMillis(to) } : {}),
+    ...(from && horizon && from < horizon ? { floor: startOfLocalDayMillis(horizon) } : {}),
   };
 }
 
@@ -297,8 +305,15 @@ function aggregationRequestId(config: DashboardConfig, index: EsIndex): string {
  * and what makes `now` a single instant across the tiles bounded by it. Grouping rather than
  * batching everything is what lets a page mix the repository and the audit at all, the two having
  * neither the same fields nor the same date field.
+ *
+ * @param horizons first day each index still holds, which only moves where a chart's padding
+ *                 starts: no clause is added, and no figure changes.
  */
-export function planDashboard(config: DashboardConfig, filters: FilterState): DashboardPlan {
+export function planDashboard(
+  config: DashboardConfig,
+  filters: FilterState,
+  horizons: IndexHorizons = {},
+): DashboardPlan {
   const widgets = new Map<string, WidgetPlan>();
   const errors = new Map<string, string>();
   const aggregationRequests: PlannedRequest[] = [];
@@ -306,7 +321,7 @@ export function planDashboard(config: DashboardConfig, filters: FilterState): Da
 
   for (const [index, widgetIds] of groupByIndex(config)) {
     const shared = globalFilters(config, filters, undefined, index);
-    const bounds = histogramBounds(config, filters, index);
+    const bounds = histogramBounds(config, filters, index, horizons);
     const aggs: Record<string, EsClause> = {};
     const aggregationWidgetIds: string[] = [];
     const populations: EsClause[][] = [];

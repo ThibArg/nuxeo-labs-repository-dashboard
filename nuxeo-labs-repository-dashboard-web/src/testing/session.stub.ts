@@ -1,7 +1,7 @@
 /**
  * A dashboard session standing still.
  *
- * `DashboardSession` injects eight services and talks to the server; a component that only draws
+ * `DashboardSession` injects ten services and talks to the server; a component that only draws
  * widgets needs none of that. This hands it a session whose state is whatever the test says it
  * is, which is what lets the grid, and any bespoke layout, be tested for what they actually do:
  * placing widgets.
@@ -13,6 +13,7 @@ import {
   FilterState,
   defaultFilterState,
 } from '../app/config/dashboard-config.model';
+import { IndexHorizons } from '../app/engine/audit-horizon';
 import { DashboardSession } from '../app/engine/dashboard-session.service';
 import { WidgetData } from '../app/engine/result-mapper';
 import { BucketClick } from '../app/widgets/chart-widget.component';
@@ -25,6 +26,8 @@ export interface SessionStub {
   error: WritableSignal<string | null>;
   widgetErrors: WritableSignal<Map<string, string>>;
   bucketLabels: WritableSignal<Map<string, Map<string, string>>>;
+  /** First day each index holds, empty until a test says where the audit starts. */
+  horizons: WritableSignal<IndexHorizons>;
   /** Every bucket click the widgets emitted, in order. */
   picked: BucketClick[];
   /** Element `nxdExportRoot` registered, if any. */
@@ -49,6 +52,7 @@ export function stubSession(
     error: signal<string | null>(null),
     widgetErrors: signal(new Map<string, string>()),
     bucketLabels: signal(new Map<string, Map<string, string>>()),
+    horizons: signal<IndexHorizons>({}),
     picked: [],
     exportRoot: null,
   };
@@ -56,6 +60,7 @@ export function stubSession(
   const session = {
     config: state.config,
     filters: state.filters,
+    horizons: state.horizons,
     runner: {
       data: state.data,
       loading: state.loading,
