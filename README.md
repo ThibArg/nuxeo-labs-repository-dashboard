@@ -926,7 +926,10 @@ The passthrough is synchronous. For as long as OpenSearch works on a request, Nu
 
 Nuxeo does no heavy computing here, the work being OpenSearch's, but an administrator changing
 periods on a large repository holds threads and connections that Web UI users need too. And a
-search the browser gave up on carries on: neither the passthrough nor OpenSearch cancels it.
+search the browser gave up on carries on: neither the passthrough nor OpenSearch cancels it. Nor
+does the dashboard: a period changed while a search runs starts another, and the first one's
+answer is discarded when it comes back, only the latest being shown. Each change of mind is
+therefore one more full search on OpenSearch, not one fewer.
 
 ### Two indices that do not grow alike
 

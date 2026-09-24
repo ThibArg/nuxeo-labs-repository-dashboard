@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import contentConfig from '../config/dashboards/content.json';
+import usersConfig from '../config/dashboards/users.json';
 import {
   defaultFilterState,
   layoutCells,
@@ -19,6 +20,7 @@ import {
   FetchStub,
   StubRoute,
   auditHorizonRoute,
+  emptySearchResponse,
   healthyServerRoutes,
   installFetchStub,
   isAggregationsRequest,
@@ -517,6 +519,33 @@ describe('DashboardPageComponent', () => {
     expect(text).toContain('circuit_breaking_exception');
     expect(text).not.toContain((5941).toLocaleString());
     expect(text).not.toContain((4821).toLocaleString());
+  });
+
+  /*
+   * The page is reused when the route names another dashboard, so the configuration of the one
+   * the reader left can still be on its way when the one they went to has already arrived.
+   */
+  it('stays on the dashboard the reader went to when the one they left loads last', async () => {
+    let release!: () => void;
+    const content = new Promise<void>((resolve) => (release = resolve));
+    stub = installFetchStub([
+      { match: 'assets/dashboards/content.json', wait: content, json: contentConfig },
+      { match: 'assets/dashboards/users.json', json: usersConfig },
+      { match: '/site/es/', json: emptySearchResponse() },
+      ...supportRoutes(),
+    ]);
+
+    const fixture = TestBed.createComponent(DashboardPageComponent);
+    fixture.componentRef.setInput('dashboardId', 'content');
+    fixture.detectChanges();
+    fixture.componentRef.setInput('dashboardId', 'users');
+    await settle(fixture);
+    release();
+    await settle(fixture);
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('Users Dashboard');
+    expect(text).not.toContain('Content Dashboard');
   });
 
   it('reports a missing configuration clearly', async () => {

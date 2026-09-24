@@ -24,7 +24,7 @@ for Angular 22:
 ```bash
 cd nuxeo-labs-repository-dashboard-web
 export PATH="$PWD/node:$PATH"
-npm test -- --watch=false                                                 # 52 files, 1001 tests
+npm test -- --watch=false                                                 # 53 files, 1005 tests
 npm test -- --watch=false --include src/app/engine/agg-compiler.spec.ts   # one file
 npm test -- --watch=false --filter 'never emits a .keyword'               # one behaviour
 npm run build     # this IS the typecheck: strict, noUnusedLocals, strictTemplates
@@ -132,8 +132,9 @@ Helpers live in `src/testing/`; use them rather than inventing equivalents.
 - **`installFetchStub(routes)`** replaces `globalThis.fetch`. Routes match on a URL substring and,
   when needed, on the parsed body: a dashboard issues its aggregation batch, its facet values query
   and its table query against the very same `_search` URL, so use the `isAggregationsRequest`,
-  `isFacetValuesRequest` and `isHitsRequest` predicates. `healthyServerRoutes()` and
-  `emptySearchResponse()` cover the preflight calls a page makes before any of that; their audit
+  `isFacetValuesRequest` and `isHitsRequest` predicates. A route's `wait` holds its answer until a
+  promise settles, which is how two runs are made to answer out of order. `healthyServerRoutes()`
+  and `emptySearchResponse()` cover the preflight calls a page makes before any of that; their audit
   answers no `horizon`, so a page knows no audit start and shows no notice until a test puts
   `auditHorizonRoute(instant)` first and runs `PreflightService.run()` itself.
 - **`settle(fixture)`** drains the asynchronous work a page starts. The application is zoneless and
@@ -218,6 +219,12 @@ made to render hints, and a broken `LabelStrategy` passed until it rendered buck
   called belong to the page; `WidgetBody` omits them. `hint` is the exception.
 - **The compiler compiles everything or nothing.** A page built from the cells that happened to
   resolve is a page whose figures nobody can account for.
+- **Only the latest run writes.** Nothing awaits a run before starting the next, and the page is
+  reused from one dashboard to the next, so `DashboardRunner` numbers its runs and each gives up
+  after any wait once another has started; only the latest sets `loading` back to false. The
+  session's `loadConfig` does the same with the dashboard id. The requests given up are not
+  aborted, the passthrough holding its thread until OpenSearch answers whatever the browser does.
+  `dashboard-runner.service.spec.ts` holds the runner; a page spec holds the switch of dashboard.
 - **So does the mapper, with an answer.** OpenSearch answers 200 when shards fail, with what the
   others counted; `mapResponse` refuses a response whose `_shards.failed` is above zero, or whose
   `timed_out` is true, and the runner fails the page as for a request that failed outright. Count
@@ -506,8 +513,8 @@ Seven screens, six composed dashboards. 69 definitions over five builders — `c
 `live-documents` serves both Content and Governance, the only sharing so far. Governance carries 17
 definitions split four ways, five of which sit on no page, describing configuration rather than
 content. Exactly one widget still reads `hits.total`: Content's `total-documents`, which constrains
-nothing and is meant to — and which is why Content alone keeps its query unnarrowed. 1001 tests
-over 52 files, build green.
+nothing and is meant to — and which is why Content alone keeps its query unnarrowed. 1005 tests
+over 53 files, build green.
 
 Every page reading the audit says where it starts, measured once by the preflight as the earliest
 `eventDate` (`engine/audit-horizon.ts`): a line under the filter bar, each widget's period restated

@@ -405,17 +405,32 @@ export class DashboardSession {
     });
   }
 
+  /**
+   * Loads a configuration and runs it, unless the reader has moved to another dashboard meanwhile.
+   *
+   * The page is reused from one dashboard to the next, so a configuration fetched for the first
+   * visit of Content can arrive after the reader has gone on to Users, and would put Content back
+   * under the Users entry of the sidebar. The runner guards its own answers; this guards the
+   * configuration they are planned from.
+   */
   private async loadConfig(id: string): Promise<void> {
     this.configError.set(null);
     this.values.set(new Map());
     this.labels.set(new Map());
+    const left = () => this.dashboardId() !== id;
 
     try {
       const config = await this.configs.load(id);
+      if (left()) {
+        return;
+      }
       this.config.set(config);
       this.overridden.set(this.configs.isOverridden(id));
       this.filters.set(this.restoreFilters(id, config));
       await this.runCurrent();
+      if (left()) {
+        return;
+      }
       /*
        * A persisted selection is restored before anything is displayed, so the filter bar would
        * name it by its raw value until the reader happened to open the dialog. Only constrained
@@ -429,6 +444,9 @@ export class DashboardSession {
           .map((group) => this.loadGroupValues(group)),
       );
     } catch (error) {
+      if (left()) {
+        return;
+      }
       this.config.set(null);
       this.configError.set(error instanceof Error ? error.message : String(error));
     }

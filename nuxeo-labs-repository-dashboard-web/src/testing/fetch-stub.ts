@@ -16,6 +16,11 @@ export interface StubRoute {
   /** Raw body, used to simulate a login redirect returning HTML. */
   text?: string;
   contentType?: string;
+  /**
+   * Holds the answer until this settles, so a test can make requests answer out of order: the
+   * application never awaits one run before starting the next.
+   */
+  wait?: Promise<unknown>;
 }
 
 export interface FetchStub {
@@ -47,6 +52,9 @@ export function installFetchStub(routes: StubRoute[]): FetchStub {
     );
     if (!route) {
       return new Response('not found', { status: 404 });
+    }
+    if (route.wait) {
+      await route.wait;
     }
 
     const contentType = route.contentType ?? (route.text ? 'text/html' : 'application/json');

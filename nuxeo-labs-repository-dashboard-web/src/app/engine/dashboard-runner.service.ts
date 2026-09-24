@@ -43,6 +43,12 @@ function emptyState(): RunnerState {
  * Reloading is explicit rather than reactive. An `effect` watching the filter state would fire on
  * every intermediate signal write and is easy to turn into a loop; an explicit `run()` keeps the
  * number of round trips obvious.
+ *
+ * Runs are not awaited by whoever starts them, so two may be in flight: "All time" chosen, then
+ * "Last 7 days" before it has answered, or Content left for Users while its search runs on. Only
+ * the latest run may write what the page shows. Without that, a slow answer arriving last would
+ * put forty seconds' worth of "All time" under the "Last 7 days" button, or Content's figures on
+ * the Users page, whose widgets then find nothing under their own names.
  */
 @Injectable()
 export class DashboardRunner {
@@ -52,6 +58,15 @@ export class DashboardRunner {
   private readonly state = signal<RunnerState>(emptyState());
   private readonly loadingState = signal(false);
   private readonly errorState = signal<string | null>(null);
+
+  /**
+   * Which run is the latest. Each checks it after every wait and gives up once another has started.
+   *
+   * The requests of a run given up are not cancelled: aborting the `fetch` would free the browser,
+   * but the passthrough holds its thread until OpenSearch answers whatever the browser does, so
+   * the server would work just as long.
+   */
+  private generation = 0;
 
   readonly loading = this.loadingState.asReadonly();
   readonly error = this.errorState.asReadonly();
@@ -74,6 +89,8 @@ export class DashboardRunner {
     filters: FilterState,
     horizons: IndexHorizons = {},
   ): Promise<void> {
+    const generation = ++this.generation;
+    const superseded = () => generation !== this.generation;
     this.loadingState.set(true);
     this.errorState.set(null);
 
@@ -94,6 +111,9 @@ export class DashboardRunner {
           response: await this.http.search(request.index, request.body),
         })),
       );
+      if (superseded()) {
+        return;
+      }
 
       const data = new Map<string, WidgetData>();
       let took: number | null = null;
@@ -103,6 +123,9 @@ export class DashboardRunner {
       }
 
       const { bucketLabels, columnLabels } = await this.resolveLabels(config, data);
+      if (superseded()) {
+        return;
+      }
 
       this.state.set({
         data,
@@ -113,10 +136,16 @@ export class DashboardRunner {
         took,
       });
     } catch (error) {
+      if (superseded()) {
+        return;
+      }
       this.errorState.set(describe(error));
       this.state.set({ ...emptyState(), widgetErrors: plan.errors });
     } finally {
-      this.loadingState.set(false);
+      // Only the latest run says the page has stopped loading: the others finishing says nothing.
+      if (!superseded()) {
+        this.loadingState.set(false);
+      }
     }
   }
 
