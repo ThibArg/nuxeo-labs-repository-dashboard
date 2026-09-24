@@ -119,6 +119,11 @@ export function topNChart(options: {
   labels?: LabelStrategy;
   hint?: string;
   format?: ValueFormat;
+  /**
+   * `map` for a field holding about as many values as documents — an identifier, a digest — read
+   * under a filter selecting a small share of them. Anywhere else the default is cheaper.
+   */
+  executionHint?: 'map';
 }): WidgetBody {
   const filter = compilePredicates(options.of);
   return {
@@ -133,6 +138,7 @@ export function topNChart(options: {
         field: options.field,
         size: options.size,
         ...(options.order ? { order: options.order } : {}),
+        ...(options.executionHint ? { execution_hint: options.executionHint } : {}),
       },
     },
   };

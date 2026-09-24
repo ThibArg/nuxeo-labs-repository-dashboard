@@ -70,6 +70,9 @@ export const topDownloaders = defineWidget({
  * `docUUID` is what the audit holds, so the keys are resolved one by one against the repository.
  * A document deleted since it was downloaded resolves to nothing and keeps its uuid, which is the
  * honest answer: the event happened, and what it happened to is gone.
+ *
+ * It is also the one field ranked here that holds a value per document ever touched, while the
+ * period selects a few days of downloads among them — which is what `map` is for.
  */
 export const topDownloadedDocuments = defineWidget({
   id: 'top-downloaded-documents',
@@ -84,6 +87,7 @@ export const topDownloadedDocuments = defineWidget({
       size: params.size,
       chart: params.chart,
       labels: 'document',
+      executionHint: 'map',
       hint: 'A document deleted since keeps its identifier',
     }),
 });

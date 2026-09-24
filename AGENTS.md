@@ -24,7 +24,7 @@ for Angular 22:
 ```bash
 cd nuxeo-labs-repository-dashboard-web
 export PATH="$PWD/node:$PATH"
-npm test -- --watch=false                                                 # 51 files, 965 tests
+npm test -- --watch=false                                                 # 51 files, 968 tests
 npm test -- --watch=false --include src/app/engine/agg-compiler.spec.ts   # one file
 npm test -- --watch=false --filter 'never emits a .keyword'               # one behaviour
 npm run build     # this IS the typecheck: strict, noUnusedLocals, strictTemplates
@@ -176,6 +176,9 @@ made to render hints, and a broken `LabelStrategy` passed until it rendered buck
 - **`AggConfig` stays a closed union and `agg-compiler.ts` stays its only compiler.** No raw DSL
   reaches the passthrough, which would forward an administrator's `script` verbatim.
   `facet-values.service.ts` once built its own JSON and escaped every guarantee; it no longer does.
+  It has been widened twice, each time by one value the compiler checks: `calendar_interval:
+  "auto"`, which may compile to an `auto_date_histogram`, and `execution_hint: "map"` on `terms`,
+  any other hint refused. A spec holds the second to `docUUID`, where it belongs.
 - **Every `EsClause` is rebuilt by `clause-compiler.ts`, never relayed.** Rebuilding is the
   guarantee: a key nobody thought to refuse cannot ride along beside one that was accepted. Five
   entries: `baseFilter`, the result of `scopeClauses`, `widget.filter`, `secondary.filter`, and the
@@ -265,9 +268,13 @@ failed on every dashboard carrying a trend and one from 1899 on Workflows alone,
 padded to 2 × 46,289 buckets while one chart of 46,289 answered; the passthrough reported each as a
 Nuxeo 500 wrapping the OpenSearch `ResponseException`. With `auto`, all of them answered. Auto
 buckets wider than a day never occurred on that data, so the shortening of month and year keys in
-`result-mapper.ts` is exercised by specs only. Three assertions ever failed, the drifting `now`
-being the third, and all were the harness's fault, so a red live check is not proof that the
-application is wrong.
+`result-mapper.ts` is exercised by specs only. `execution_hint: "map"` on the most downloaded
+documents is honoured, not merely accepted: with `profile: true` every shard reports
+`MapStringTermsAggregator` where it reported `GlobalOrdinalsStringTermsAggregator` (or its
+`.LowCardinality` variant), over identical aggregations. At the sandbox's 69 downloads it is no
+faster; the gain is for an audit naming far more documents than a period downloads. Three assertions
+ever failed, the drifting `now` being the third, and all were the harness's fault, so a red live
+check is not proof that the application is wrong.
 
 **The sandbox's audit indices are partly fabricated and prove nothing about the platform.** In
 `audit`, login events were generated and `principalName` / `eventDate` copied from target
@@ -417,6 +424,7 @@ Do not undo these without knowing what they were for.
 | Not `min_doc_count: 1` on a trend | It bounds the bucket count just as well, but the x axis lists buckets rather than scaling time: empty years vanish and an 1899 bar sits beside 2024. The retention horizon keeps it, where a month with no expiry is a gap, not information |
 | Content opens on the last twelve months, Governance on All time | Content on All time is the one full scan of the repository index the planner cannot narrow, its Total tile reading `hits.total`. Governance describes what holds today, and a window on `dc:created` would hide a record written three years ago and still under retention |
 | The period is stated on every widget it constrains, not in hints | A hint names it only where a definition thought to, and a tile below the fold or pasted into a slide loses the picker; on Content, Total counts a year of the repository. `<nxd-widget>` decides once, through `dateFieldFor`, so a widget the period does not touch says nothing rather than something false |
+| `execution_hint: "map"` on `docUUID`, and nowhere else | The default builds global ordinals over every value the shard holds, whatever the period selects: on `docUUID`, every document the audit ever named, rebuilt after each refresh. `map` hashes only what is collected, which is cheaper there and dearer on a field of a few thousand values |
 | No implicit exclusion of technical documents | An explicit user decision: the type filter is the tool, and it is persisted |
 | No Nuxeo JS client | CommonJS, not tree-shakable; it would pull batch upload, directories and OAuth2 for three call shapes |
 | A page names its missing prerequisite instead of being greyed out | A disabled menu entry cannot tell the reader which package to install |
@@ -469,7 +477,7 @@ Seven screens, six composed dashboards. 69 definitions over five builders — `c
 `live-documents` serves both Content and Governance, the only sharing so far. Governance carries 17
 definitions split four ways, five of which sit on no page, describing configuration rather than
 content. Exactly one widget still reads `hits.total`: Content's `total-documents`, which constrains
-nothing and is meant to — and which is why Content alone keeps its query unnarrowed. 965 tests over
+nothing and is meant to — and which is why Content alone keeps its query unnarrowed. 968 tests over
 51 files, build green.
 
 Downloads is the newest screen and the worked example `CUSTOMISING.md` is written from: seven

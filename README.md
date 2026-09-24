@@ -928,14 +928,22 @@ two things, and a purge only acts on the second:
 - **the volume of a day.** A screen goes through the events it reads only, but thirty days of them
   is thirty days however often the audit is purged, so a busy installation may still have tens of
   millions of entries to go through on the default period;
-- **what the index has held since the last purge.** That bounds "All time" and the longer periods,
-  and also the number of distinct values some widgets rank: the most downloaded documents rank
-  `docUUID`, which takes as many values as documents touched since the purge. An audit purged every
-  month keeps that affordable; one purged every year may not.
+- **what the index has held since the last purge.** That bounds "All time" and the longer periods.
+
+One ranking would depend on that history rather than on the period, and is kept from doing so. The
+most downloaded documents rank `docUUID`, which takes a value per document the audit ever named.
+Ranked the default way, a keyword goes through *global ordinals*: a table of every value the shard
+holds, built whatever the period selects and rebuilt after a refresh that changed the shard — years
+of documents to name the ten of a week. That widget asks for `execution_hint: "map"` instead, which
+hashes the values of the downloads actually collected, so its cost follows the period like every
+other widget's. Measured on the test instance, the profile reports `MapStringTermsAggregator` where
+it reported `GlobalOrdinalsStringTermsAggregator`, over the very same ranking. No other shipped
+widget asks for it, and a spec holds it to `docUUID`: on a field of a few thousand values, such as
+`principalName`, the table is small and the default the cheaper of the two.
 
 How the audit is purged matters as much as how often. An index recreated after a snapshot is small
 at once. Entries removed with `delete_by_query` stay in their segments until OpenSearch merges
-them, and their values still weigh on a ranking like the one above until then.
+them, so the index shrinks later than its count does.
 
 A purged audit also means the audit screens describe only what happened since the purge, which
 they do not yet say on screen: "All time" there means "since the last purge".

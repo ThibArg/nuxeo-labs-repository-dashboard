@@ -42,7 +42,19 @@ export interface DateRangeBucket {
 }
 
 export type AggConfig =
-  | { terms: { field: string; size?: number; order?: TermsOrder; missing?: string } }
+  | {
+      terms: {
+        field: string;
+        size?: number;
+        order?: TermsOrder;
+        missing?: string;
+        /**
+         * `map` ranks the values of the documents collected instead of the whole shard's. See
+         * `compileAgg`; no other hint is accepted.
+         */
+        execution_hint?: 'map';
+      };
+    }
   | {
       date_histogram: {
         field: string;

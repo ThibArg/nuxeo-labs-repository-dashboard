@@ -308,7 +308,7 @@ export function compileAgg(
     compiledMetric ? { ...body, aggs: { [METRIC_AGG]: compiledMetric } } : body;
 
   if ('terms' in agg) {
-    const { field, size, order, missing } = agg.terms;
+    const { field, size, order, missing, execution_hint } = agg.terms;
     const terms: EsClause = { field: assertAggregatableField(field) };
     if (size !== undefined) {
       terms['size'] = size;
@@ -320,6 +320,23 @@ export function compileAgg(
     }
     if (missing !== undefined) {
       terms['missing'] = missing;
+    }
+    /*
+     * A `terms` on a keyword defaults to global ordinals: a table of every value the shard holds,
+     * built whatever the filter selects and rebuilt after any refresh that touched the shard. On
+     * `docUUID` that is every document the audit ever named, so the most downloaded documents of a
+     * week cost a table of years. `map` hashes the values of the documents actually collected
+     * instead, which is cheaper exactly when those are few beside the values the field holds.
+     * Only `map` is accepted: the other hint, `global_ordinals`, is what a keyword gets anyway, and
+     * a closed set that lists only what is needed is the point.
+     */
+    if (execution_hint !== undefined) {
+      if (execution_hint !== 'map') {
+        throw new UnsupportedAggregationError(
+          `execution_hint "${execution_hint}" is not accepted on "${field}"; only "map" is`,
+        );
+      }
+      terms['execution_hint'] = 'map';
     }
     return withMetric({ terms });
   }

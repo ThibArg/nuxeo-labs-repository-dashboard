@@ -293,6 +293,21 @@ describe('the queries the shipped dashboards send', () => {
     });
   });
 
+  /*
+   * `docUUID` holds a value per document the audit ever named, and a week of downloads touches a
+   * few of them: ranked by the default, the shard builds a table of every one first. `map` belongs
+   * there and nowhere the default is cheaper, so it is asserted in both directions.
+   */
+  it('rank the most downloaded documents without a table of every document ever named', () => {
+    const hinted = SHIPPED.flatMap(([, , config]) => nodesByRequest(config, BOUNDED).flat())
+      .map((node) => node['terms'])
+      .filter((terms) => terms?.['execution_hint']);
+
+    expect(hinted.map((terms) => [terms['field'], terms['execution_hint']])).toEqual([
+      ['docUUID', 'map'],
+    ]);
+  });
+
   /** The Total tile reads `hits.total`, so on Content the query is a figure in its own right. */
   it('leave Content on the shared filters alone', () => {
     const content = shipped('content.json');

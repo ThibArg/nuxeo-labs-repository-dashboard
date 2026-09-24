@@ -72,6 +72,24 @@ describe('agg-compiler', () => {
       expect(terms.shard_size).toBeGreaterThan(terms.size * 1.5 + 10);
     });
 
+    /*
+     * The default on a keyword builds global ordinals over every value the shard holds, whatever
+     * the filter selects: on `docUUID`, every document the audit ever named.
+     */
+    it('ranks the collected values rather than the whole shard\u2019s when asked to', () => {
+      expect(compileAgg({ terms: { field: 'docUUID', size: 10, execution_hint: 'map' } })).toEqual({
+        terms: { field: 'docUUID', size: 10, shard_size: shardSizeFor(10), execution_hint: 'map' },
+      });
+    });
+
+    it('refuses any hint but map, the other one being the default already', () => {
+      const other = {
+        terms: { field: 'docUUID', execution_hint: 'global_ordinals' },
+      } as unknown as AggConfig;
+
+      expect(() => compileAgg(other)).toThrow(/only "map"/);
+    });
+
     it('leaves the shard size out when no size was asked for', () => {
       expect(compileAgg({ terms: { field: 'a' } })).toEqual({ terms: { field: 'a' } });
     });
