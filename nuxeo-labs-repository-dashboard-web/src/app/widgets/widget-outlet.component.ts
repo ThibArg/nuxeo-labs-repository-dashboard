@@ -25,11 +25,18 @@ import { RankedListComponent } from './ranked-list.component';
   host: { class: 'block h-full' },
   template: `
     @if (asKpi(); as kpi) {
-      <nxd-kpi-card [config]="kpi" [data]="data()" [loading]="loading()" [error]="error()" />
+      <nxd-kpi-card
+        [config]="kpi"
+        [data]="data()"
+        [period]="period()"
+        [loading]="loading()"
+        [error]="error()"
+      />
     } @else if (asRankedList(); as ranked) {
       <nxd-ranked-list
         [config]="ranked"
         [data]="data()"
+        [period]="period()"
         [labels]="bucketLabels()"
         [loading]="loading()"
         [error]="error()"
@@ -40,6 +47,7 @@ import { RankedListComponent } from './ranked-list.component';
         [config]="chart"
         [widgetId]="widgetId()"
         [data]="data()"
+        [period]="period()"
         [labels]="bucketLabels()"
         [loading]="loading()"
         [error]="error()"
@@ -49,6 +57,7 @@ import { RankedListComponent } from './ranked-list.component';
       <nxd-data-table
         [config]="table"
         [data]="data()"
+        [period]="period()"
         [labels]="columnLabels()"
         [loading]="loading()"
         [error]="error()"
@@ -69,6 +78,9 @@ export class WidgetOutletComponent {
 
   /** Label of the active date range, interpolated into a `{range}` placeholder in the hint. */
   readonly rangeLabel = input('');
+
+  /** Period the figures obey, shown on the card; null when the page's period does not bind it. */
+  readonly period = input<string | null>(null);
 
   /** Bucket key to label, for chart and ranked list widgets. */
   readonly bucketLabels = input<Map<string, string>>(new Map());

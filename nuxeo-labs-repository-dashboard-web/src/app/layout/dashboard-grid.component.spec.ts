@@ -116,6 +116,47 @@ describe('DashboardGridComponent', () => {
     });
   });
 
+  describe('the period each widget states', () => {
+    const DATED = { filters: [{ type: 'dateRange' as const, field: 'dc:created' }] };
+
+    function periods(fixture: { nativeElement: unknown }): Record<string, string> {
+      const cells = [...(fixture.nativeElement as HTMLElement).querySelectorAll('nxd-widget')];
+      return Object.fromEntries(
+        cells.map((cell) => [
+          cell.getAttribute('data-widget-id'),
+          cell.querySelector('[data-testid="chart-period"]')?.textContent?.trim() ?? '',
+        ]),
+      );
+    }
+
+    it('states the period on every widget it constrains, and follows it', () => {
+      expect(periods(mount(config(DATED), ALL))).toEqual({
+        created: 'All time',
+        modified: 'All time',
+      });
+      TestBed.resetTestingModule();
+      expect(periods(mount(config(DATED), LAST_30))).toEqual({
+        created: 'Last 30 days',
+        modified: 'Last 30 days',
+      });
+    });
+
+    it('states none on a page that has no period', () => {
+      expect(periods(mount(config(), LAST_30))).toEqual({ created: '', modified: '' });
+    });
+
+    /** A period over a figure it never touched would mislead as much as silence over one it did. */
+    it('states none on the half of a mixed page the period leaves alone', () => {
+      const base = config();
+      const mixed = config({
+        filters: [{ type: 'dateRange', field: 'dc:created', byIndex: { audit: '' } }],
+        widgets: { ...base.widgets, modified: { ...base.widgets['modified'], index: 'audit' } },
+      });
+
+      expect(periods(mount(mixed, LAST_30))).toEqual({ created: 'Last 30 days', modified: '' });
+    });
+  });
+
   describe('range reminder', () => {
     it('interpolates the active range into the hint', () => {
       const content = (mount(config(), ALL).nativeElement as HTMLElement).textContent ?? '';

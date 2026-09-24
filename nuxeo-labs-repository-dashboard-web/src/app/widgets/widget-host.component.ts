@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { PeriodLabelComponent } from './period-label.component';
 
 /**
  * Card frame shared by every non KPI widget: title, optional badge, and the four display states
@@ -6,6 +7,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
  */
 @Component({
   selector: 'nxd-widget-host',
+  imports: [PeriodLabelComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block h-full' },
   template: `
@@ -15,6 +17,9 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
           <h2 class="nxd-card-title truncate">{{ label() }}</h2>
           @if (hint(); as text) {
             <p class="mt-1 truncate text-xs text-ink-subtle">{{ text }}</p>
+          }
+          @if (period(); as text) {
+            <p class="mt-1 text-xs text-ink-subtle"><nxd-period [text]="text" /></p>
           }
         </div>
         <div class="flex shrink-0 items-center gap-2">
@@ -106,6 +111,8 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 export class WidgetHostComponent {
   readonly label = input.required<string>();
   readonly hint = input<string | null>(null);
+  /** Period the figures obey, or null when the page's period does not constrain them. */
+  readonly period = input<string | null>(null);
   readonly badge = input<string | null>(null);
   readonly loading = input(false);
   readonly error = input<string | null>(null);

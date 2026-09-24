@@ -25,6 +25,7 @@ interface RenderedRow {
     <nxd-widget-host
       [label]="config().label"
       [hint]="config().hint ?? null"
+      [period]="period()"
       [badge]="badge()"
       [loading]="loading()"
       [error]="error()"
@@ -74,6 +75,8 @@ export class DataTableComponent {
   private readonly http = inject(NuxeoHttpService);
 
   readonly config = input.required<TableWidgetConfig>();
+  /** Period the figures obey, or null when the page's period does not constrain them. */
+  readonly period = input<string | null>(null);
   readonly data = input<WidgetData | undefined>(undefined);
   readonly labels = input<Map<string, Map<string, string>>>(new Map());
   readonly loading = input(false);

@@ -390,7 +390,20 @@ describe('DashboardPageComponent', () => {
     expect(searches).toHaveLength(1);
   });
 
-  it('reminds the reader which range the trends cover, and how wide their bars are', async () => {
+  /** The period each widget states: its own line on a card, the stub's span on a chart. */
+  function periods(fixture: ComponentFixture<DashboardPageComponent>): string[] {
+    const root = fixture.nativeElement as HTMLElement;
+    return [
+      ...root.querySelectorAll('[data-testid="widget-period"], [data-testid="chart-period"]'),
+    ].map((node) => (node.textContent ?? '').replace('Period:', '').trim());
+  }
+
+  /*
+   * A tile read on its own says nothing of the picker above it, and on Content the Total tile now
+   * counts what the last twelve months created, not the repository. So every widget the period
+   * constrains says which, and follows it.
+   */
+  it('states the period on every widget, and how wide the trend bars are', async () => {
     stub = installFetchStub([
       {
         match: '/site/es/nuxeo/_search',
@@ -405,10 +418,10 @@ describe('DashboardPageComponent', () => {
 
     // Content opens on the last twelve months, drawn by the week; OpenSearch chose seven days.
     let text = (fixture.nativeElement as HTMLElement).textContent ?? '';
-    expect(text).toContain('Number of documents created per week (Last 12 months)');
-    expect(text).toContain(
-      'Number of documents modified per 7 days (Based on Last 12 months creation)',
-    );
+    expect(text).toContain('Number of documents created per week');
+    expect(text).toContain('Number of documents modified per 7 days, among those created in the');
+    expect(periods(fixture)).toHaveLength(layoutCells(CONTENT.layout).length);
+    expect(new Set(periods(fixture))).toEqual(new Set(['Last 12 months']));
 
     const last30 = Array.from(
       (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>(
@@ -419,8 +432,8 @@ describe('DashboardPageComponent', () => {
     await settle(fixture);
 
     text = (fixture.nativeElement as HTMLElement).textContent ?? '';
-    expect(text).toContain('Number of documents created per day (Last 30 days)');
-    expect(text).toContain('(Based on Last 30 days creation)');
+    expect(text).toContain('Number of documents created per day');
+    expect(new Set(periods(fixture))).toEqual(new Set(['Last 30 days']));
   });
 
   it('surfaces a failing search instead of rendering zeros', async () => {

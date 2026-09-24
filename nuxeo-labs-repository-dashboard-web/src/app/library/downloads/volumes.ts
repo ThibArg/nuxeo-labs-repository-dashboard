@@ -44,7 +44,7 @@ export const downloads = defineWidget({
     countTile({
       of: FILE_DOWNLOADS,
       severity: params.severity,
-      hint: 'Files saved by a reader ({range})',
+      hint: 'Files saved by a reader',
     }),
 });
 
@@ -100,6 +100,6 @@ export const downloadsPerDay = defineWidget({
       field: 'eventDate',
       interval: params.interval,
       chart: params.chart,
-      hint: 'Files saved per {interval}, renditions excluded ({range})',
+      hint: 'Files saved per {interval}, renditions excluded',
     }),
 });

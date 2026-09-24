@@ -34,7 +34,7 @@ export const workflowsStarted = defineWidget({
     countTile({
       of: STARTED,
       severity: params.severity,
-      hint: 'Instances started ({range}), not instances running now',
+      hint: 'Instances started in the period, not instances running now',
     }),
 });
 

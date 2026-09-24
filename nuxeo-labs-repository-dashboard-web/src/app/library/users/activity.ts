@@ -66,7 +66,7 @@ export const distinctUsersPerDay = defineWidget({
       interval: params.interval,
       chart: params.chart,
       metric: { cardinality: 'principalName' },
-      hint: 'Distinct users with a successful login, per {interval} ({range})',
+      hint: 'Distinct users with a successful login, per {interval}',
     }),
 });
 

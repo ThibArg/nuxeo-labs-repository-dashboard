@@ -24,7 +24,7 @@ for Angular 22:
 ```bash
 cd nuxeo-labs-repository-dashboard-web
 export PATH="$PWD/node:$PATH"
-npm test -- --watch=false                                                 # 51 files, 961 tests
+npm test -- --watch=false                                                 # 51 files, 965 tests
 npm test -- --watch=false --include src/app/engine/agg-compiler.spec.ts   # one file
 npm test -- --watch=false --filter 'never emits a .keyword'               # one behaviour
 npm run build     # this IS the typecheck: strict, noUnusedLocals, strictTemplates
@@ -66,7 +66,7 @@ occurrences in `src/`**, verified.
 | `template:` inline, styles in `src/styles.css` | `templateUrl`, `styleUrl` |
 | a function from `core/format.ts` | a pipe |
 | `(input)`, `(change)`, native `<dialog>` | `ngModel`, `FormsModule` |
-| `ChangeDetectionStrategy.OnPush` | the default — 29 of the 30 components; the odd one is a test host in a spec |
+| `ChangeDetectionStrategy.OnPush` | the default — 30 of the 31 components; the odd one is a test host in a spec |
 
 `rxjs` sits in `package.json` only because `@angular/core`, `common` and `router` declare it a peer
 dependency; it is imported nowhere, and removing it breaks the install rather than shrinking
@@ -138,8 +138,8 @@ Helpers live in `src/testing/`; use them rather than inventing equivalents.
   uses plain `fetch`, so `whenStable()` alone knows nothing of those promises.
 - **`ChartWidgetStubComponent`**, installed with `TestBed.overrideComponent(WidgetOutletComponent, …)`,
   replaces the real chart: ECharts paints on a canvas jsdom does not provide. It renders the label,
-  the hint **and** the resolved bucket labels, so all three stay observable. `buildChartOption`
-  being pure, option building is tested directly.
+  the hint, the period **and** the resolved bucket labels, so all four stay observable.
+  `buildChartOption` being pure, option building is tested directly.
 - **`stubSession()`** hands a component a `DashboardSession` standing still, which is what lets the
   grid and any bespoke layout be tested for what they do — placing widgets — without eight injected
   services. **`captureDownloads()`** intercepts what an export hands the browser.
@@ -416,6 +416,7 @@ Do not undo these without knowing what they were for.
 | A trend's width follows the period, and OpenSearch picks it where the span is unknown | A fixed daily width is 46,000 buckets from one document dated 1899, and the ceiling is per response. `auto` is the one widening of `AggConfig` this took, and `auto_date_histogram` the one new aggregation reaching the passthrough |
 | Not `min_doc_count: 1` on a trend | It bounds the bucket count just as well, but the x axis lists buckets rather than scaling time: empty years vanish and an 1899 bar sits beside 2024. The retention horizon keeps it, where a month with no expiry is a gap, not information |
 | Content opens on the last twelve months, Governance on All time | Content on All time is the one full scan of the repository index the planner cannot narrow, its Total tile reading `hits.total`. Governance describes what holds today, and a window on `dc:created` would hide a record written three years ago and still under retention |
+| The period is stated on every widget it constrains, not in hints | A hint names it only where a definition thought to, and a tile below the fold or pasted into a slide loses the picker; on Content, Total counts a year of the repository. `<nxd-widget>` decides once, through `dateFieldFor`, so a widget the period does not touch says nothing rather than something false |
 | No implicit exclusion of technical documents | An explicit user decision: the type filter is the tool, and it is persisted |
 | No Nuxeo JS client | CommonJS, not tree-shakable; it would pull batch upload, directories and OAuth2 for three call shapes |
 | A page names its missing prerequisite instead of being greyed out | A disabled menu entry cannot tell the reader which package to install |
@@ -468,7 +469,7 @@ Seven screens, six composed dashboards. 69 definitions over five builders — `c
 `live-documents` serves both Content and Governance, the only sharing so far. Governance carries 17
 definitions split four ways, five of which sit on no page, describing configuration rather than
 content. Exactly one widget still reads `hits.total`: Content's `total-documents`, which constrains
-nothing and is meant to — and which is why Content alone keeps its query unnarrowed. 961 tests over
+nothing and is meant to — and which is why Content alone keeps its query unnarrowed. 965 tests over
 51 files, build green.
 
 Downloads is the newest screen and the worked example `CUSTOMISING.md` is written from: seven

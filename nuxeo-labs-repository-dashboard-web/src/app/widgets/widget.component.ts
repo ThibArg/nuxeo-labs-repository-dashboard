@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { DashboardSession } from '../engine/dashboard-session.service';
 import { resolveSpan } from '../config/dashboard-config.model';
+import { dateFieldFor } from '../engine/query-planner';
 import { WidgetOutletComponent } from './widget-outlet.component';
 
 /**
@@ -31,6 +32,7 @@ import { WidgetOutletComponent } from './widget-outlet.component';
         [loading]="session.runner.loading()"
         [error]="error()"
         [rangeLabel]="session.filters().range.label"
+        [period]="period()"
         [bucketLabels]="session.runner.bucketLabels().get(for()) ?? emptyBucketLabels"
         [columnLabels]="session.runner.columnLabels().get(for()) ?? emptyColumnLabels"
         (picked)="session.pickBucket($event, for())"
@@ -57,6 +59,21 @@ export class WidgetComponent {
   protected readonly emptyColumnLabels = new Map<string, Map<string, string>>();
 
   protected readonly widget = computed(() => this.session.config()?.widgets[this.for()] ?? null);
+
+  /**
+   * The period this widget's figures obey, or null when the page's period does not constrain the
+   * index it reads — Tasks declares none, and on a page mixing two indices a `byIndex` of `""`
+   * leaves one half unfiltered. Saying "Last 12 months" over a figure no period touched would be
+   * the same lie as leaving it unsaid over one that it did.
+   */
+  protected readonly period = computed(() => {
+    const config = this.session.config();
+    const widget = this.widget();
+    if (!config || !widget || !dateFieldFor(config, widget.index ?? config.index)) {
+      return null;
+    }
+    return this.session.filters().range.label;
+  });
 
   /** Width in the twelve column grid, for a caller laying widgets out with `.nxd-grid`. */
   readonly span = computed(() => {

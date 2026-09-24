@@ -34,6 +34,7 @@ interface RankedEntry {
     <nxd-widget-host
       [label]="config().label"
       [hint]="config().hint ?? null"
+      [period]="period()"
       [loading]="loading()"
       [error]="error()"
       [empty]="empty()"
@@ -74,6 +75,8 @@ interface RankedEntry {
 })
 export class RankedListComponent {
   readonly config = input.required<ChartWidgetConfig>();
+  /** Period the figures obey, or null when the page's period does not constrain them. */
+  readonly period = input<string | null>(null);
   readonly data = input<WidgetData | undefined>(undefined);
 
   protected readonly footer = computed(() => truncationFooter(this.data()));

@@ -34,7 +34,7 @@ export const documentsCreated = defineWidget({
       field: 'dc:created',
       interval: params.interval,
       chart: params.chart,
-      hint: 'Number of documents created per {interval} ({range})',
+      hint: 'Number of documents created per {interval}',
     }),
 });
 
@@ -58,6 +58,6 @@ export const documentsModified = defineWidget({
       field: 'dc:modified',
       interval: params.interval,
       chart: params.chart,
-      hint: 'Number of documents modified per {interval} (Based on {range} creation)',
+      hint: 'Number of documents modified per {interval}, among those created in the period',
     }),
 });

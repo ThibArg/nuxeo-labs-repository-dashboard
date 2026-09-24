@@ -33,6 +33,8 @@ import { ChartSnapshotRegistry } from '../app/widgets/chart-snapshot.registry';
       <span>{{ config().label }}</span>
       <!-- Rendered so that hint interpolation stays observable through the stub. -->
       <span data-testid="chart-hint">{{ config().hint }}</span>
+      <!-- The real chart hands the period to WidgetHostComponent; rendered here to stay observable. -->
+      <span data-testid="chart-period">{{ period() }}</span>
       <!--
         The real chart hands its error to WidgetHostComponent, which this stub does not use. Without
         it, which of the two errors reached a widget — its own or the dashboard's — could not be
@@ -71,6 +73,7 @@ export class ChartWidgetStubComponent {
   private readonly snapshots = inject(ChartSnapshotRegistry);
 
   readonly config = input.required<ChartWidgetConfig>();
+  readonly period = input<string | null>(null);
   readonly widgetId = input('');
   readonly data = input<WidgetData | undefined>(undefined);
   readonly labels = input<Map<string, string>>(new Map());

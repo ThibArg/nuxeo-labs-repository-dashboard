@@ -52,7 +52,7 @@ export const workflowsStartedPerDay = defineWidget({
       field: 'eventDate',
       interval: params.interval,
       chart: params.chart,
-      hint: 'Instances started per {interval} ({range})',
+      hint: 'Instances started per {interval}',
     }),
 });
 
@@ -68,7 +68,7 @@ export const workflowsCompletedPerDay = defineWidget({
       field: 'eventDate',
       interval: params.interval,
       chart: params.chart,
-      hint: 'Instances finished per {interval} ({range})',
+      hint: 'Instances finished per {interval}',
     }),
 });
 

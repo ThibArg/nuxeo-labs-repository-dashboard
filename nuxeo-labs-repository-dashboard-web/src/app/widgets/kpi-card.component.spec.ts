@@ -21,6 +21,22 @@ const PROXIES: KpiWidgetConfig = {
 };
 
 describe('KpiCardComponent', () => {
+  it('states the period its figure obeys, and none when no period binds it', () => {
+    const fixture = TestBed.createComponent(KpiCardComponent);
+    fixture.componentRef.setInput('config', { type: 'kpi', label: 'Total' });
+    fixture.componentRef.setInput('data', { kind: 'scalar', value: 3949 });
+    fixture.componentRef.setInput('period', 'Last 12 months');
+    fixture.detectChanges();
+    const period = () =>
+      (fixture.nativeElement as HTMLElement).querySelector('[data-testid="widget-period"]');
+
+    expect(period()?.textContent).toContain('Last 12 months');
+
+    fixture.componentRef.setInput('period', null);
+    fixture.detectChanges();
+    expect(period()).toBeNull();
+  });
+
   it('renders the main figure', () => {
     const text = mount({ type: 'kpi', label: 'Total' }, { kind: 'scalar', value: 1234 });
     expect(text).toContain((1234).toLocaleString());

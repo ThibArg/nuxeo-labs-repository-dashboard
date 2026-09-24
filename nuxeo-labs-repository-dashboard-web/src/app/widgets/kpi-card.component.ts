@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 import { KpiSeverity, KpiWidgetConfig } from '../config/dashboard-config.model';
 import { formatNumber } from '../core/format';
 import { WidgetData } from '../engine/result-mapper';
+import { PeriodLabelComponent } from './period-label.component';
 
 /**
  * Single figure tile.
@@ -11,6 +12,7 @@ import { WidgetData } from '../engine/result-mapper';
  */
 @Component({
   selector: 'nxd-kpi-card',
+  imports: [PeriodLabelComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'block h-full' },
   template: `
@@ -37,6 +39,9 @@ import { WidgetData } from '../engine/result-mapper';
       @if (config().hint; as text) {
         <span class="mt-1 text-xs" [class]="mutedClasses()">{{ text }}</span>
       }
+      @if (period(); as text) {
+        <span class="mt-1 text-xs" [class]="mutedClasses()"><nxd-period [text]="text" /></span>
+      }
     </div>
   `,
 })
@@ -45,6 +50,8 @@ export class KpiCardComponent {
   readonly data = input<WidgetData | undefined>(undefined);
   readonly loading = input(false);
   readonly error = input<string | null>(null);
+  /** Period the figure obeys, or null when the page's period does not constrain it. */
+  readonly period = input<string | null>(null);
 
   private readonly severity = computed<KpiSeverity>(() => this.config().severity ?? 'neutral');
 

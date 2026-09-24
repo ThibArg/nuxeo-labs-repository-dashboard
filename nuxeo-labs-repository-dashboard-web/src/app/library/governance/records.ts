@@ -178,6 +178,6 @@ export const recordsByCreationDate = defineWidget({
       field: 'dc:created',
       interval: params.interval,
       chart: params.chart,
-      hint: 'Documents created per {interval} ({range}) that are records today',
+      hint: 'Documents created per {interval} that are records today',
     }),
 });

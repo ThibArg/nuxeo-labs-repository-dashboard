@@ -485,20 +485,30 @@ period, and takes back the risk above on "All time". `min_doc_count` cannot be w
 
 ### Reminding the reader of the active range
 
-A chart sitting below the fold loses sight of the date range picker, so its hint can carry the
-range itself:
+A widget sitting below the fold loses sight of the date range picker, and a tile pasted into a
+slide loses the page altogether. So every widget the period constrains states it on its card,
+under the title and the hint — "Last 12 months", "All time", or the two days of a typed range — and
+follows it when it changes. On Content that is what tells the Total tile's reader they are looking
+at a year of the repository rather than all of it.
+
+A widget whose index the period does not constrain states nothing: Tasks declares no period, and
+on a page mixing two indices a `byIndex` of `""` leaves one half out of it. A period written over
+a figure it never touched would mislead as much as silence over one it did. The line is drawn by
+`<nxd-widget>`, so a tab, a bespoke layout and the HTML export carry it alike.
+
+A hint can still name the period in its own words, through `{range}`:
 
 ```jsonc
-"createdTrend":  { "hint": "Number of documents created per {interval} ({range})" },
-"modifiedTrend": { "hint": "Number of documents modified per {interval} (Based on {range} creation)" }
+"createdTrend": { "hint": "Created per {interval} ({range})" }
 ```
 
-The second wording is not cosmetic. The global range filters `dc:created`, while that chart
-buckets on `dc:modified`: it shows modifications made to the documents *created* in the window,
-not modifications made during the window.
+The shipped definitions no longer do, the card saying it already. One wording remains worth
+keeping whatever the placeholder: the period filters `dc:created` while "Documents Modified"
+buckets `dc:modified`, so its hint says the chart counts modifications *among the documents created
+in the period*, not modifications made during it.
 
 `{interval}` names the width of the bars — `week`, `7 days`, `3 months` — which follows the period
-(below) and is sometimes only known once OpenSearch has answered, so it is read off the data rather
+(above) and is sometimes only known once OpenSearch has answered, so it is read off the data rather
 than the configuration. Until the first answer arrives it reads "interval".
 
 Interpolation happens once, in `WidgetOutletComponent`, which returns the original configuration
