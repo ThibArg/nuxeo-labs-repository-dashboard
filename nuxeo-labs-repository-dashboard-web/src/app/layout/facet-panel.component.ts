@@ -12,6 +12,7 @@ import { TermsMemberConfig, TermsSelection } from '../config/dashboard-config.mo
 import {
   PrincipalSuggestService,
   SUGGEST_DEBOUNCE_MS,
+  SUGGEST_MAX_RESULTS,
   SUGGEST_MIN_CHARS,
   SuggestedPrincipal,
 } from '../core/principal-suggest.service';
@@ -96,6 +97,12 @@ interface Row {
       }
     </ul>
 
+    @if (tooMany()) {
+      <p class="mt-2 text-xs text-ink-subtle">
+        More than {{ maxResults }} people and groups match "{{ query().trim() }}". Type more of the
+        name to find one.
+      </p>
+    }
     @if (member().note; as note) {
       <p class="mt-2 text-xs text-ink-subtle">{{ note }}</p>
     }
@@ -120,8 +127,10 @@ export class FacetPanelComponent {
   protected readonly query = signal('');
   protected readonly searching = signal(false);
   protected readonly minChars = SUGGEST_MIN_CHARS;
+  protected readonly maxResults = SUGGEST_MAX_RESULTS;
 
   private readonly matches = signal<SuggestedPrincipal[]>([]);
+  protected readonly tooMany = signal(false);
 
   protected readonly isLookup = computed(() => this.member().lookup === 'user');
 
@@ -140,6 +149,7 @@ export class FacetPanelComponent {
       if (term.trim().length < SUGGEST_MIN_CHARS) {
         this.suggest.cancel();
         this.matches.set([]);
+        this.tooMany.set(false);
         this.searching.set(false);
         return;
       }
@@ -147,7 +157,8 @@ export class FacetPanelComponent {
       this.searching.set(true);
       const timer = setTimeout(() => {
         void this.suggest.suggest(term).then((found) => {
-          this.matches.set(found);
+          this.matches.set(found.principals);
+          this.tooMany.set(found.tooMany);
           this.searching.set(false);
         });
       }, SUGGEST_DEBOUNCE_MS);

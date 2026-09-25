@@ -646,7 +646,13 @@ is looking for.
   own picker calls, with the same three character threshold and 300 ms debounce, and an aborted
   request so a fast typist never sees answers arrive out of order. It returns users and groups
   together, composes their label server side, and hands back the prefixed identifier, which is
-  precisely the form `nt:actors` stores.
+  precisely the form `nt:actors` stores. Unlike Web UI's picker it asks for **twenty matches at
+  most** (`userSuggestionMaxSearchResults`): without a limit the operation reads every user the
+  term matches, and a directory need not apply its own `querySizeLimit` — the SQL one ignores it
+  on the query-builder path the operation takes (`SQLSession.doQuery`).
+  Past twenty the operation lists nobody and answers "Please narrow your search.", so the panel
+  asks for more of the name instead. Groups are searched whole either way, the operation limiting
+  only its user search.
 
 The two halves answer different questions and neither replaces the other: only the index knows who
 is busiest, only the directory knows where Kate is. Selected values are pinned to the top of the
@@ -938,6 +944,14 @@ and frees the search threads before the passthrough's socket gives up at 121 s. 
 that way fails its page with "OpenSearch stopped the search … after 90s", rather than with a bare
 500; if some shards had answered in time, the page says how many did not.
 
+Every search on `audit` or `audit_wf` also logs a warning on the Nuxeo side, "Getting AuditBackend
+from Framework.getService is deprecated", with a stack trace in dev mode. It comes from the
+passthrough itself: `AuditRequestFilter` and `RoutingAuditRequestFilter` look the backend up the
+deprecated way, and `AuditComponent` has warned on every such lookup since 2025.16. The plugin
+cannot avoid it short of not reading the audit — two lines at startup, one per audit page load.
+Raising the `org.nuxeo.audit.service.AuditComponent` logger to `ERROR` silences it, along with
+anything else that class would warn about.
+
 The parameter exists since OpenSearch 1.1. An older cluster refuses it with a 400 on every search,
 which would take every screen down, however small the repository, so the preflight's first search
 watches for that refusal. On "contains unrecognized parameter: [cancel_after_time_interval]" the
@@ -1198,8 +1212,16 @@ files that ship, and every clause applies exactly as before.
 Document types and lifecycle states reuse Web UI's own translation bundle, fetched once from
 `/nuxeo/ui/i18n/messages.json`, with the same key conventions and the same fallback as
 `nuxeo-format-behavior.js`: `label.document.type.<lower case type>` and `label.ui.state.<state>`.
-Users are resolved through `/api/v1/user/{id}`, deduplicated and cached. Every lookup degrades to
-the raw value, so a missing translation or a deleted principal never breaks a chart.
+Users are resolved through `/api/v1/user/{id}`, groups through `/api/v1/group/{name}`,
+deduplicated and cached. Every lookup degrades to the raw value, so a missing translation or a
+deleted principal never breaks a chart.
+
+A group's label costs more than it looks on a server with large groups. `GET /api/v1/group/{name}`
+reads the directory entry with its references (`UserManagerImpl.getGroupModel` calls `getEntry`,
+which fetches them), so every member of the group is loaded even though the response, lacking
+`fetch.group=memberUsers`, writes none of them. It happens once per group and per session, the
+answer being cached, but a chart of task assignees naming a group of fifty thousand reads fifty
+thousand member ids to print one label.
 
 Workflow values reach the same bundle by two further strategies. `message` translates a value that
 *is* an i18n key: `extended.taskName` holds `wf.parallelDocumentReview.chooseParticipants.title`,

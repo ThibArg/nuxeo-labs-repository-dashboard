@@ -2,6 +2,8 @@ import { TestBed } from '@angular/core/testing';
 import { TermsMemberConfig, TermsSelection } from '../config/dashboard-config.model';
 import { FacetPanelComponent } from './facet-panel.component';
 import { FacetValue } from '../engine/facet-values.service';
+import { SUGGEST_DEBOUNCE_MS, SUGGEST_MAX_RESULTS } from '../core/principal-suggest.service';
+import { installFetchStub } from '../../testing/fetch-stub';
 
 const MEMBER: TermsMemberConfig = {
   id: 'types',
@@ -240,6 +242,36 @@ describe('FacetPanelComponent under lookup', () => {
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(text).toContain('47 assignees in all');
     expect(text).toContain('Search for the others');
+  });
+
+  /*
+   * Three letters on a large directory match more than the operation will list, and it then lists
+   * nobody. The reader has to be told to type on, and must not be offered the message as a person.
+   */
+  it('asks for more of the name when the directory has too many matches', async () => {
+    const stub = installFetchStub([
+      {
+        match: '/automation/UserGroup.Suggestion',
+        json: [{ displayLabel: 'Please narrow your search.' }],
+      },
+    ]);
+    try {
+      const { fixture } = mountLookup({ mode: 'all' });
+      const box = (fixture.nativeElement as HTMLElement).querySelector('input[type="search"]')!;
+      (box as HTMLInputElement).value = 'adm';
+      box.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+
+      await new Promise((resolve) => setTimeout(resolve, SUGGEST_DEBOUNCE_MS + 50));
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+      expect(text).toContain(`More than ${SUGGEST_MAX_RESULTS} people and groups match "adm"`);
+      expect(labelsOf(fixture)).toEqual(['Josh', 'kate', 'alan']);
+    } finally {
+      stub.restore();
+    }
   });
 
   /*

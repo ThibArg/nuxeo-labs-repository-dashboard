@@ -24,7 +24,7 @@ for Angular 22:
 ```bash
 cd nuxeo-labs-repository-dashboard-web
 export PATH="$PWD/node:$PATH"
-npm test -- --watch=false                                                 # 54 files, 1011 tests
+npm test -- --watch=false                                                 # 54 files, 1014 tests
 npm test -- --watch=false --include src/app/engine/agg-compiler.spec.ts   # one file
 npm test -- --watch=false --filter 'never emits a .keyword'               # one behaviour
 npm run build     # this IS the typecheck: strict, noUnusedLocals, strictTemplates
@@ -397,6 +397,18 @@ against an enforced record; and a document carrying a legal hold *and* a retenti
   `coreQueryPageProvider` with no Elasticsearch override anywhere in the LTS 2025 tree, so this is
   not the indexing lag it looks like: listing a container straight after creating twenty-three
   documents answered six. A script enumerating what it has just written must converge, not read once.
+- **`UserGroup.Suggestion` past its limit lists nobody.** Given `userSuggestionMaxSearchResults`,
+  it answers a single `{ "displayLabel": "Please narrow your search." }` with no `id` and no
+  `prefixed_id` once users, groups or both exceed it — confirmed live with a limit of 1. Mapped as
+  an entry it is a person whose identifier is `user:`, so `principal-suggest.service.ts` drops
+  id-less entries and says `tooMany`. The limit bounds the user search only; groups are searched
+  whole.
+- **`GET /api/v1/group/{name}` loads every member of the group**, whatever the response writes:
+  `getGroupModel` calls `getEntry`, which fetches references. `LabelService` caches the answer per
+  session, but the first label of a very large group is a directory read of all its members.
+- **Every audit search logs a deprecation WARN** from `AuditComponent.getAdapter`, the passthrough's
+  own filters calling `Framework.getService(AuditBackend.class)`; with a stack trace in dev mode.
+  Observed on the sandbox, which the review had marked "not observed". Nothing to fix here.
 - **`Blob.text()` strips a byte order mark** by definition of the UTF-8 decode algorithm, so no
   assertion on an exported CSV's text can see it. The mark is what stops Excel reading UTF-8 as the
   local encoding, so prove it on the bytes.
@@ -529,7 +541,7 @@ Seven screens, six composed dashboards. 69 definitions over five builders — `c
 `live-documents` serves both Content and Governance, the only sharing so far. Governance carries 17
 definitions split four ways, five of which sit on no page, describing configuration rather than
 content. Exactly one widget still reads `hits.total`: Content's `total-documents`, which constrains
-nothing and is meant to — and which is why Content alone keeps its query unnarrowed. 1011 tests
+nothing and is meant to — and which is why Content alone keeps its query unnarrowed. 1014 tests
 over 54 files, build green.
 
 Every page reading the audit says where it starts, measured once by the preflight as the earliest
