@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { formatDay } from '../config/dashboard-config.model';
+import { NuxeoHttpService } from './nuxeo-http.service';
 import { PreflightCheck, PreflightService } from './preflight.service';
 import { FetchStub, healthyServerRoutes, installFetchStub } from '../../testing/fetch-stub';
 
@@ -148,6 +149,84 @@ describe('PreflightService', () => {
     expect(result.auditHorizon).toBeNull();
     expect(result.features.audit).toBe(true);
     expect(find(result.checks, 'index-audit').detail).toContain('holds no event yet');
+  });
+
+  describe('stopping a search that runs too long', () => {
+    /** What the sandbox answered, OpenSearch 1.3.20 behind it, for a parameter it did not know. */
+    const REFUSED = {
+      'entity-type': 'exception',
+      status: 500,
+      message:
+        'org.nuxeo.runtime.RuntimeServiceException: org.opensearch.client.ResponseException: ' +
+        'method [GET], host [http://opensearch:9200], URI [/nuxeo/_search?' +
+        'cancel_after_time_interval=90s], status line [HTTP/1.1 400 Bad Request]\n' +
+        '{"error":{"root_cause":[{"type":"illegal_argument_exception","reason":"request ' +
+        '[/nuxeo/_search] contains unrecognized parameter: [cancel_after_time_interval]"}]}}',
+    };
+
+    function searches(): string[] {
+      return stub.calls.map((call) => call.url).filter((url) => url.includes('/site/es/'));
+    }
+
+    it('asks OpenSearch to stop every search after 90 s', async () => {
+      stub = installFetchStub(healthyServerRoutes());
+
+      const result = await TestBed.inject(PreflightService).run();
+
+      expect(searches().length).toBeGreaterThan(0);
+      expect(searches().every((url) => url.endsWith('?cancel_after_time_interval=90s'))).toBe(true);
+      expect(find(result.checks, 'index-nuxeo').detail).toContain('stops any search after 90s');
+      expect(result.checks.some((check) => check.id === 'search-cancellation')).toBe(false);
+    });
+
+    /*
+     * A cluster older than OpenSearch 1.1 refuses the parameter on every search. Sent regardless,
+     * it would take every screen down on the smallest repository.
+     */
+    it('drops it for the session on a cluster that does not know it, and says so', async () => {
+      stub = installFetchStub(
+        healthyServerRoutes([{ match: 'cancel_after_time_interval', status: 500, json: REFUSED }]),
+      );
+      const preflight = TestBed.inject(PreflightService);
+
+      const result = await preflight.run();
+
+      expect(preflight.isReady()).toBe(true);
+      expect(result.features).toEqual({
+        repository: true,
+        audit: true,
+        workflow: true,
+        retention: true,
+      });
+      expect(find(result.checks, 'search-cancellation').status).toBe('warning');
+      expect(
+        searches()
+          .slice(1)
+          .every((url) => !url.includes('cancel_after')),
+      ).toBe(true);
+      expect(TestBed.inject(NuxeoHttpService).cancelsSearches).toBe(false);
+
+      // Diagnostics runs the checks again; the cluster has not changed its mind.
+      expect(find((await preflight.run()).checks, 'search-cancellation').status).toBe('warning');
+    });
+
+    it('does not take another failure of the repository index for an old cluster', async () => {
+      stub = installFetchStub(
+        healthyServerRoutes([
+          {
+            match: '/site/es/nuxeo/_search',
+            status: 500,
+            json: { message: 'index_not_found_exception: no such index [nuxeo]' },
+          },
+        ]),
+      );
+
+      const result = await TestBed.inject(PreflightService).run();
+
+      expect(find(result.checks, 'index-nuxeo').status).toBe('failed');
+      expect(searches().filter((url) => url.includes('/site/es/nuxeo/'))).toHaveLength(1);
+      expect(TestBed.inject(NuxeoHttpService).cancelsSearches).toBe(true);
+    });
   });
 
   it('treats an HTML login page as an expired session', async () => {

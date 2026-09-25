@@ -1,7 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { formatDay, toLocalDay } from '../config/dashboard-config.model';
 import { compileMetric } from '../engine/agg-compiler';
-import { NuxeoHttpService } from './nuxeo-http.service';
+import { NuxeoHttpError, NuxeoHttpService, SEARCH_CANCEL_AFTER } from './nuxeo-http.service';
 import { NxCapabilities, NxCurrentUser } from './nuxeo.types';
 
 export type CheckStatus = 'pending' | 'ok' | 'warning' | 'failed';
@@ -198,14 +198,30 @@ export class PreflightService {
     }
 
     try {
-      const response = await this.http.search('nuxeo', { size: 0, track_total_hits: true });
+      const response = await this.searchRepositoryOnce();
       checks.push({
         id: 'index-nuxeo',
         label: 'Repository index reachable',
         status: 'ok',
         blocking: true,
-        detail: `responded in ${response.took} ms`,
+        detail: this.http.cancelsSearches
+          ? `responded in ${response.took} ms; OpenSearch stops any search after ${SEARCH_CANCEL_AFTER}`
+          : `responded in ${response.took} ms`,
       });
+      if (!this.http.cancelsSearches) {
+        checks.push({
+          id: 'search-cancellation',
+          label: 'Long searches stopped by OpenSearch',
+          status: 'warning',
+          blocking: false,
+          detail:
+            'The cluster refuses cancel_after_time_interval, which OpenSearch 1.1 introduced, so ' +
+            'every search is sent without it.',
+          remedy:
+            'A search the dashboard has given up on runs to its end and holds its threads until ' +
+            'then. Upgrading the cluster to OpenSearch 1.1 or later lets the dashboard stop it.',
+        });
+      }
       return true;
     } catch (error) {
       checks.push({
@@ -220,6 +236,32 @@ export class PreflightService {
           'nuxeo.search.client.default.opensearch1.index.name.',
       });
       return false;
+    }
+  }
+
+  /**
+   * The first search of the session, which is also where the cluster says whether it knows
+   * `cancel_after_time_interval`.
+   *
+   * One older than OpenSearch 1.1 answers 400 to a parameter it does not know, relayed as a Nuxeo
+   * 500 whose message quotes it: "contains unrecognized parameter: [cancel_after_time_interval]".
+   * It would answer every search the same way, so the parameter is dropped for the session and
+   * the search sent again. Any other failure is the index's, and is reported as such.
+   */
+  private async searchRepositoryOnce() {
+    const probe = { size: 0, track_total_hits: true };
+    try {
+      return await this.http.search('nuxeo', probe);
+    } catch (error) {
+      const refused =
+        error instanceof NuxeoHttpError &&
+        error.body.includes('unrecognized parameter') &&
+        error.body.includes('cancel_after_time_interval');
+      if (!refused) {
+        throw error;
+      }
+      this.http.stopCancellingSearches();
+      return this.http.search('nuxeo', probe);
     }
   }
 

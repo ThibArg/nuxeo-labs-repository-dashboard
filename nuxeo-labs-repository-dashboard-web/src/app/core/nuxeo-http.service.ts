@@ -2,6 +2,18 @@ import { Injectable, inject } from '@angular/core';
 import { DOCUMENT } from '@angular/common';
 import { EsIndex, EsResponse, EsSearchBody } from './nuxeo.types';
 
+/**
+ * How long OpenSearch may work on a dashboard search before it stops it.
+ *
+ * The passthrough is synchronous and cancels nothing: a search the browser gave up on, or one a
+ * reader superseded by choosing another period, would otherwise run to its end, holding a search
+ * thread per shard. Sent as `cancel_after_time_interval`, which OpenSearch 1.1 introduced. Kept
+ * under the 121 s the passthrough's socket waits by default, so that OpenSearch gives up first and
+ * frees what it holds; an administrator who lowered `nuxeo.opensearch1.client.socketTimeout` below
+ * it gets the socket's error first, and the search still stops here.
+ */
+export const SEARCH_CANCEL_AFTER = '90s';
+
 /** Raised for any non-2xx response, carrying enough context to render a useful message. */
 export class NuxeoHttpError extends Error {
   constructor(
@@ -55,9 +67,31 @@ export class NuxeoHttpService {
     return `${this.serverRoot}/api/v1/${path.replace(/^\/+/, '')}`;
   }
 
-  /** Absolute URL of an OpenSearch passthrough path. */
+  /**
+   * False once the cluster has refused `cancel_after_time_interval`, which only the preflight's
+   * first search finds out. A cluster older than OpenSearch 1.1 answers 400 to a parameter it
+   * does not know, on every search, so sending it anyway would take every screen down.
+   */
+  private cancelling = true;
+
+  get cancelsSearches(): boolean {
+    return this.cancelling;
+  }
+
+  /** For the rest of the session, sends searches without asking OpenSearch to stop them. */
+  stopCancellingSearches(): void {
+    this.cancelling = false;
+  }
+
+  /**
+   * Absolute URL of an OpenSearch passthrough search.
+   *
+   * The passthrough appends the query string it received to the URL it forwards, for every index
+   * it exposes (`AbstractSearchRequestFilterImpl.getUrl`), so a parameter here reaches OpenSearch.
+   */
   esUrl(index: EsIndex): string {
-    return `${this.serverRoot}/site/es/${index}/_search`;
+    const url = `${this.serverRoot}/site/es/${index}/_search`;
+    return this.cancelling ? `${url}?cancel_after_time_interval=${SEARCH_CANCEL_AFTER}` : url;
   }
 
   /** `GET` on the REST API v1, returning parsed JSON. */
@@ -89,11 +123,33 @@ export class NuxeoHttpService {
     index: EsIndex,
     body: EsSearchBody,
   ): Promise<EsResponse<T>> {
-    return this.request<EsResponse<T>>(this.esUrl(index), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', accept: 'application/json' },
-      body: JSON.stringify(body),
-    });
+    try {
+      return await this.request<EsResponse<T>>(this.esUrl(index), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json' },
+        body: JSON.stringify(body),
+      });
+    } catch (error) {
+      /*
+       * A cancelled search reaches the browser as a Nuxeo 500 wrapping OpenSearch's error. Said as
+       * it stands, "500 on …" would read as a broken server rather than as a search asked to do
+       * too much. The reason of a cancellation on time is written the same way every time,
+       * "Cancellation timeout of 1.5m is expired" (`TimeoutTaskCancellationUtility`); a shard that
+       * had not started yet says only that its parent task was cancelled.
+       */
+      if (error instanceof NuxeoHttpError && error.body.includes('task_cancelled_exception')) {
+        throw new NuxeoHttpError(
+          error.status,
+          error.url,
+          error.body,
+          error.body.includes('Cancellation timeout of')
+            ? `OpenSearch stopped the search on the ${index} index after ${SEARCH_CANCEL_AFTER}, ` +
+                'before it had answered. A shorter period asks less of it.'
+            : `OpenSearch cancelled the search on the ${index} index before it had answered.`,
+        );
+      }
+      throw error;
+    }
   }
 
   /**

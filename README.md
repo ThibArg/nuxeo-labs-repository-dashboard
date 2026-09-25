@@ -811,7 +811,9 @@ The editor is where the reason is shown.
 
 - Nuxeo LTS 2025
 - JDK 21 or later, Maven 3.8 or later, to build
-- A Nuxeo server using **OpenSearch as its search client**
+- A Nuxeo server using **OpenSearch as its search client**; OpenSearch 1.1 or later to have a
+  search the dashboard gave up on stopped (see [What it costs Nuxeo](#what-it-costs-nuxeo)). An
+  older cluster works without it, and Diagnostics says so
 - An **administrator** session
 - On a large repository, an OpenSearch cluster **sized for it**: see
   [Performance depends on the cluster](#performance-depends-on-the-cluster)
@@ -923,13 +925,26 @@ The passthrough is synchronous. For as long as OpenSearch works on a request, Nu
 | A Tomcat request thread | 20 in all | `nuxeo.server.http.maxThreads` |
 | A connection to OpenSearch | 10 per OpenSearch node, 30 in all, shared with indexing and every Web UI search | nothing: the client library's defaults |
 | The wait before giving up | 121 s | `nuxeo.opensearch1.client.socketTimeout` (`180s`, for instance), or the legacy `elasticsearch.restClient.socketTimeoutMs` |
+| How long OpenSearch may work on a dashboard search | 90 s | fixed, `SEARCH_CANCEL_AFTER` in `nuxeo-http.service.ts`; the cluster setting `search.cancel_after_time_interval` does the same for every other search |
 
 Nuxeo does no heavy computing here, the work being OpenSearch's, but an administrator changing
-periods on a large repository holds threads and connections that Web UI users need too. And a
-search the browser gave up on carries on: neither the passthrough nor OpenSearch cancels it. Nor
-does the dashboard: a period changed while a search runs starts another, and the first one's
-answer is discarded when it comes back, only the latest being shown. Each change of mind is
-therefore one more full search on OpenSearch, not one fewer.
+periods on a large repository holds threads and connections that Web UI users need too. The
+passthrough cancels nothing: a search the browser gave up on carries on, and so does one a reader
+superseded by choosing another period, whose answer the dashboard discards when it comes back. So
+**every search the dashboard sends asks OpenSearch to stop it after 90 s**, through the
+`cancel_after_time_interval` parameter, which the passthrough forwards with the query string. That
+bounds what a change of mind costs — one more search, never one running for as long as it likes —
+and frees the search threads before the passthrough's socket gives up at 121 s. A search stopped
+that way fails its page with "OpenSearch stopped the search … after 90s", rather than with a bare
+500; if some shards had answered in time, the page says how many did not.
+
+The parameter exists since OpenSearch 1.1. An older cluster refuses it with a 400 on every search,
+which would take every screen down, however small the repository, so the preflight's first search
+watches for that refusal. On "contains unrecognized parameter: [cancel_after_time_interval]" the
+dashboard sends every search without it for the rest of the session, and Diagnostics carries a
+warning saying a search it gave up on will run to its end. `allow_partial_search_results=false` is
+not sent: an answer some shards did not contribute to is already refused, and OpenSearch's own
+refusal would reach the reader as a Nuxeo 500 saying less.
 
 ### Two indices that do not grow alike
 

@@ -24,7 +24,7 @@ for Angular 22:
 ```bash
 cd nuxeo-labs-repository-dashboard-web
 export PATH="$PWD/node:$PATH"
-npm test -- --watch=false                                                 # 53 files, 1005 tests
+npm test -- --watch=false                                                 # 54 files, 1011 tests
 npm test -- --watch=false --include src/app/engine/agg-compiler.spec.ts   # one file
 npm test -- --watch=false --filter 'never emits a .keyword'               # one behaviour
 npm run build     # this IS the typecheck: strict, noUnusedLocals, strictTemplates
@@ -223,8 +223,17 @@ made to render hints, and a broken `LabelStrategy` passed until it rendered buck
   reused from one dashboard to the next, so `DashboardRunner` numbers its runs and each gives up
   after any wait once another has started; only the latest sets `loading` back to false. The
   session's `loadConfig` does the same with the dashboard id. The requests given up are not
-  aborted, the passthrough holding its thread until OpenSearch answers whatever the browser does.
+  aborted, the passthrough holding its thread until OpenSearch answers whatever the browser does —
+  90 s at most, since every search asks to be stopped then.
   `dashboard-runner.service.spec.ts` holds the runner; a page spec holds the switch of dashboard.
+- **Every search asks OpenSearch to stop it after 90 s**, `esUrl` appending
+  `cancel_after_time_interval` (`SEARCH_CANCEL_AFTER`), which the passthrough forwards with the
+  query string. OpenSearch before 1.1 refuses it on every search, so the preflight's repository
+  probe — the session's first search, and the only place that can learn it — drops it for the
+  session on a Nuxeo 500 quoting "unrecognized parameter" and the name; any other failure stays a
+  failure of the index. A search sent before that probe would take every screen down on such a
+  cluster. `preflight.service.spec.ts` holds the three cases, `nuxeo-http.service.spec.ts` the
+  message a cancelled search is given.
 - **So does the mapper, with an answer.** OpenSearch answers 200 when shards fail, with what the
   others counted; `mapResponse` refuses a response whose `_shards.failed` is above zero, or whose
   `timed_out` is true, and the runner fails the page as for a request that failed outright. Count
@@ -308,7 +317,14 @@ shortcuts, 35 requests, all answered `_shards.failed: 0` and `timed_out: false` 
 repository, five on the audit), so refusing an incomplete answer refuses nothing there. No partial
 answer could be provoked for the other direction: a search `timeout` as short as `1nanos` never
 fires on that data, OpenSearch reading the clock it caches every 200 ms, and no clause shy of a
-script fails one shard and not the others; that direction is held by a spec only. Three assertions
+script fails one shard and not the others; that direction is held by a spec only. The same 35
+requests sent with `?cancel_after_time_interval=90s` all answered 200 and complete, `nuxeo`,
+`audit` and `audit_wf` alike; a misspelt parameter came back as a Nuxeo 500 whose `message`, first
+in the body and well inside the 2,000 characters `NuxeoHttpError` keeps, quotes OpenSearch's
+"contains unrecognized parameter", which is what the preflight watches for. No search could be made
+to be cancelled: at `1nanos` or `1ms` it finishes before the timer fires, so the cancelled messages
+are held by specs built from the reasons `TimeoutTaskCancellationUtility` and `QueryPhase` write in
+the 1.3.20 sources. Three assertions
 ever failed, the drifting `now` being the third, and all were the harness's fault, so a red live
 check is not proof that the application is wrong.
 
@@ -513,8 +529,8 @@ Seven screens, six composed dashboards. 69 definitions over five builders — `c
 `live-documents` serves both Content and Governance, the only sharing so far. Governance carries 17
 definitions split four ways, five of which sit on no page, describing configuration rather than
 content. Exactly one widget still reads `hits.total`: Content's `total-documents`, which constrains
-nothing and is meant to — and which is why Content alone keeps its query unnarrowed. 1005 tests
-over 53 files, build green.
+nothing and is meant to — and which is why Content alone keeps its query unnarrowed. 1011 tests
+over 54 files, build green.
 
 Every page reading the audit says where it starts, measured once by the preflight as the earliest
 `eventDate` (`engine/audit-horizon.ts`): a line under the filter bar, each widget's period restated
