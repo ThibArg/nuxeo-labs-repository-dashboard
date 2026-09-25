@@ -1,5 +1,12 @@
 # Nuxeo Labs Repository Dashboard
 
+> [!CAUTION]
+> This plugin was forked to https://github.com/nuxeo-sandbox/nuxeo-labs-repository-dashboard
+> and will not be continued here anymore
+
+<hr>
+<hr>
+
 An administrator facing analytics dashboard for a Nuxeo repository, served by the platform at
 `/nuxeo/dashboard/` and reachable from the Web UI Administration menu.
 
