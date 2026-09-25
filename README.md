@@ -1,30 +1,31 @@
 # Nuxeo Labs Repository Dashboard
 
-> [!IMPORTANT]
-> This plugin is **WORK IN PROGRESS** — do not use it as is for now. It will be published in the
-> `nuxeo-sandbox` repository once ready. For now, we use GitHub mainly as a backup.
-
 An administrator facing analytics dashboard for a Nuxeo repository, served by the platform at
 `/nuxeo/dashboard/` and reachable from the Web UI Administration menu.
 
-The dashboard is a standalone Angular application packaged as a Nuxeo bundle. Charts and figures
+The dashboard is an Angular/TypeScript application packaged as a Nuxeo bundle. Charts and figures
 are described by configuration rather than hard coded, and the widgets of one index are batched
 into a single OpenSearch aggregation request.
 
-> **Status: seven screens live.** Content, Users, Downloads, Workflows, Tasks and Governance are
-> complete, alongside Diagnostics. All six are composed from a reusable widget library of 69
-> definitions, see [Roadmap](#roadmap).
+<img src="README-Images/dashboard.png" alt="Dashboard screenshots" width="1000">
 
-> **Want a dashboard of your own?** This plugin is meant to be forked and changed, and it was built
-> to be changed with an AI assistant. See
-> [CUSTOMISING.md](CUSTOMISING.md) — the four layers a change can belong to, a prompt to paste for
-> each kind of change, what to verify, how to ship your own renamed package, and the security
-> checklist to run on the diff.
+> [!NOTE]
+> The plugin was **written with an AI assistant<sup>(1)</sup> and it is meant to be maintained the
+> same way**. What that changes for whoever picks it up, and what stands in for a line by line human
+> reading, is set out in [CUSTOMISING.md](CUSTOMISING.md#written-with-an-assistant-and-maintained-with-one).
+>
+> **Want a dashboard of your own?** This plugin is meant to be forked and changed, and **it was built
+> to be changed with an AI assistant**. See [CUSTOMISING.md](CUSTOMISING.md) — the four layers a change
+> can belong to, a prompt to paste for each kind of change, what to verify, how to ship your own renamed
+> package, and the security checklist to run on the diff.
+>
+> (1): OpenCode driving Claude Opus 5/5.5, September 2026
 
-> **How this was made.** The plugin was written with an AI assistant — OpenCode driving Claude Opus
-> 5, in September 2026 — and it is meant to be maintained the same way. What that changes for
-> whoever picks it up, and what stands in for a line by line human reading, is set out in
-> [CUSTOMISING.md](CUSTOMISING.md#written-with-an-assistant-and-maintained-with-one).
+## Status
+
+**Seven screens live.** Content, Users, Downloads, Workflows, Tasks and Governance are
+complete, alongside Diagnostics. All six are composed from a reusable widget library of 69
+definitions, see [Roadmap](#roadmap).
 
 ## Screens
 
